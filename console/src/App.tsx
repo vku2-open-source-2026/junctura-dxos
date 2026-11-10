@@ -157,7 +157,8 @@ const AppContent: React.FC<AppContentProps> = ({
       case "docs":
         return <DocsScreen />;
       default:
-        return <OverviewScreen onNavigate={handleNavigate} />;
+        // Public routes wait for the session redirect before rendering a screen.
+        return null;
     }
   };
 

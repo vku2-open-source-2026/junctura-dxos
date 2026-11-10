@@ -239,9 +239,17 @@ describe("Task 40 — data and file summaries", () => {
       name: viStrings.files.title,
     });
 
-    expect(await screen.findByText("Sổ sức khỏe")).toBeInTheDocument();
+    expect(
+      await screen.findByRole("button", { name: /Sổ sức khỏe/ })
+    ).toBeInTheDocument();
+    // Wait for the browser's duplicate storage label before checking the stat.
+    expect(
+      await screen.findByRole("option", { name: viStrings.files.sortSize })
+    ).toBeInTheDocument();
     expect(screen.getByText(viStrings.files.statFiles)).toBeInTheDocument();
-    expect(screen.getByText(viStrings.files.statStorage)).toBeInTheDocument();
+    expect(
+      screen.getByText(viStrings.files.statStorage, { selector: "span" })
+    ).toBeInTheDocument();
     expect(
       screen.getByText(viStrings.files.statQuarantined)
     ).toBeInTheDocument();

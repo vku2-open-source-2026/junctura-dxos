@@ -70,6 +70,7 @@ jobs:
       - name: Verify migration checksums, drift detection and concurrent runners
         run: npm run test:migrations
       - name: Validate Compose configuration
+        id: compose-config
         run: |
           npm run setup
           docker compose config --quiet
@@ -94,8 +95,8 @@ jobs:
       - name: Verify protected audit boundary, redaction and persistence
         run: npm run test:audit
       - name: Collect container diagnostics on failure
-        if: failure()
+        if: failure() && steps.compose-config.outcome == 'success'
         run: docker compose logs --no-color
       - name: Stop test containers
-        if: always()
+        if: always() && steps.compose-config.outcome == 'success'
         run: docker compose down
