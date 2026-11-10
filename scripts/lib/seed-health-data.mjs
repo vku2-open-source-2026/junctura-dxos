@@ -17,28 +17,29 @@ export const HEALTH_APPS = [
   { name: "so-suc-khoe", displayName: "Sổ sức khỏe" },
 ];
 
+// The six capabilities of the shared Junctura Health contracts
+// (https://github.com/vku2-open-source-2026/junctura-health/tree/main/contracts):
+// same names, providers, titles and descriptions. That repository is the source of
+// truth; this scenario only mirrors it so the Console shows the agreed picture.
 export const HEALTH_CAPABILITIES = [
-  { app: "tram-y-te", name: "tra-cuu-benh-nhan", title: "Tra cứu bệnh nhân", description: "Trả về thông tin cơ bản của một bệnh nhân theo mã." },
-  { app: "benh-vien", name: "lich-kham", title: "Lịch khám chuyên khoa", description: "Trả về các khung giờ khám chuyên khoa còn trống." },
-  { app: "nha-thuoc", name: "kiem-tra-don-thuoc", title: "Kiểm tra đơn thuốc", description: "Xác nhận đơn thuốc và tình trạng cấp phát." },
-  { app: "bao-hiem", name: "xac-minh-chi-phi", title: "Xác minh chi phí", description: "Xác minh mức chi trả bảo hiểm cho một lượt khám." },
-  { app: "so-suc-khoe", name: "ho-so-suc-khoe", title: "Hồ sơ sức khỏe", description: "Tổng hợp hồ sơ sức khỏe của một người dân." },
-  { app: "tram-y-te", name: "referral-summary", title: "Tóm tắt chuyển tuyến", description: "Cung cấp tóm tắt chuyển tuyến cho cơ sở tiếp nhận." },
-  { app: "nha-thuoc", name: "prescription-verify", title: "Kiểm tra đơn thuốc", description: "Xác nhận đơn thuốc đã được kiểm tra trước khi cấp phát." },
-  { app: "bao-hiem", name: "claim-verify", title: "Xác minh chi phí", description: "Xác minh chi phí điều trị được bảo hiểm chi trả." },
-  { app: "so-suc-khoe", name: "pre-visit-summary", title: "Tóm tắt trước khám", description: "Tóm tắt thông tin sức khỏe cần thiết trước một buổi khám." },
-  { app: "so-suc-khoe", name: "vaccination-history", title: "Lịch sử tiêm chủng", description: "Trả về lịch sử tiêm chủng đã ghi nhận của một người dân." },
+  { app: "tram-y-te", name: "pre-visit-summary", title: "Tóm tắt trước khám", description: "Dị ứng, bệnh mạn tính, thuốc đang dùng và các lần khám gần nhất của người bệnh tại trạm y tế." },
+  { app: "tram-y-te", name: "allergy-list", title: "Danh sách dị ứng", description: "Các chất gây dị ứng đã ghi nhận của người bệnh, dùng để cảnh báo khi kê đơn hoặc phát thuốc." },
+  { app: "tram-y-te", name: "vaccination-history", title: "Lịch sử tiêm chủng", description: "Các mũi vắc xin người bệnh đã tiêm tại trạm y tế." },
+  { app: "tram-y-te", name: "referral-summary", title: "Hồ sơ chuyển tuyến", description: "Phiếu chuyển tuyến điện tử: lý do chuyển, chẩn đoán sơ bộ và xử trí đã làm." },
+  { app: "benh-vien", name: "prescription-verify", title: "Xác minh đơn thuốc", description: "Kiểm tra một đơn thuốc do bệnh viện kê: còn hiệu lực không, gồm những thuốc gì, đã phát chưa." },
+  { app: "benh-vien", name: "claim-verify", title: "Xác minh chi phí điều trị", description: "Cho bên bảo hiểm biết một khoản chi có khớp hồ sơ điều trị hay không; chỉ trả lời có/không." },
 ];
 
-// Provider → consumer relationships that the Console organisation tree draws.
-// Each capability above is provided by the left application and used by the right
-// application through a real, independently approved direct trust grant.
+// Provider → consumer relationships of the contracts, which the Console organisation
+// tree draws. Each one becomes a real, independently approved direct trust grant.
 export const HEALTH_RELATIONS = [
+  { provider: "tram-y-te", consumer: "benh-vien", capability: "pre-visit-summary" },
+  { provider: "tram-y-te", consumer: "benh-vien", capability: "allergy-list" },
+  { provider: "tram-y-te", consumer: "benh-vien", capability: "vaccination-history" },
   { provider: "tram-y-te", consumer: "benh-vien", capability: "referral-summary" },
-  { provider: "nha-thuoc", consumer: "benh-vien", capability: "prescription-verify" },
-  { provider: "bao-hiem", consumer: "benh-vien", capability: "claim-verify" },
-  { provider: "so-suc-khoe", consumer: "benh-vien", capability: "pre-visit-summary" },
-  { provider: "so-suc-khoe", consumer: "tram-y-te", capability: "vaccination-history" },
+  { provider: "tram-y-te", consumer: "nha-thuoc", capability: "allergy-list" },
+  { provider: "benh-vien", consumer: "nha-thuoc", capability: "prescription-verify" },
+  { provider: "benh-vien", consumer: "bao-hiem", capability: "claim-verify" },
 ];
 
 const FAMILY_NAMES = ["Nguyễn", "Trần", "Lê", "Phạm", "Hoàng", "Huỳnh", "Phan", "Võ", "Đặng", "Bùi", "Đỗ", "Hồ"];

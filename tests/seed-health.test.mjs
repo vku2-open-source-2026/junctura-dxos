@@ -331,3 +331,20 @@ test("failed authentication does not echo the client secret", async () => {
     await stack.close();
   }
 });
+
+test("the health scenario mirrors the shared Junctura Health contracts", () => {
+  // Source of truth: https://github.com/vku2-open-source-2026/junctura-health/tree/main/contracts
+  const contracts = {
+    "pre-visit-summary": { provider: "tram-y-te", consumers: ["benh-vien"] },
+    "allergy-list": { provider: "tram-y-te", consumers: ["benh-vien", "nha-thuoc"] },
+    "vaccination-history": { provider: "tram-y-te", consumers: ["benh-vien"] },
+    "referral-summary": { provider: "tram-y-te", consumers: ["benh-vien"] },
+    "prescription-verify": { provider: "benh-vien", consumers: ["nha-thuoc"] },
+    "claim-verify": { provider: "benh-vien", consumers: ["bao-hiem"] },
+  };
+  assert.deepEqual(Object.fromEntries(HEALTH_CAPABILITIES.map(c => [c.name, c.app])),
+    Object.fromEntries(Object.entries(contracts).map(([name, c]) => [name, c.provider])));
+  const expected = Object.entries(contracts).flatMap(([capability, c]) => c.consumers.map(consumer => `${c.provider}>${consumer}:${capability}`));
+  assert.deepEqual(HEALTH_RELATIONS.map(r => `${r.provider}>${r.consumer}:${r.capability}`).sort(), expected.sort());
+  assert.ok(HEALTH_RELATIONS.every(r => HEALTH_APPS.some(a => a.name === r.consumer)));
+});

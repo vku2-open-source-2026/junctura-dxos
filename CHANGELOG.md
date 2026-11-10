@@ -8,6 +8,11 @@ All notable changes to Junctura are recorded here. Versions follow
 
 ## Unreleased
 
+- **Health scenario follows the shared contracts:** `npm run seed:health` now registers
+  exactly the six capabilities of the Junctura Health contracts with their agreed
+  providers and consumers (seven grants), and its sample consents use the purposes
+  those contracts allow. The five ad-hoc capabilities and the reversed provider roles
+  are gone. Do not run it on the same tenant as `demo:setup` of `junctura-health`.
 - **Competition demo provisioning:** `npm run demo:provision` recreates the
   local `admin1`–`admin3` Keycloak users, upserts their Console permissions and
   writes the Git-ignored browser login hints; `npm run demo:seed` follows it with
