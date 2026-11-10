@@ -22,16 +22,19 @@ export const APPLICATION_PROFILES = [
   { name: "so-suc-khoe", clientId: "app-so-suc-khoe", displayName: "Sổ sức khỏe" },
 ];
 
+// Requests outside the agreed contracts, left for the administrators to decide:
+// two still waiting and one refused (an insurer must not read clinical summaries).
 const approvalQueueTargets = [
-  { key: "pending-schedule", provider: "benh-vien", consumer: "nha-thuoc", capability: "lich-kham", outcome: "pending" },
-  { key: "pending-claim", provider: "bao-hiem", consumer: "tram-y-te", capability: "xac-minh-chi-phi", outcome: "pending" },
-  { key: "rejected-record", provider: "so-suc-khoe", consumer: "bao-hiem", capability: "ho-so-suc-khoe", outcome: "rejected" },
+  { key: "pending-vaccination", provider: "tram-y-te", consumer: "nha-thuoc", capability: "vaccination-history", outcome: "pending" },
+  { key: "pending-summary", provider: "tram-y-te", consumer: "so-suc-khoe", capability: "pre-visit-summary", outcome: "pending" },
+  { key: "rejected-record", provider: "tram-y-te", consumer: "bao-hiem", capability: "pre-visit-summary", outcome: "rejected" },
 ];
 
+// Purposes are the ones each contract allows.
 const consentTargets = [
-  { consumer: "benh-vien", capability: "so-suc-khoe/pre-visit-summary", purposes: ["treatment", "referral"], days: 120, outcome: "active" },
-  { consumer: "bao-hiem", capability: "so-suc-khoe/ho-so-suc-khoe", purposes: ["insurance_claim"], days: 60, outcome: "active" },
-  { consumer: "nha-thuoc", capability: "tram-y-te/tra-cuu-benh-nhan", purposes: ["treatment"], days: 30, outcome: "revoked" },
+  { consumer: "benh-vien", capability: "tram-y-te/pre-visit-summary", purposes: ["treatment"], days: 120, outcome: "active" },
+  { consumer: "bao-hiem", capability: "benh-vien/claim-verify", purposes: ["claim_review"], days: 60, outcome: "active" },
+  { consumer: "nha-thuoc", capability: "tram-y-te/allergy-list", purposes: ["dispensing"], days: 30, outcome: "revoked" },
 ];
 
 function referralInput(referral, patient) {

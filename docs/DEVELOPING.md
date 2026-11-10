@@ -209,8 +209,9 @@ Prerequisites: the stack from `npm run local:up`, the `.env` created by
 Compose project. The default run uses the reviewed local operator flow in
 `scripts/lib/demo-stack.mjs` to enroll or reuse five Layer-2 applications
 (Trạm y tế, Bệnh viện, Nhà thuốc, Bảo hiểm, Sổ sức khỏe), binds their resource
-subjects exactly as `npm run app:enroll` does, publishes their example
-capabilities, and creates the five health trust relationships through the real
+subjects exactly as `npm run app:enroll` does, publishes the six capabilities
+of the shared [Junctura Health contracts](https://github.com/vku2-open-source-2026/junctura-health/tree/main/contracts)
+with their agreed providers, and creates the seven contract trust relationships through the real
 Trust API (owner proposes, an independent approver approves and activates). It
 then writes presentation-only principal profiles directly (three administrators
 and two application service accounts, never permissions), seeds pending and
@@ -226,6 +227,12 @@ reads `console/public/login-hints.json` when present or accepts
 credentials. Every step is idempotent, so reruns reuse existing rows. Capability
 execution and emergency access stay opt-in (`C4A_ENABLED`/`C4B_ENABLED`) and
 are skipped when that runtime is disabled.
+
+This scenario is a Console illustration that mirrors those contracts; the
+contracts repository stays the source of truth. Its applications (`app-tram-y-te`,
+...) are separate from the ones `npm run demo:setup` of `junctura-health` enrolls
+(`health-clinic`, ...), so do not run both on the same tenant: the Console would
+show two sets of health applications.
 
 ```sh
 npm run seed:health
