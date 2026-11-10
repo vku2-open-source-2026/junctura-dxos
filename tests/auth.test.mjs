@@ -9,6 +9,15 @@ const claims = { active: true, iss: issuer, aud: "junctura-core", exp: 2000, sub
 test("verified identity uses tenant and roles from issuer claims", () => {
   assert.deepEqual(validateIdentity(claims, issuer, 1000), { subject: "subject", tenantId: "tenant-a", roles: ["core-reader", "core-writer"] });
 });
+test("verified identity exposes only the caller's own preferred username", () => {
+  assert.deepEqual(validateIdentity({ ...claims, preferred_username: "admin1" }, issuer, 1000), {
+    subject: "subject", tenantId: "tenant-a", roles: ["core-reader", "core-writer"], preferredUsername: "admin1",
+  });
+  for (const preferred_username of ["", " ", "bad\u0000name", "x".repeat(256), 12]) {
+    assert.deepEqual(validateIdentity({ ...claims, preferred_username }, issuer, 1000),
+      { subject: "subject", tenantId: "tenant-a", roles: ["core-reader", "core-writer"] });
+  }
+});
 test("inactive, expired, wrong issuer/audience and missing subject tokens fail closed", () => {
   for (const patch of [{ active: false }, { exp: 999 }, { exp: "2000" }, { iss: "wrong" }, { aud: "wrong" }, { sub: null }]) {
     assert.throws(() => validateIdentity({ ...claims, ...patch }, issuer, 1000), (error) => error.status === 401);

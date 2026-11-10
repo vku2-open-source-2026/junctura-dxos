@@ -195,6 +195,69 @@
           "protocol": "openid-connect"
         }
       ]
+    },
+    {
+      "clientId": "junctura-console",
+      "protocol": "openid-connect",
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": true,
+      "redirectUris": [
+        "http://127.0.0.1:3000/*",
+        "http://localhost:3000/*",
+        "http://127.0.0.1:3002/*",
+        "http://localhost:3002/*",
+        "http://127.0.0.1:8080/*",
+        "http://localhost:8080/*"
+      ],
+      "attributes": {
+        "pkce.code.challenge.method": "S256",
+        "post.logout.redirect.uris": "http://127.0.0.1:3000/*##http://localhost:3000/*##http://127.0.0.1:3002/*##http://localhost:3002/*##http://127.0.0.1:8080/*##http://localhost:8080/*"
+      },
+      "protocolMappers": [
+        {
+          "name": "tenant",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-attribute-mapper",
+          "config": {
+            "user.attribute": "tenant_id",
+            "claim.name": "tenant_id",
+            "jsonType.label": "String",
+            "access.token.claim": "true",
+            "introspection.token.claim": "true"
+          }
+        },
+        {
+          "name": "audience",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "config": {
+            "included.custom.audience": "junctura-core",
+            "access.token.claim": "true",
+            "introspection.token.claim": "true"
+          }
+        },
+        {
+          "name": "tenant-memberships",
+          "protocolMapper": "oidc-group-membership-mapper",
+          "config": {
+            "access.token.claim": "true",
+            "claim.name": "tenant_memberships",
+            "full.path": "false",
+            "introspection.token.claim": "true"
+          },
+          "protocol": "openid-connect"
+        }
+      ],
+      "name": "Junctura Console",
+      "webOrigins": [
+        "http://127.0.0.1:3000",
+        "http://localhost:3000",
+        "http://127.0.0.1:3002",
+        "http://localhost:3002",
+        "http://127.0.0.1:8080",
+        "http://localhost:8080"
+      ]
     }
   ],
   "users": [

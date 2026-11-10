@@ -1,11 +1,19 @@
 // SPDX-FileCopyrightText: 2026 Junctura Contributors
 // SPDX-License-Identifier: Apache-2.0
 import { createHash } from "node:crypto";
+import { applicationToken } from "../applications/applications.mjs";
 import { dataRequest } from "../data/data.mjs";
 import { HttpError, json, readJson, requireWriter, uuidPattern } from "../../platform/http/http.mjs";
 import { workflowRequest } from "./client.mjs";
+import { workflowSummary } from "./summary.mjs";
 
 const engineId = /^[A-Za-z0-9:_-]{1,128}$/;
+const executionStatuses = new Set(["running", "completed", "cancelled"]);
+const businessLabels = {
+  "chuyen-tuyen": "Chuyển tuyến",
+  "xac-minh-don-thuoc": "Xác minh đơn thuốc",
+  "xac-minh-chi-phi": "Xác minh chi phí",
+};
 
 export function canonicalInput(value, depth = 0) {
   if (depth > 32) throw new HttpError(400, "input_too_deep");
@@ -28,6 +36,180 @@ async function execution(config, tenantId, id) {
   return { id: item.id, definitionId: item.processDefinitionId,
     status: item.endTime ? (item.deleteReason ? "cancelled" : "completed") : "running",
     input: input ? JSON.parse(input) : {} };
+}
+
+function parseListQuery(url) {
+  const allowed = new Set(["limit", "status"]);
+  for (const key of new Set(url.searchParams.keys())) {
+    if (!allowed.has(key) || url.searchParams.getAll(key).length !== 1) {
+      throw new HttpError(400, "invalid_query");
+    }
+  }
+  const rawLimit = url.searchParams.get("limit") ?? "20";
+  if (!/^\d+$/.test(rawLimit) || Number(rawLimit) < 1 || Number(rawLimit) > 100) {
+    throw new HttpError(400, "invalid_query");
+  }
+  const status = url.searchParams.get("status");
+  if (status !== null && !executionStatuses.has(status)) throw new HttpError(400, "invalid_query");
+  return { limit: Number(rawLimit), status };
+}
+
+function statusOf(item) {
+  if (!item.endTime) return "running";
+  return item.deleteReason ? "cancelled" : "completed";
+}
+
+function safeText(value, max = 200) {
+  return typeof value === "string" && value.length >= 1 && value.length <= max &&
+    !/[\u0000-\u001f\u007f]/u.test(value) ? value : null;
+}
+
+function businessTitle(item) {
+  const raw = item.variables?.find((variable) => variable.name === "input")?.value;
+  let input = raw;
+  if (typeof raw === "string") {
+    try { input = JSON.parse(raw); } catch { input = null; }
+  }
+  if (!input || typeof input !== "object" || Array.isArray(input)) return null;
+  const code = safeText(input.ma_ho_so, 32);
+  if (!code || !/^[A-Z][A-Z0-9-]{0,31}$/.test(code)) return null;
+  const label = businessLabels[input.loai] ?? "Hồ sơ";
+  return `${label} ${code}`;
+}
+
+async function activeTask(config, tenantId, id) {
+  const tasks = await workflowRequest(config, `runtime/tasks?${new URLSearchParams({
+    processInstanceId: id, tenantId, size: "1",
+  })}`);
+  const task = Array.isArray(tasks?.data) ? tasks.data[0] : undefined;
+  if (!task || typeof task.id !== "string") return null;
+  const groups = [];
+  try {
+    const links = await workflowRequest(config, `runtime/tasks/${encodeURIComponent(task.id)}/identitylinks`);
+    if (Array.isArray(links)) {
+      for (const link of links) {
+        const group = link?.type === "candidate" ? safeText(link.group ?? link.groupId, 128) : null;
+        if (group && !groups.includes(group)) groups.push(group);
+      }
+    }
+  } catch {
+    // Identity links are optional. The task itself is enough to show the step.
+  }
+  return {
+    name: safeText(task.name),
+    assignee: safeText(task.assignee, 128),
+    groups,
+    createTime: typeof task.createTime === "string" ? task.createTime : null,
+  };
+}
+
+function definitionParts(item) {
+  const parts = typeof item.processDefinitionId === "string" ? item.processDefinitionId.split(":") : [];
+  return {
+    key: safeText(parts[0], 128),
+    version: /^\d+$/.test(parts[1] ?? "") ? Number(parts[1]) : null,
+  };
+}
+
+function executionView(item, task, definitions) {
+  const status = statusOf(item);
+  const definitionId = safeText(item.processDefinitionId);
+  const parts = definitionParts(item);
+  const known = definitionId ? definitions.get(definitionId) : undefined;
+  return {
+    id: item.id,
+    definition: {
+      id: definitionId,
+      key: safeText(item.processDefinitionKey, 128) ?? known?.key ?? parts.key ?? null,
+      name: safeText(item.processDefinitionName) ?? known?.name ?? null,
+      version: Number.isInteger(item.processDefinitionVersion) ? item.processDefinitionVersion : known?.version ?? parts.version ?? null,
+    },
+    status,
+    startedAt: item.startTime ?? null,
+    updatedAt: item.endTime ?? task?.createTime ?? item.startTime ?? null,
+    title: businessTitle(item),
+    currentStep: status === "running" && task ? {
+      name: task.name,
+      assignee: task.assignee,
+      groups: task.groups,
+    } : null,
+  };
+}
+
+async function definitionIndex(config, tenantId) {
+  const result = await workflowRequest(config, `repository/process-definitions?${new URLSearchParams({
+    tenantId, latest: "true", size: "100",
+  })}`);
+  const definitions = new Map();
+  for (const item of Array.isArray(result?.data) ? result.data : []) {
+    const id = safeText(item?.id, 256);
+    if (id) definitions.set(id, {
+      key: safeText(item.key, 128),
+      name: safeText(item.name),
+      version: Number.isInteger(item.version) ? item.version : null,
+    });
+  }
+  return definitions;
+}
+
+async function listExecutions(config, tenantId, { limit, status }) {
+  const items = [];
+  const definitions = await definitionIndex(config, tenantId);
+  let start = 0;
+  let scanned = 0;
+  for (let page = 0; page < 20 && items.length < limit; page++) {
+    const query = new URLSearchParams({
+      tenantId, includeProcessVariables: "true", size: "100", start: String(start),
+      sort: "startTime", order: "desc",
+    });
+    // Flowable's finished flag selects both completed and deleted instances; the
+    // deleteReason is the only portable distinction and is filtered below.
+    if (status === "running") query.set("finished", "false");
+    else if (status) query.set("finished", "true");
+    const result = await workflowRequest(config, `history/historic-process-instances?${query}`);
+    const batch = Array.isArray(result?.data) ? result.data : [];
+    scanned += batch.length;
+    for (const item of batch) {
+      if (!item || typeof item.id !== "string" || item.tenantId !== tenantId) continue;
+      const definitionId = safeText(item.processDefinitionId, 256);
+      const known = definitionId ? definitions.get(definitionId) : undefined;
+      const definitionKey = safeText(item.processDefinitionKey, 128) ?? known?.key ?? definitionParts(item).key;
+      if (definitionKey === "junctura_c4a_single") continue;
+      if (status && statusOf(item) !== status) continue;
+      const task = statusOf(item) === "running" ? await activeTask(config, tenantId, item.id) : null;
+      items.push(executionView(item, task, definitions));
+      if (items.length >= limit) break;
+    }
+    const total = Number.isInteger(result?.total) ? result.total : scanned;
+    if (!batch.length || scanned >= total) break;
+    start = scanned;
+  }
+  return { items, limit };
+}
+
+async function requireWorkflowAudit(identity, config) {
+  if (!config.dataUrl) throw new HttpError(503, "workflow_unavailable");
+  if (!identity.clientId) throw new HttpError(403, "verified_client_required");
+  let response;
+  try {
+    response = await fetch(`${config.dataUrl}/rpc/workflow_audit_access`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${applicationToken(identity, config.dataSecret, "junctura_workflow_audit_api")}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ payload: {} }),
+      signal: AbortSignal.timeout(5000),
+      redirect: "error",
+    });
+  } catch { throw new HttpError(503, "workflow_unavailable"); }
+  if (!response.ok) throw new HttpError(503, "workflow_unavailable");
+  let result;
+  try { result = await response.json(); } catch { throw new HttpError(503, "workflow_unavailable"); }
+  if (result?.error) throw new HttpError(result.status, result.error);
+  if (result?.status !== 200 || result?.value?.allowed !== true) {
+    throw new HttpError(503, "workflow_unavailable");
+  }
 }
 
 async function start(request, identity, config) {
@@ -76,6 +258,21 @@ async function start(request, identity, config) {
 }
 
 export async function handleWorkflow(request, response, identity, config, url) {
+  if (url.pathname === "/v1/workflows/summary") {
+    if (request.method !== "GET") {
+      response.setHeader("Allow", "GET");
+      throw new HttpError(405, "method_not_allowed");
+    }
+    if (url.search) throw new HttpError(400, "invalid_query");
+    await requireWorkflowAudit(identity, config);
+    response.setHeader("Cache-Control", "no-store");
+    return json(response, 200, await workflowSummary(config, identity.tenantId));
+  }
+  if (url.pathname === "/v1/workflows/executions" && request.method === "GET") {
+    const options = parseListQuery(url);
+    await requireWorkflowAudit(identity, config);
+    return json(response, 200, await listExecutions(config, identity.tenantId, options));
+  }
   if (url.search) throw new HttpError(400, "invalid_query");
   if (url.pathname === "/v1/workflows/definitions" && request.method === "GET") {
     const result = await workflowRequest(config, `repository/process-definitions?${new URLSearchParams({ tenantId: identity.tenantId, latest: "true", size: "100" })}`);

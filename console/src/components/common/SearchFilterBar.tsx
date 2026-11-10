@@ -32,7 +32,7 @@ export const SearchFilterBar: React.FC<SearchFilterBarProps> = ({
             value={searchQuery}
             onChange={(e) => onSearchChange(e.target.value)}
             placeholder={placeholder}
-            className="w-full pl-9 pr-8 py-1.5 text-xs rounded-md border border-slate-200 dark:border-[#223E50] bg-white dark:bg-[#12232F] text-stone-ink dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-[#176B80] dark:focus:ring-sky-500 transition-colors"
+            className="w-full pl-9 pr-8 py-1.5 text-sm rounded-md border border-slate-200 dark:border-[#243843] bg-white dark:bg-[#13242D] text-stone-ink dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-[#176B80] dark:focus:ring-[var(--accent)] transition-colors"
           />
           {searchQuery && (
             <button

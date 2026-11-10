@@ -29,9 +29,9 @@ export const StatusIndicator: React.FC<StatusIndicatorProps> = ({
         };
       case "running":
         return {
-          dot: "bg-sky-600 dark:bg-sky-400",
-          ping: "bg-sky-400 dark:bg-sky-300",
-          text: "text-sky-800 dark:text-sky-300",
+          dot: "bg-[var(--accent)]",
+          ping: "bg-[var(--accent)]/40",
+          text: "text-[var(--accent)]",
         };
       case "warning":
         return {

@@ -29,7 +29,9 @@ at v1, and workflow variables remain tenant-scoped.
   Checks OIDC discovery/issuer, an RLS-scoped data query, object filer metadata
   plus a registered storage volume, and the authenticated workflow engine.
   It does not prove every future operation or a complete disaster recovery.
-- `GET /v1/identity`: authenticated `{subject, tenantId, roles}`.
+- `GET /v1/identity`: authenticated `{subject, tenantId, roles}` plus
+  `preferredUsername` when the caller's own token carries a safe
+  `preferred_username` claim.
 - `/identity/realms/junctura/.well-known/openid-configuration`: upstream Keycloak
   discovery. Use its standard OIDC authorization, token, refresh and logout APIs.
 
@@ -178,9 +180,151 @@ and redacts free text; failure to append rolls back the mutation. The internal
 `cursor`, requires a principal with `audit.read`, and is executable only by
 `junctura_audit_api`; application roles cannot read or write the table directly.
 
-This is not a Foundation route and has no public OpenAPI operation. Do not expose
-it through PostgREST or `/v1`/`/v2` without a separately reviewed contract,
-authorization mapping and pagination policy. See [AUDIT.md](AUDIT.md).
+Core serves it read-only as `GET /v1/audit-events` (Capability OpenAPI
+`listAuditEvents`) for verified management principals with `audit.read`, after a
+reviewed authorization mapping and pagination policy (see [AUDIT.md](AUDIT.md)).
+It is not a Foundation route and is never exposed through PostgREST.
+
+## Traffic metrics
+
+| Route | Methods | Contract |
+| --- | --- | --- |
+| `/v1/metrics/traffic` | GET | One-minute buckets for the last `minutes` (default 60, max 1440): `{from,to,intervalSeconds,buckets:[{at,requests,errors4xx,errors5xx,avgLatencyMs,maxLatencyMs}],totals}` |
+| `/v1/metrics/requests` | GET | Newest first request log, `limit` default 20 and max 100: `{items:[{at,method,path,status,durationMs}]}` |
+| `/v1/metrics/features` | GET | Per-feature one-minute buckets for the last `minutes` (default 60, max 1440): `{from,to,features:[{feature,requests,errors4xx,errors5xx,avgLatencyMs,maxLatencyMs,series:[{at,requests}]}]}` sorted by requests descending |
+
+These counters are real observations of requests that reached Core, recorded as
+each response finishes. They live only in the running process: there is no
+database write, no migration and no persistence, and every value resets when
+Core restarts. They are per instance, not an aggregated cluster view. The
+metrics routes themselves are counted like any other request, so reading them
+slightly increases the numbers.
+
+The `minutes` and `limit` query parameters are strict: unknown, repeated,
+non-integer or out-of-range values return `400`, and non-GET methods return
+`405` with `Allow: GET`. All three routes require a verified management
+principal with `audit.read`, matching `GET /v1/audit-events`, and send
+`Cache-Control: no-store`. Buckets are chronological and include empty minutes
+as zeros; `totals` sums the returned window. The request log keeps at most the
+newest 200 entries and stores only the normalized path. Query strings,
+fragments, headers, bodies, tokens, subjects and recognizable UUID/token path
+segments are never retained.
+
+`features` assigns each normalized request path to one fixed feature using
+whole-segment prefixes: `data` (`/v1/data`, `/v2/data`), `files` (`/v1/objects`,
+`/v2/objects`), `workflows` (`/v1/workflows`), `approvals` (`/v1/approvals`),
+`sharing` (`/v1/trust`, `/v2/resource-shares`), `capabilities`
+(`/v1/capabilities`, `/v1/capability-executions`, `/v1/compositions`),
+`applications` (`/v1/applications`), `consents` (`/v1/me/consents`,
+`/v1/me/data-access`, `/v1/emergency-accesses`), `secrets` (`/v2/secrets`) and
+`audit` (`/v1/audit-events`). Directory, health, identity, metrics and any
+unrecognized path are grouped as `other`. Only features observed in the window
+are returned; each carries its own per-minute request series and the same
+latency and error semantics as the traffic route. The feature view is read-only
+and intended for operator oversight; it changes no workflow state.
+
+## Tenant directory
+
+| Route | Methods | Contract |
+| --- | --- | --- |
+| `/v1/directory/principals` | GET | Enrolled management principals of the caller tenant and issuer: `{items:[{subject,issuer,managementClient,permissions,enabled,displayName,organization,jobTitle,kind}],truncated}`; profile fields are `null` when unset and `kind` is `admin`, `application` or `null` |
+| `/v1/directory/organizations` | GET | Real tenant tree from registered applications and current trust grants: `{root:{id,name,kind,children},relations:[{from,to,label}],truncated}` |
+
+Both routes require a verified management principal with `audit.read` in its own
+tenant, read only from the local tables through the private
+`junctura_directory_api` role (migration 022), and send `Cache-Control: no-store`.
+They never call the Keycloak admin API and never return client secrets, tokens or
+request bodies. `principals` lists at most 1000 rows ordered by subject; the
+database compares the verified caller's `management_client` with the stored
+principal, so only enrolled principals can ask. Migration 023 adds nullable,
+bounded, control-character-free `display_name`, `organization`, `job_title` and
+`kind` (`admin` or `application`) columns to `app_private.principals`; the API
+returns them as `displayName`, `organization`, `jobTitle` and `kind`, each `null`
+when unset. These are presentation fields seeded by the local operator script,
+not identity-provider claims and never secrets.
+
+`organizations` builds the tree from the caller's tenant and issuer: the root is
+the tenant (`kind: platform`), children are the applications registered in this
+tenant (`kind: application`), and `relations` are the active, unexpired direct
+trust grants between those applications (migration 024); proposals awaiting
+approval and revoked or expired grants are not shown. A relation label is the real
+published capability title, falling back to the exact `capabilityId`; no label is
+invented. Each list is bounded (1000 applications, 500 relations) and `truncated`
+reports whether more exist. There is no separate organization table yet, so the
+tree shows applications directly under the tenant. Display names come from the
+applications themselves; other principals are identified by `subject`, while the
+caller can read its own `preferredUsername` from `/v1/identity`.
+
+## Storage summary and workflow history
+
+| Route | Methods | Contract |
+| --- | --- | --- |
+| `/v1/storage/summary` | GET | Per application and tenant totals for structured record counts and object metadata: `{applications:[{id,name,state,collections:[{name,records,updatedAt}],files:{count,bytes,quarantined,updatedAt}}],totals:{collections,files}}` |
+| `/v1/storage/files` | GET | One directory level of an application's private file tree: `{application:{id,name},path,folders:[{name,files,bytes,updatedAt}],files:[{name,extension,bytes,status,updatedAt}],truncated}`. Requires `application`; optional `path` defaults to the root. File names are partially masked (`maskFileName`); folder names and sizes are metadata only. |
+| `/v1/storage/collections` | GET | Inferred structure of each collection owned by the application: `{application:{id,name},collections:[{name,records,updatedAt,fields:[{name,type,fillRate}]}]}`. Requires `application`. Types are `string`, `number`, `boolean`, `object`, `array`, `mixed` or `null`; `fillRate` is 0–100 from at most the 200 newest records. |
+| `/v1/workflows/executions` | GET | Tenant workflow history, newest first: `{items:[{id,definition:{id,key,name,version},status,startedAt,updatedAt,title,currentStep}],limit}` |
+| `/v1/workflows/summary` | GET | Read-only workflow dashboard: `{definitions:[{key,name,application:{id,name}|null,steps:[{name,owner}],counts:{running,completed,cancelled},updatedAt}],totals:{definitions,running,completed,cancelled}}` |
+
+These routes require a verified management principal with `audit.read`, are
+read-only and send `Cache-Control: no-store`. The storage routes call
+`core.storage_summary(jsonb)` through the private `junctura_storage_api` role
+(migration 025) or `core.storage_collections(jsonb)` through
+`junctura_storage_collections_api` (migration 026). The workflow list first
+checks `audit.read` through `core.workflow_audit_access(jsonb)` and the private
+`junctura_workflow_audit_api` role. The database enforces the tenant and
+permission; Core only asserts the private roles.
+
+The storage summary deliberately returns aggregates only. Structured counts come
+from `core.app_records` per owning application and from legacy `core.records`
+for the tenant total. File counts, bytes, quarantine count and last modification
+time come from reduced SeaweedFS filer metadata under the tenant's private
+paths; object IDs, versions, original names, download paths and bytes are never
+returned. If the object filer is not configured, `files` is `null`; if it is
+configured but unavailable, the request fails closed with `503`.
+
+The file browser reads the same application-prefixed filer tree and returns one
+level at a time. Folder names are structural and shown in full (unsafe names are
+skipped); file names are reduced by the pure `maskFileName` helper in
+`src/modules/storage/`: it keeps the first three and last two grapheme clusters
+of the base name with `…` in between, keeps the extension, and for bases of five
+clusters or fewer keeps only the first cluster. Grapheme segmentation prevents
+splitting Vietnamese diacritics or combining marks. Object-key directories left
+by older flat uploads are never listed. Files under the published application
+prefix are `clean`; a quarantine prefix would be `quarantined`; anything the
+core cannot classify is `unknown`. Bytes, object keys, versions, internal paths
+and record values are never returned.
+
+The collection structure function infers field names and JSON types from at most
+the 200 newest records of each collection, then returns only the name, type and
+fill rate. It never returns a record, a sample value, a JSON path or object key.
+Fill rate counts sampled records where the field is present and not `null`;
+multiple JSON types for one field collapse to `mixed`, and an all-`null` field is
+typed `null`. Collections are owned by the requested application only.
+
+The workflow list accepts only `limit` (1–100, default 20) and
+`status=running|completed|cancelled`; other or repeated parameters return
+`400`. It reads Flowable history scoped to the caller tenant, excludes the
+internal `junctura_c4a_single` definition, and returns the active task name and
+candidate groups for running executions. `title` is a safe business label built
+only from the record code and workflow kind; patient names, identifiers, record
+contents and workflow variables are not included in the list response.
+
+The workflow summary is a strictly read-only dashboard. It reads the three
+business BPMN definitions shipped in `src/modules/workflow/definitions/`, their
+named user tasks and candidate groups, then aggregates tenant-scoped Flowable
+history into running, completed and cancelled counts. `steps` de-duplicates
+names, so a repeated “Hoàn tất” task appears once, and the end event is not a
+step. The owning product is a reviewed code-level declaration: Chuyển tuyến
+bệnh nhân → Trạm y tế, Xác minh đơn thuốc → Nhà thuốc, Xác minh chi phí bảo hiểm
+→ Bảo hiểm. Other installed non-technical definitions, and definitions that only
+exist in history, are returned with `application: null` rather than guessed.
+`cancelled` is the only unsuccessful outcome; the summary never returns patient
+data, variables, record codes or task IDs and cannot start, complete, approve or
+stop a workflow. The technical `junctura_checkpoint` fixture is marked
+`technical: true` in code (display name “Kiểm tra kỹ thuật”) and, together with
+the C4A engine definition, is excluded from the summary. No query parameters are
+accepted, only `GET` is allowed and responses are `Cache-Control: no-store`.
+Permission, database or engine failures fail closed with `503`.
 
 ## Capability extension APIs
 

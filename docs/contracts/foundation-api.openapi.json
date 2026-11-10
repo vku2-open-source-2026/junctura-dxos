@@ -4183,6 +4183,12 @@
             "contains": {
               "const": "core-reader"
             }
+          },
+          "preferredUsername": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255,
+            "description": "Optional display name from the caller's own token; never looked up through the identity provider's admin API."
           }
         },
         "required": [

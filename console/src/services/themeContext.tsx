@@ -1,13 +1,25 @@
 // SPDX-FileCopyrightText: 2026 Junctura Contributors
 // SPDX-License-Identifier: Apache-2.0
 import React, { createContext, useContext, useState, useEffect } from "react";
-import { Theme } from "../types";
+import { TextSize, Theme } from "../types";
+
+export const TEXT_SIZE_STORAGE_KEY = "junctura_text_size";
+const DEFAULT_TEXT_SIZE: TextSize = "md";
+
+function readStoredTextSize(): TextSize {
+  const saved = localStorage.getItem(TEXT_SIZE_STORAGE_KEY);
+  return saved === "sm" || saved === "md" || saved === "lg"
+    ? saved
+    : DEFAULT_TEXT_SIZE;
+}
 
 interface ThemeContextType {
   theme: Theme;
   isDark: boolean;
   setTheme: (theme: Theme) => void;
   toggleTheme: () => void;
+  textSize: TextSize;
+  setTextSize: (size: TextSize) => void;
 }
 
 const ThemeContext = createContext<ThemeContextType | null>(null);
@@ -18,7 +30,15 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     return (saved === "light" || saved === "dark" || saved === "system") ? saved : "light";
   });
 
+  const [textSize, setTextSizeState] = useState<TextSize>(readStoredTextSize);
+
   const [isDark, setIsDark] = useState<boolean>(false);
+
+  useEffect(() => {
+    const root = document.documentElement;
+    root.setAttribute("data-text-size", textSize);
+    localStorage.setItem(TEXT_SIZE_STORAGE_KEY, textSize);
+  }, [textSize]);
 
   useEffect(() => {
     const root = document.documentElement;
@@ -47,8 +67,14 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     setThemeState((prev) => (prev === "dark" ? "light" : "dark"));
   };
 
+  const setTextSize = (size: TextSize) => {
+    setTextSizeState(size);
+  };
+
   return (
-    <ThemeContext.Provider value={{ theme, isDark, setTheme, toggleTheme }}>
+    <ThemeContext.Provider
+      value={{ theme, isDark, setTheme, toggleTheme, textSize, setTextSize }}
+    >
       {children}
     </ThemeContext.Provider>
   );

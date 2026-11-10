@@ -1,38 +1,36 @@
 // SPDX-FileCopyrightText: 2026 Junctura Contributors
 // SPDX-License-Identifier: Apache-2.0
-import {
+import type {
   HealthStatus,
   ReadyStatus,
   IdentityState,
   UserIdentity,
   Application,
   Approval,
-  StructuredRecord,
-  StoredObject,
-  ResourceShare,
-  WorkflowDefinition,
+  StorageSummary,
+  StorageCollections,
+  StorageFileListing,
   WorkflowExecution,
-  AuditSessionEvent,
+  WorkflowExecutionSummary,
+  WorkflowSummary,
   AuditVerification,
+  AuditEventPage,
   TrustGraph,
   TrustGraphEdge,
+  TrustGraphNode,
+  TrustGrant,
+  CapabilityVersion,
+  SubjectConsent,
+  EmergencyAccess,
+  TrafficSeries,
+  FeatureSeries,
+  RecentRequest,
+  DirectoryPrincipalsPage,
+  DirectoryTree,
 } from "../types";
-import {
-  MOCK_IDENTITY,
-  MOCK_APPLICATIONS,
-  MOCK_APPROVALS,
-  MOCK_WORKFLOW_DEFINITIONS,
-  MOCK_WORKFLOW_EXECUTIONS,
-  MOCK_STRUCTURED_RECORDS,
-  MOCK_OBJECTS,
-  MOCK_RESOURCE_SHARES,
-  MOCK_AUDIT_EVENTS,
-  mockTrustGraph,
-} from "./mockData";
 
 const DEFAULT_BASE_URL = "/api";
 const GATEWAY_KEY = "junctura_gateway_url";
-const LIVE_MODE_KEY = "junctura_live_mode";
 const LEGACY_TOKEN_KEY = "junctura_token";
 
 export function normalizeBaseUrl(value: string): string {
@@ -76,19 +74,23 @@ function isUserIdentity(value: unknown): value is UserIdentity {
   );
 }
 
+export class ApiError extends Error {
+  status: number;
+  code: string;
+
+  constructor(status: number, code: string) {
+    super(code);
+    this.name = "ApiError";
+    this.status = status;
+    this.code = code;
+  }
+}
+
 export class ApiClient {
   private baseUrl: string;
   private token: string | null;
-  private isLiveMode: boolean;
   private currentIdentity: UserIdentity | null;
   private identityRequestId = 0;
-  private sessionApplications: Application[];
-  private sessionApprovals: Approval[];
-  private sessionExecutions: WorkflowExecution[];
-  private sessionRecords: StructuredRecord[];
-  private sessionShares: ResourceShare[];
-  private sessionAuditLogs: AuditSessionEvent[];
-  private previewTrustGraph: TrustGraph | null = null;
   private readonly listeners = new Set<() => void>();
 
   constructor() {
@@ -104,15 +106,7 @@ export class ApiClient {
     }
 
     this.token = null;
-    this.isLiveMode = localStorage.getItem(LIVE_MODE_KEY) === "true";
     this.currentIdentity = null;
-    this.sessionApplications = [];
-    this.sessionApprovals = [];
-    this.sessionExecutions = [];
-    this.sessionRecords = [];
-    this.sessionShares = [];
-    this.sessionAuditLogs = [];
-    this.resetSessionData(this.isLiveMode);
   }
 
   public subscribe(listener: () => void): () => void {
@@ -126,16 +120,6 @@ export class ApiClient {
     for (const listener of this.listeners) listener();
   }
 
-  private resetSessionData(live: boolean): void {
-    this.sessionApplications = live ? [] : [...MOCK_APPLICATIONS];
-    this.sessionApprovals = live ? [] : [...MOCK_APPROVALS];
-    this.sessionExecutions = live ? [] : [...MOCK_WORKFLOW_EXECUTIONS];
-    this.sessionRecords = live ? [] : [...MOCK_STRUCTURED_RECORDS];
-    this.sessionShares = live ? [] : [...MOCK_RESOURCE_SHARES];
-    this.sessionAuditLogs = live ? [] : [...MOCK_AUDIT_EVENTS];
-    this.previewTrustGraph = null;
-  }
-
   private buildUrl(path: string): string {
     const base = this.baseUrl === "/" ? "" : this.baseUrl.replace(/\/+$/, "");
     return `${base}${path}`;
@@ -147,7 +131,7 @@ export class ApiClient {
     withAuth = true
   ): Promise<Response> {
     if (!isApprovedBaseUrl(this.baseUrl)) {
-      throw new Error("gateway_origin_not_approved");
+      throw new ApiError(0, "gateway_origin_not_approved");
     }
     const headers = new Headers(init.headers);
     if (withAuth && this.token) {
@@ -156,20 +140,13 @@ export class ApiClient {
     return fetch(this.buildUrl(path), { ...init, headers });
   }
 
-  public getLiveMode(): boolean {
-    return this.isLiveMode;
-  }
-
-  public setLiveMode(live: boolean): void {
-    const changed = this.isLiveMode !== live;
-    this.isLiveMode = live;
-    localStorage.setItem(LIVE_MODE_KEY, live ? "true" : "false");
-    if (changed) {
-      this.identityRequestId += 1;
-      this.currentIdentity = null;
-      this.resetSessionData(live);
-      this.notify();
-    }
+  private async fail(res: Response, fallback: string): Promise<never> {
+    const body = (await res.json().catch(() => null)) as
+      | { error?: unknown }
+      | null;
+    const code =
+      body && typeof body.error === "string" ? body.error : fallback;
+    throw new ApiError(res.status, code);
   }
 
   public getBaseUrl(): string {
@@ -183,7 +160,7 @@ export class ApiClient {
   public setBaseUrl(url: string): void {
     const normalized = normalizeBaseUrl(url);
     if (!isApprovedBaseUrl(normalized)) {
-      throw new Error("gateway_origin_not_approved");
+      throw new ApiError(0, "gateway_origin_not_approved");
     }
     this.baseUrl = normalized;
     localStorage.setItem(GATEWAY_KEY, normalized);
@@ -204,195 +181,19 @@ export class ApiClient {
     this.notify();
   }
 
-  private logActivity(
-    action: string,
-    category: AuditSessionEvent["category"],
-    details: string,
-    status: AuditSessionEvent["status"] = "success"
-  ): void {
-    const identity = this.isLiveMode ? this.currentIdentity : MOCK_IDENTITY;
-    const event: AuditSessionEvent = {
-      id: "evt-" + Math.random().toString(36).substring(2, 9),
-      timestamp: new Date().toISOString(),
-      action,
-      category,
-      subject: identity?.subject ?? "operator/session",
-      tenantId: identity?.tenantId ?? "unresolved",
-      status,
-      details,
-      requestId: "req-" + Math.random().toString(36).substring(2, 7),
-    };
-    this.sessionAuditLogs.unshift(event);
+  public getIdentity(): Promise<IdentityState> {
+    return this.loadIdentity();
   }
 
-  public async verifyAuditChain(): Promise<AuditVerification> {
-    if (!this.isLiveMode) {
-      const result: AuditVerification = {
-        verified: true,
-        entries: this.sessionAuditLogs.length,
-        newlySealed: 0,
-        headHash: null,
-        firstBreak: null,
-        verifiedAt: new Date().toISOString(),
-        preview: true,
-      };
-      this.logActivity("VERIFY_AUDIT_CHAIN", "security", "Preview: không gọi máy chủ");
-      return result;
-    }
-    const res = await this.send("/v1/audit-events/verify", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: "{}",
-    });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({ error: "request_failed" }));
-      this.logActivity("VERIFY_AUDIT_CHAIN", "security", err.error || "request_failed", res.status === 403 ? "denied" : "error");
-      throw new Error(err.error || "audit_verification_failed");
-    }
-    const result = (await res.json()) as AuditVerification;
-    this.logActivity(
-      "VERIFY_AUDIT_CHAIN",
-      "security",
-      result.verified
-        ? `Chuỗi băm toàn vẹn: ${result.entries} sự kiện`
-        : `Phát hiện can thiệp tại #${result.firstBreak?.chainSeq} (${result.firstBreak?.reason})`,
-      result.verified ? "success" : "denied"
-    );
-    return result;
-  }
-
-  public async getTrustGraph(): Promise<TrustGraph> {
-    if (!this.isLiveMode) {
-      this.previewTrustGraph ??= mockTrustGraph();
-      return structuredClone(this.previewTrustGraph);
-    }
-    const res = await this.send("/v1/trust/graph");
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({ error: "request_failed" }));
-      throw new Error(err.error || "trust_graph_failed");
-    }
-    return (await res.json()) as TrustGraph;
-  }
-
-  public async revokeTrustGrant(edge: TrustGraphEdge, reason: string): Promise<void> {
-    const trimmed = reason.trim();
-    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(edge.grantId)) throw new Error("invalid_grant_id");
-    if (!trimmed || trimmed.length > 512) throw new Error("reason_required");
-    if (!this.isLiveMode) {
-      const target = this.previewTrustGraph?.edges.find((e) => e.grantId === edge.grantId);
-      if (!target || target.state === "revoked") throw new Error("invalid_transition");
-      target.state = "revoked";
-      target.revokedAt = new Date().toISOString();
-      target.revision += 1;
-      this.logActivity("REVOKE_TRUST_GRANT", "security", `Preview: thu hồi ${edge.title ?? edge.capabilityId}`);
-      return;
-    }
-    const res = await this.send(`/v1/trust/grants/${edge.grantId}/revoke`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "If-Match": `"grant-${edge.grantId}-${edge.revision}"` },
-      body: JSON.stringify({ reason: trimmed }),
-    });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({ error: "request_failed" }));
-      this.logActivity("REVOKE_TRUST_GRANT", "security", err.error || "request_failed", res.status === 403 ? "denied" : "error");
-      throw new Error(err.error || "revoke_failed");
-    }
-    this.logActivity("REVOKE_TRUST_GRANT", "security", `Thu hồi quyền ${edge.title ?? edge.capabilityId}`);
-  }
-
-  public getSessionActivity(): AuditSessionEvent[] {
-    return [...this.sessionAuditLogs];
-  }
-
-  public async getHealth(): Promise<HealthStatus> {
-    const start = performance.now();
-    if (!this.isLiveMode) {
-      return {
-        service: "junctura-core (preview)",
-        status: "ok",
-        timestamp: new Date().toISOString(),
-        latencyMs: 4,
-      };
-    }
-    try {
-      const res = await this.send(
-        "/health",
-        { signal: AbortSignal.timeout(3000) },
-        false
-      );
-      const latency = Math.round(performance.now() - start);
-      if (res.ok) {
-        const data = await res.json();
-        return {
-          service: data.service ?? "junctura-core",
-          status: data.status === "ok" ? "ok" : "degraded",
-          timestamp: new Date().toISOString(),
-          latencyMs: latency,
-        };
-      }
-      return { service: "junctura-core", status: "degraded", latencyMs: latency };
-    } catch {
-      return {
-        service: "junctura-core",
-        status: "error",
-        latencyMs: Math.round(performance.now() - start),
-      };
-    }
-  }
-
-  public async getReady(): Promise<ReadyStatus> {
-    const start = performance.now();
-    if (!this.isLiveMode) {
-      return {
-        status: "ready",
-        timestamp: new Date().toISOString(),
-        latencyMs: 12,
-        dependencies: {
-          identity: true,
-          data: true,
-          objects: true,
-          workflow: true,
-        },
-      };
-    }
-    try {
-      const res = await this.send(
-        "/ready",
-        { signal: AbortSignal.timeout(4000) },
-        false
-      );
-      const latency = Math.round(performance.now() - start);
-      if (res.ok) {
-        return {
-          status: "ready",
-          timestamp: new Date().toISOString(),
-          latencyMs: latency,
-          dependencies: {
-            identity: true,
-            data: true,
-            objects: true,
-            workflow: true,
-          },
-        };
-      }
-      return { status: "not_ready", latencyMs: latency };
-    } catch {
-      return { status: "unknown", latencyMs: Math.round(performance.now() - start) };
-    }
-  }
-
-  public async getIdentity(): Promise<IdentityState> {
+  private async loadIdentity(): Promise<IdentityState> {
     const requestId = ++this.identityRequestId;
-    if (!this.isLiveMode) {
-      return { status: "preview", identity: MOCK_IDENTITY };
-    }
     if (!this.token) {
       this.currentIdentity = null;
       return { status: "missing" };
     }
     try {
       const res = await this.send("/v1/identity", {
-        signal: AbortSignal.timeout(3000),
+        signal: AbortSignal.timeout(6000),
       });
       if (res.status === 400 || res.status === 401) {
         if (requestId === this.identityRequestId) this.currentIdentity = null;
@@ -421,84 +222,131 @@ export class ApiClient {
     }
   }
 
-  public async getApplication(appId: string): Promise<Application | null> {
-    if (!this.isLiveMode) {
-      const found = this.sessionApplications.find((a) => a.appId === appId);
-      return found ?? null;
+  public get currentUser(): UserIdentity | null {
+    return this.currentIdentity;
+  }
+
+  public async getHealth(): Promise<HealthStatus> {
+    const start = performance.now();
+    try {
+      const res = await this.send(
+        "/health",
+        { signal: AbortSignal.timeout(4000) },
+        false
+      );
+      const latency = Math.round(performance.now() - start);
+      if (res.ok) {
+        const data = (await res.json().catch(() => ({}))) as {
+          service?: unknown;
+          status?: unknown;
+        };
+        return {
+          service:
+            typeof data.service === "string" ? data.service : "junctura-core",
+          status: data.status === "ok" ? "ok" : "degraded",
+          timestamp: new Date().toISOString(),
+          latencyMs: latency,
+        };
+      }
+      return {
+        service: "junctura-core",
+        status: "degraded",
+        latencyMs: latency,
+      };
+    } catch {
+      return {
+        service: "junctura-core",
+        status: "error",
+        latencyMs: Math.round(performance.now() - start),
+      };
     }
+  }
+
+  public async getReady(): Promise<ReadyStatus> {
+    const start = performance.now();
+    try {
+      const res = await this.send(
+        "/ready",
+        { signal: AbortSignal.timeout(5000) },
+        false
+      );
+      const latency = Math.round(performance.now() - start);
+      if (res.ok) {
+        return {
+          status: "ready",
+          timestamp: new Date().toISOString(),
+          latencyMs: latency,
+        };
+      }
+      return { status: "not_ready", latencyMs: latency };
+    } catch {
+      return {
+        status: "unknown",
+        latencyMs: Math.round(performance.now() - start),
+      };
+    }
+  }
+
+  public async probeHealth(baseUrl: string): Promise<{
+    ok: boolean;
+    status: number;
+    service?: string;
+    healthStatus?: string;
+    latencyMs: number;
+  }> {
+    const normalized = normalizeBaseUrl(baseUrl);
+    if (!isApprovedBaseUrl(normalized)) {
+      throw new ApiError(0, "gateway_origin_not_approved");
+    }
+    const start = performance.now();
+    const base = normalized === "/" ? "" : normalized.replace(/\/+$/, "");
+    const response = await fetch(`${base}/health`, {
+      signal: AbortSignal.timeout(3000),
+    });
+    const latencyMs = Math.round(performance.now() - start);
+    if (!response.ok) {
+      return { ok: false, status: response.status, latencyMs };
+    }
+    let body: { service?: unknown; status?: unknown } = {};
+    try {
+      body = await response.json();
+    } catch {
+      body = {};
+    }
+    return {
+      ok: true,
+      status: response.status,
+      service: typeof body.service === "string" ? body.service : undefined,
+      healthStatus: typeof body.status === "string" ? body.status : undefined,
+      latencyMs,
+    };
+  }
+
+  public async getTrustGraph(): Promise<TrustGraph> {
+    const res = await this.send("/v1/trust/graph", {
+      signal: AbortSignal.timeout(6000),
+    });
+    if (!res.ok) await this.fail(res, "trust_graph_failed");
+    return (await res.json()) as TrustGraph;
+  }
+
+  public async getApplicationNodes(): Promise<TrustGraphNode[]> {
+    const graph = await this.getTrustGraph();
+    return graph.nodes;
+  }
+
+  public async getApplication(appId: string): Promise<Application | null> {
     const res = await this.send(
       `/v1/applications/${encodeURIComponent(appId)}`,
-      { signal: AbortSignal.timeout(4000) }
+      { signal: AbortSignal.timeout(6000) }
     );
     if (res.status === 404) return null;
-    if (!res.ok) {
-      throw new Error("application_lookup_failed");
-    }
-    return await res.json();
-  }
-
-  public async getApplicationsList(): Promise<Application[]> {
-    return [...this.sessionApplications];
-  }
-
-  public async registerApplication(payload: {
-    displayName: string;
-    oauthClientId: string;
-    providerOrigin: string;
-  }): Promise<Application> {
-    if (!this.isLiveMode) {
-      const appId = crypto.randomUUID();
-      const newApp: Application = {
-        appId,
-        tenantId: MOCK_IDENTITY.tenantId,
-        ownerSubject: MOCK_IDENTITY.subject,
-        displayName: payload.displayName,
-        oauthClientId: payload.oauthClientId,
-        providerOrigin: payload.providerOrigin,
-        state: "pending",
-        revision: 1,
-        digest:
-          "sha256:" +
-          Array.from(crypto.getRandomValues(new Uint8Array(32)))
-            .map((b) => b.toString(16).padStart(2, "0"))
-            .join(""),
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      };
-      this.sessionApplications.unshift(newApp);
-      this.logActivity(
-        "REGISTER_APPLICATION",
-        "application",
-        `Đã gửi đề xuất ứng dụng '${payload.displayName}' (${appId})`
-      );
-      return newApp;
-    }
-    const res = await this.send("/v1/applications", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({ error: "request_failed" }));
-      this.logActivity(
-        "REGISTER_APPLICATION_FAILED",
-        "application",
-        `Đăng ký thất bại: ${err.error}`,
-        "error"
-      );
-      throw new Error(err.error || "failed_to_register");
-    }
-    const app = await res.json();
-    this.sessionApplications.unshift(app);
-    this.logActivity(
-      "REGISTER_APPLICATION",
-      "application",
-      `Đã tạo ứng dụng '${payload.displayName}' qua API Gateway`
-    );
-    return app;
+    if (!res.ok) await this.fail(res, "application_lookup_failed");
+    return (await res.json()) as Application;
   }
 
   public async createApproval(payload: {
+    resourceType: "application" | "grant";
     resourceId: string;
     resourceDigest: string;
     resourceRevision: number;
@@ -507,79 +355,26 @@ export class ApiClient {
     decision: "approve" | "deny";
     expiresAt: string;
   }): Promise<Approval> {
-    if (!this.isLiveMode) {
-      const approval: Approval = {
-        approvalId: crypto.randomUUID(),
-        resourceType: "application",
-        resourceId: payload.resourceId,
-        resourceDigest: payload.resourceDigest,
-        resourceRevision: payload.resourceRevision,
-        requesterSubject: payload.requesterSubject,
-        requesterAppId: payload.requesterAppId,
-        decision: payload.decision,
-        expiresAt: payload.expiresAt,
-        consumed: false,
-        revoked: false,
-        createdAt: new Date().toISOString(),
-      };
-      this.sessionApprovals.unshift(approval);
-      this.logActivity(
-        "CREATE_APPROVAL",
-        "approval",
-        `Tạo quyết định ${payload.decision} cho app ${payload.resourceId}`
-      );
-      return approval;
-    }
     const res = await this.send("/v1/approvals", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ resourceType: "application", ...payload }),
+      body: JSON.stringify(payload),
     });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({ error: "request_failed" }));
-      throw new Error(err.error || "failed_to_create_approval");
-    }
-    const apprv = await res.json();
-    this.sessionApprovals.unshift(apprv);
-    this.logActivity(
-      "CREATE_APPROVAL",
-      "approval",
-      `Ký duyệt thành công approval ${apprv.approvalId}`
-    );
-    return apprv;
+    if (!res.ok) await this.fail(res, "failed_to_create_approval");
+    return (await res.json()) as Approval;
   }
 
   public async approveApplication(
     appId: string,
     approvalId: string,
-    eTag?: string
+    revision?: number
   ): Promise<void> {
-    if (!this.isLiveMode) {
-      const app = this.sessionApplications.find((a) => a.appId === appId);
-      if (app) {
-        app.state = "active";
-        app.revision += 1;
-        app.updatedAt = new Date().toISOString();
-        app.lastApprovalId = approvalId;
-      }
-      const apprv = this.sessionApprovals.find(
-        (a) => a.approvalId === approvalId
-      );
-      if (apprv) {
-        apprv.consumed = true;
-        apprv.consumedAt = new Date().toISOString();
-      }
-      this.logActivity(
-        "APPROVE_APPLICATION",
-        "application",
-        `Kích hoạt ứng dụng ${appId} với approval ${approvalId}`
-      );
-      return;
-    }
     const headers: Record<string, string> = {
       "Content-Type": "application/json",
     };
-    if (eTag) headers["If-Match"] = eTag;
+    if (revision !== undefined) {
+      headers["If-Match"] = `"application-${appId}-${revision}"`;
+    }
     const res = await this.send(
       `/v1/applications/${encodeURIComponent(appId)}/approve`,
       {
@@ -588,15 +383,7 @@ export class ApiClient {
         body: JSON.stringify({ approvalId }),
       }
     );
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({ error: "request_failed" }));
-      throw new Error(err.error || "failed_to_approve");
-    }
-    this.logActivity(
-      "APPROVE_APPLICATION",
-      "application",
-      `Kích hoạt ứng dụng ${appId} thành công qua Gateway`
-    );
+    if (!res.ok) await this.fail(res, "failed_to_approve");
   }
 
   public async transitionApplicationState(
@@ -604,31 +391,14 @@ export class ApiClient {
     action: "suspend" | "reactivate" | "revoke",
     reason: string,
     approvalId?: string,
-    eTag?: string
+    revision?: number
   ): Promise<void> {
-    if (!this.isLiveMode) {
-      const app = this.sessionApplications.find((a) => a.appId === appId);
-      if (app) {
-        app.state =
-          action === "suspend"
-            ? "suspended"
-            : action === "reactivate"
-              ? "active"
-              : "revoked";
-        app.revision += 1;
-        app.updatedAt = new Date().toISOString();
-      }
-      this.logActivity(
-        "TRANSITION_STATE",
-        "application",
-        `Chuyển trạng thái app ${appId} -> ${action}: ${reason}`
-      );
-      return;
-    }
     const headers: Record<string, string> = {
       "Content-Type": "application/json",
     };
-    if (eTag) headers["If-Match"] = eTag;
+    if (revision !== undefined) {
+      headers["If-Match"] = `"application-${appId}-${revision}"`;
+    }
     const body: Record<string, string> = { action, reason };
     if (approvalId) body["approvalId"] = approvalId;
     const res = await this.send(
@@ -639,241 +409,302 @@ export class ApiClient {
         body: JSON.stringify(body),
       }
     );
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({ error: "request_failed" }));
-      throw new Error(err.error || "state_transition_failed");
-    }
-    this.logActivity(
-      "TRANSITION_STATE",
-      "application",
-      `Chuyển trạng thái app ${appId} sang ${action}`
-    );
+    if (!res.ok) await this.fail(res, "state_transition_failed");
   }
 
-  public async getWorkflowDefinitions(): Promise<WorkflowDefinition[]> {
-    if (!this.isLiveMode) {
-      return [...MOCK_WORKFLOW_DEFINITIONS];
-    }
-    const res = await this.send("/v1/workflows/definitions", {
-      signal: AbortSignal.timeout(4000),
-    });
-    if (!res.ok) {
-      throw new Error("workflow_definitions_unavailable");
-    }
-    const data = await res.json();
-    return data.items ?? [];
-  }
-
-  public async getWorkflowExecutions(): Promise<WorkflowExecution[]> {
-    return [...this.sessionExecutions];
-  }
-
-  public async startWorkflowExecution(
-    definitionId: string,
-    input: Record<string, unknown> = {}
-  ): Promise<WorkflowExecution> {
-    const idempotencyKey = crypto.randomUUID();
-    if (!this.isLiveMode) {
-      const execution: WorkflowExecution = {
-        id: crypto.randomUUID(),
-        definitionId,
-        status: "running",
-        startTime: new Date().toISOString(),
-        input,
-        activeTaskId: "task_" + Math.random().toString(36).substring(2, 6),
-        activeTaskName: "User Checkpoint Task",
-      };
-      this.sessionExecutions.unshift(execution);
-      this.logActivity(
-        "START_WORKFLOW",
-        "workflow",
-        `Khởi chạy quy trình '${definitionId}' với Idempotency-Key ${idempotencyKey}`
-      );
-      return execution;
-    }
-    const res = await this.send("/v1/workflows/executions", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Idempotency-Key": idempotencyKey,
-      },
-      body: JSON.stringify({ definitionId, input }),
-    });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({ error: "request_failed" }));
-      throw new Error(err.error || "failed_to_start_workflow");
-    }
-    const data = await res.json();
-    const exec: WorkflowExecution = {
-      id: data.id,
-      definitionId,
-      status: data.status ?? "running",
-      startTime: new Date().toISOString(),
-      input,
-      activeTaskId: "checkpoint_task",
-      activeTaskName: "User Checkpoint",
-    };
-    this.sessionExecutions.unshift(exec);
-    this.logActivity(
-      "START_WORKFLOW",
-      "workflow",
-      `Khởi chạy thành công execution ${data.id}`
-    );
-    return exec;
-  }
-
-  public async completeWorkflowTask(executionId: string): Promise<void> {
-    if (!this.isLiveMode) {
-      const exec = this.sessionExecutions.find((e) => e.id === executionId);
-      if (exec) {
-        exec.status = "completed";
-        exec.endTime = new Date().toISOString();
-        exec.activeTaskId = undefined;
-      }
-      this.logActivity(
-        "COMPLETE_TASK",
-        "workflow",
-        `Hoàn thành tác vụ quy trình ${executionId}`
-      );
-      return;
-    }
+  public async getTrustGrant(grantId: string): Promise<TrustGrant> {
     const res = await this.send(
-      `/v1/workflows/executions/${encodeURIComponent(executionId)}/complete`,
+      `/v1/trust/grants/${encodeURIComponent(grantId)}`,
+      { signal: AbortSignal.timeout(6000) }
+    );
+    if (!res.ok) await this.fail(res, "grant_lookup_failed");
+    return (await res.json()) as TrustGrant;
+  }
+
+  public async activateTrustGrant(
+    grantId: string,
+    approvalId: string,
+    revision: number
+  ): Promise<void> {
+    const res = await this.send(
+      `/v1/trust/grants/${encodeURIComponent(grantId)}/activate`,
       {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({}),
+        headers: {
+          "Content-Type": "application/json",
+          "If-Match": `"grant-${grantId}-${revision}"`,
+        },
+        body: JSON.stringify({ approvalId }),
       }
     );
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({ error: "request_failed" }));
-      throw new Error(err.error || "failed_to_complete_task");
-    }
-    const exec = this.sessionExecutions.find((e) => e.id === executionId);
-    if (exec) {
-      exec.status = "completed";
-      exec.endTime = new Date().toISOString();
-    }
-    this.logActivity(
-      "COMPLETE_TASK",
-      "workflow",
-      `Đã hoàn thành tác vụ cho ${executionId}`
-    );
+    if (!res.ok) await this.fail(res, "failed_to_activate_grant");
   }
 
-  public async cancelWorkflowExecution(executionId: string): Promise<void> {
-    if (!this.isLiveMode) {
-      const exec = this.sessionExecutions.find((e) => e.id === executionId);
-      if (exec) {
-        exec.status = "cancelled";
-        exec.endTime = new Date().toISOString();
-      }
-      this.logActivity(
-        "CANCEL_WORKFLOW",
-        "workflow",
-        `Hủy bỏ thực thi quy trình ${executionId}`
-      );
-      return;
+  public async revokeTrustGrant(
+    edge: TrustGraphEdge,
+    reason: string
+  ): Promise<void> {
+    const trimmed = reason.trim();
+    if (!trimmed || trimmed.length > 512) {
+      throw new ApiError(400, "reason_required");
     }
     const res = await this.send(
-      `/v1/workflows/executions/${encodeURIComponent(executionId)}`,
-      { method: "DELETE" }
+      `/v1/trust/grants/${edge.grantId}/revoke`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "If-Match": `"grant-${edge.grantId}-${edge.revision}"`,
+        },
+        body: JSON.stringify({ reason: trimmed }),
+      }
     );
-    if (!res.ok && res.status !== 204) {
-      const err = await res.json().catch(() => ({ error: "request_failed" }));
-      throw new Error(err.error || "failed_to_cancel");
-    }
-    const exec = this.sessionExecutions.find((e) => e.id === executionId);
-    if (exec) {
-      exec.status = "cancelled";
-      exec.endTime = new Date().toISOString();
-    }
-    this.logActivity(
-      "CANCEL_WORKFLOW",
-      "workflow",
-      `Đã hủy bỏ execution ${executionId}`
-    );
+    if (!res.ok) await this.fail(res, "revoke_failed");
   }
 
-  public async getRecords(): Promise<StructuredRecord[]> {
-    return this.isLiveMode ? [] : [...this.sessionRecords];
+  public async getCapabilities(): Promise<CapabilityVersion[]> {
+    const res = await this.send("/v1/capabilities?limit=100", {
+      signal: AbortSignal.timeout(8000),
+    });
+    if (!res.ok) await this.fail(res, "capabilities_unavailable");
+    const data = (await res.json()) as { items?: CapabilityVersion[] };
+    return Array.isArray(data.items) ? data.items : [];
   }
 
-  public async createRecord(
-    collection: string,
-    data: Record<string, unknown>
-  ): Promise<StructuredRecord> {
-    this.assertPreviewOnly();
-    const newRecord: StructuredRecord = {
-      id: crypto.randomUUID(),
-      collection,
-      data,
-      createdAt: new Date().toISOString(),
-      ownerAppId: MOCK_APPLICATIONS[0].appId,
-      isShared: false,
+  public async getWorkflowSummary(): Promise<WorkflowSummary> {
+    const res = await this.send("/v1/workflows/summary", {
+      signal: AbortSignal.timeout(20000),
+    });
+    if (!res.ok) await this.fail(res, "workflow_summary_unavailable");
+    const data = (await res.json()) as Partial<WorkflowSummary> | null;
+    const definitions = Array.isArray(data?.definitions)
+      ? data.definitions
+      : [];
+    const totals = data?.totals ?? {
+      definitions: definitions.length,
+      running: 0,
+      completed: 0,
+      cancelled: 0,
     };
-    this.sessionRecords.unshift(newRecord);
-    this.logActivity(
-      "CREATE_RECORD",
-      "resource",
-      `Tạo bản ghi mới trong collection '${collection}' (${newRecord.id})`
-    );
-    return newRecord;
+    return { definitions, totals };
   }
 
-  public async deleteRecord(id: string): Promise<void> {
-    this.assertPreviewOnly();
-    this.sessionRecords = this.sessionRecords.filter((r) => r.id !== id);
-    this.logActivity("DELETE_RECORD", "resource", `Xóa bản ghi ${id}`);
-  }
-
-  public async getObjects(): Promise<StoredObject[]> {
-    return this.isLiveMode ? [] : [...MOCK_OBJECTS];
-  }
-
-  public async getResourceShares(): Promise<ResourceShare[]> {
-    return this.isLiveMode ? [] : [...this.sessionShares];
-  }
-
-  public async createResourceShare(payload: {
-    resourceType: "record" | "object";
-    resourceId: string;
-    granteeAppId: string;
-    expiresAt: string;
-  }): Promise<ResourceShare> {
-    this.assertPreviewOnly();
-    const share: ResourceShare = {
-      shareId: crypto.randomUUID(),
-      resourceType: payload.resourceType,
-      resourceId: payload.resourceId,
-      granteeAppId: payload.granteeAppId,
-      action: "read",
-      expiresAt: payload.expiresAt,
-      createdAt: new Date().toISOString(),
+  public async getWorkflowExecutions(
+    options: {
+      status?: WorkflowExecution["status"];
+      limit?: number;
+    } = {}
+  ): Promise<WorkflowExecutionSummary[]> {
+    const query = new URLSearchParams();
+    if (options.status) query.set("status", options.status);
+    query.set("limit", String(options.limit ?? 100));
+    const res = await this.send(`/v1/workflows/executions?${query.toString()}`, {
+      signal: AbortSignal.timeout(20000),
+    });
+    if (!res.ok) await this.fail(res, "workflow_executions_unavailable");
+    const data = (await res.json()) as {
+      items?: WorkflowExecutionSummary[];
     };
-    this.sessionShares.unshift(share);
-    this.logActivity(
-      "CREATE_RESOURCE_SHARE",
-      "resource",
-      `Cấp quyền chia sẻ chỉ đọc cho app ${payload.granteeAppId}`
-    );
-    return share;
+    return Array.isArray(data.items) ? data.items : [];
   }
 
-  public async revokeResourceShare(shareId: string): Promise<void> {
-    this.assertPreviewOnly();
-    this.sessionShares = this.sessionShares.filter((s) => s.shareId !== shareId);
-    this.logActivity(
-      "REVOKE_RESOURCE_SHARE",
-      "resource",
-      `Thu hồi chia sẻ tài nguyên ${shareId}`
-    );
+  public async getStorageSummary(): Promise<StorageSummary> {
+    const res = await this.send("/v1/storage/summary", {
+      signal: AbortSignal.timeout(12000),
+    });
+    if (!res.ok) await this.fail(res, "storage_summary_unavailable");
+    const data = (await res.json()) as Partial<StorageSummary> | null;
+    const files = data?.totals?.files;
+    return {
+      applications: Array.isArray(data?.applications) ? data.applications : [],
+      totals: {
+        collections: Array.isArray(data?.totals?.collections)
+          ? data.totals.collections
+          : [],
+        files:
+          files &&
+          typeof files.count === "number" &&
+          typeof files.bytes === "number" &&
+          typeof files.quarantined === "number"
+            ? files
+            : null,
+      },
+    };
   }
 
-  private assertPreviewOnly(): void {
-    if (this.isLiveMode) {
-      throw new Error("preview_only_operation");
+  public async getStorageCollections(
+    applicationId: string
+  ): Promise<StorageCollections> {
+    const query = new URLSearchParams({ application: applicationId });
+    const res = await this.send(
+      `/v1/storage/collections?${query.toString()}`,
+      { signal: AbortSignal.timeout(12000) }
+    );
+    if (!res.ok) await this.fail(res, "storage_collections_unavailable");
+    const data = (await res.json()) as Partial<StorageCollections> | null;
+    const application = data?.application;
+    return {
+      application:
+        application &&
+        typeof application.id === "string" &&
+        typeof application.name === "string"
+          ? application
+          : { id: applicationId, name: "" },
+      collections: Array.isArray(data?.collections) ? data.collections : [],
+    };
+  }
+
+  public async getStorageFiles(
+    applicationId: string,
+    path: string
+  ): Promise<StorageFileListing> {
+    const query = new URLSearchParams({ application: applicationId });
+    if (path && path !== "/") query.set("path", path);
+    const res = await this.send(`/v1/storage/files?${query.toString()}`, {
+      signal: AbortSignal.timeout(12000),
+    });
+    if (!res.ok) await this.fail(res, "storage_files_unavailable");
+    const data = (await res.json()) as Partial<StorageFileListing> | null;
+    const application = data?.application;
+    return {
+      application:
+        application &&
+        typeof application.id === "string" &&
+        typeof application.name === "string"
+          ? application
+          : { id: applicationId, name: "" },
+      path: typeof data?.path === "string" ? data.path : path || "/",
+      folders: Array.isArray(data?.folders) ? data.folders : [],
+      files: Array.isArray(data?.files) ? data.files : [],
+      truncated: data?.truncated === true,
+    };
+  }
+
+  public async getAuditEvents(params: {
+    since?: string;
+    until?: string;
+    limit?: number;
+    cursor?: string;
+  } = {}): Promise<AuditEventPage> {
+    const query = new URLSearchParams();
+    if (params.since) query.set("since", params.since);
+    if (params.until) query.set("until", params.until);
+    if (params.limit) query.set("limit", String(params.limit));
+    if (params.cursor) query.set("cursor", params.cursor);
+    const suffix = query.toString() ? `?${query.toString()}` : "";
+    const res = await this.send(`/v1/audit-events${suffix}`, {
+      signal: AbortSignal.timeout(8000),
+    });
+    if (!res.ok) await this.fail(res, "audit_events_unavailable");
+    const data = (await res.json()) as AuditEventPage;
+    return {
+      items: Array.isArray(data.items) ? data.items : [],
+      nextCursor: data.nextCursor ?? null,
+    };
+  }
+
+  public async verifyAuditChain(): Promise<AuditVerification> {
+    const res = await this.send("/v1/audit-events/verify", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({}),
+    });
+    if (!res.ok) await this.fail(res, "audit_verification_failed");
+    return (await res.json()) as AuditVerification;
+  }
+
+  public async getConsents(): Promise<SubjectConsent[]> {
+    const res = await this.send("/v1/me/consents", {
+      signal: AbortSignal.timeout(8000),
+    });
+    if (!res.ok) await this.fail(res, "consents_unavailable");
+    const data = (await res.json()) as { consents?: SubjectConsent[] };
+    return Array.isArray(data.consents) ? data.consents : [];
+  }
+
+  public async getEmergencyAccesses(): Promise<EmergencyAccess[]> {
+    const res = await this.send("/v1/emergency-accesses", {
+      signal: AbortSignal.timeout(8000),
+    });
+    if (!res.ok) await this.fail(res, "emergency_unavailable");
+    const data = (await res.json()) as { reviews?: EmergencyAccess[] };
+    return Array.isArray(data.reviews) ? data.reviews : [];
+  }
+
+  public async getTrafficSeries(minutes: number): Promise<TrafficSeries> {
+    const safeMinutes = Math.min(1440, Math.max(60, Math.round(minutes)));
+    const res = await this.send(
+      `/v1/metrics/traffic?minutes=${safeMinutes}`,
+      { signal: AbortSignal.timeout(8000) }
+    );
+    if (!res.ok) await this.fail(res, "traffic_metrics_unavailable");
+    const data = (await res.json()) as Partial<TrafficSeries>;
+    return {
+      from: typeof data.from === "string" ? data.from : new Date().toISOString(),
+      to: typeof data.to === "string" ? data.to : new Date().toISOString(),
+      intervalSeconds: 60,
+      buckets: Array.isArray(data.buckets) ? data.buckets : [],
+      totals: data.totals ?? {
+        requests: 0,
+        errors4xx: 0,
+        errors5xx: 0,
+        avgLatencyMs: 0,
+        maxLatencyMs: 0,
+      },
+    };
+  }
+
+  public async getFeatureSeries(minutes = 60): Promise<FeatureSeries> {
+    const safeMinutes = Math.min(60, Math.max(1, Math.round(minutes)));
+    const res = await this.send(
+      `/v1/metrics/features?minutes=${safeMinutes}`,
+      { signal: AbortSignal.timeout(8000) }
+    );
+    if (!res.ok) await this.fail(res, "feature_metrics_unavailable");
+    const data = (await res.json()) as Partial<FeatureSeries>;
+    return {
+      from: typeof data.from === "string" ? data.from : new Date().toISOString(),
+      to: typeof data.to === "string" ? data.to : new Date().toISOString(),
+      features: Array.isArray(data.features) ? data.features : [],
+    };
+  }
+
+  public async getRecentRequests(limit = 100): Promise<RecentRequest[]> {
+    const safeLimit = Math.min(100, Math.max(1, Math.round(limit)));
+    const res = await this.send(`/v1/metrics/requests?limit=${safeLimit}`, {
+      signal: AbortSignal.timeout(8000),
+    });
+    if (!res.ok) await this.fail(res, "recent_requests_unavailable");
+    const data = (await res.json()) as { items?: RecentRequest[] };
+    return Array.isArray(data.items) ? data.items : [];
+  }
+
+  public async getDirectoryPrincipals(): Promise<DirectoryPrincipalsPage> {
+    const res = await this.send("/v1/directory/principals", {
+      signal: AbortSignal.timeout(8000),
+    });
+    if (!res.ok) await this.fail(res, "directory_principals_unavailable");
+    const data = (await res.json()) as Partial<DirectoryPrincipalsPage>;
+    return {
+      items: Array.isArray(data.items) ? data.items : [],
+      truncated: data.truncated === true,
+    };
+  }
+
+  public async getDirectoryOrganizations(): Promise<DirectoryTree> {
+    const res = await this.send("/v1/directory/organizations", {
+      signal: AbortSignal.timeout(8000),
+    });
+    if (!res.ok) await this.fail(res, "directory_organizations_unavailable");
+    const data = (await res.json()) as Partial<DirectoryTree>;
+    if (!data.root) {
+      throw new ApiError(0, "invalid_directory_response");
     }
+    return {
+      root: data.root,
+      relations: Array.isArray(data.relations) ? data.relations : [],
+      truncated: data.truncated === true,
+    };
   }
 }
 

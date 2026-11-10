@@ -7,6 +7,7 @@ import { applicationToken } from "../applications/applications.mjs";
 import { HttpError, json, readFlatJsonObject } from "../../platform/http/http.mjs";
 
 export const AUDIT_VERIFY_PATH = "/v1/audit-events/verify";
+export const AUDIT_EVENTS_PATH = "/v1/audit-events";
 
 export async function handleAudit(request, response, identity, config, url) {
   if (!config.dataUrl) throw new HttpError(503, "audit_unavailable");
@@ -58,6 +59,48 @@ export async function handleSubjectAccess(request, response, identity, config, u
   } catch { throw new HttpError(503, "audit_unavailable"); }
   if (result?.error) throw new HttpError(result.status, result.error);
   if (result?.status !== 200 || !Array.isArray(result.value?.entries)) throw new HttpError(503, "audit_unavailable");
+  response.setHeader("Cache-Control", "no-store");
+  return json(response, 200, result.value);
+}
+
+// Read-only page of the caller tenant's audit events, newest first. The database
+// function core.audit_query enforces the tenant and the audit.read permission;
+// Core only asserts the private audit role for a verified management principal.
+const AUDIT_QUERY_KEYS = new Set(["since", "until", "limit", "cursor"]);
+
+export async function handleAuditEvents(request, response, identity, config, url) {
+  if (url.pathname !== AUDIT_EVENTS_PATH) throw new HttpError(404, "not_found");
+  if (request.method !== "GET") {
+    response.setHeader("Allow", "GET");
+    throw new HttpError(405, "method_not_allowed");
+  }
+  if (!config.dataUrl) throw new HttpError(503, "audit_unavailable");
+  if (!identity.clientId) throw new HttpError(403, "verified_client_required");
+  const payload = {};
+  for (const [key, value] of url.searchParams) {
+    if (!AUDIT_QUERY_KEYS.has(key) || key in payload) throw new HttpError(400, "invalid_audit_query");
+    if (key === "limit") {
+      if (!/^[0-9]{1,3}$/.test(value)) throw new HttpError(400, "invalid_audit_limit");
+      payload.limit = Number(value);
+    } else {
+      if (value.length < 1 || value.length > 1024) throw new HttpError(400, "invalid_audit_query");
+      payload[key] = value;
+    }
+  }
+  let result;
+  try {
+    const db = await fetch(`${config.dataUrl}/rpc/audit_query`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${applicationToken(identity, config.dataSecret, "junctura_audit_api")}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ payload }),
+      signal: AbortSignal.timeout(10000),
+      redirect: "error",
+    });
+    if (!db.ok) throw Error();
+    result = await db.json();
+  } catch { throw new HttpError(503, "audit_unavailable"); }
+  if (result?.error) throw new HttpError(result.status, result.error);
+  if (result?.status !== 200 || !Array.isArray(result.value?.items)) throw new HttpError(503, "audit_unavailable");
   response.setHeader("Cache-Control", "no-store");
   return json(response, 200, result.value);
 }

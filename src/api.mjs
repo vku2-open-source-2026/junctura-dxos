@@ -2,7 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0
 import { randomUUID } from "node:crypto";
 import { handleApplications } from "./modules/applications/applications.mjs";
-import { AUDIT_VERIFY_PATH, SUBJECT_ACCESS_PATH, handleAudit, handleSubjectAccess } from "./modules/audit/audit.mjs";
+import { AUDIT_EVENTS_PATH, AUDIT_VERIFY_PATH, SUBJECT_ACCESS_PATH, handleAudit, handleAuditEvents, handleSubjectAccess } from "./modules/audit/audit.mjs";
+import { DIRECTORY_ORGANIZATIONS_PATH, DIRECTORY_PRINCIPALS_PATH, handleDirectory } from "./modules/directory/directory.mjs";
 import { handleConsent, isConsentPath } from "./modules/consent/consent.mjs";
 import { createAuthorizer } from "./platform/auth/auth.mjs";
 import { handleApprovals, handleCapabilities } from "./modules/capability/registry/capabilities.mjs";
@@ -15,11 +16,24 @@ import { checkReadiness } from "./bootstrap/readiness.mjs";
 import { handleWorkflow } from "./modules/workflow/workflow.mjs";
 import { handleShares, requireLegacyClient, resourceIdentity } from "./modules/resources/resources.mjs";
 import { handleSecrets } from "./modules/secrets/secrets.mjs";
+import { isStoragePath, handleStorage } from "./modules/storage/storage.mjs";
 import { TRUST_GRAPH_PATH, handleTrust, handleTrustGraph } from "./modules/capability/trust/trust.mjs";
+import { handleMetrics, isMetricsPath, recordRequest } from "./modules/metrics/metrics.mjs";
 
 export function createApi(config) {
   const authorize = createAuthorizer(config);
   return async (request, response) => {
+    const startedAt = performance.now();
+    if (typeof response.once === "function") response.once("finish", () => {
+      try {
+        recordRequest({
+          method: request.method,
+          path: request.url?.split("?", 1)[0],
+          statusCode: response.statusCode,
+          durationMs: performance.now() - startedAt,
+        });
+      } catch { /* traffic accounting must never affect a request */ }
+    });
     const path = request.url?.split("?", 1)[0];
     if (path === "/ready" && request.method === "GET") {
       try {
@@ -138,6 +152,16 @@ export function createApi(config) {
           { error: error instanceof HttpError ? error.message : "audit_unavailable", requestId });
       }
     }
+    if (path === AUDIT_EVENTS_PATH) {
+      const requestId = randomUUID();
+      response.setHeader("X-Request-Id", requestId);
+      try {
+        return await handleAuditEvents(request, response, await authorize(request, true), config, new URL(request.url, "http://core"));
+      } catch (error) {
+        return json(response, error instanceof HttpError ? error.status : 503,
+          { error: error instanceof HttpError ? error.message : "audit_unavailable", requestId });
+      }
+    }
     if (path === AUDIT_VERIFY_PATH) {
       const requestId = randomUUID();
       response.setHeader("X-Request-Id", requestId);
@@ -147,6 +171,26 @@ export function createApi(config) {
         if (error.status === 413) response.setHeader("Connection", "close");
         return json(response, error instanceof HttpError ? error.status : 503,
           { error: error instanceof HttpError ? error.message : "audit_unavailable", requestId });
+      }
+    }
+    if (path === DIRECTORY_PRINCIPALS_PATH || path === DIRECTORY_ORGANIZATIONS_PATH) {
+      const requestId = randomUUID();
+      response.setHeader("X-Request-Id", requestId);
+      try {
+        return await handleDirectory(request, response, await authorize(request, true), config, new URL(request.url, "http://core"));
+      } catch (error) {
+        return json(response, error instanceof HttpError ? error.status : 503,
+          { error: error instanceof HttpError ? error.message : "directory_unavailable", requestId });
+      }
+    }
+    if (isMetricsPath(path)) {
+      const requestId = randomUUID();
+      response.setHeader("X-Request-Id", requestId);
+      try {
+        return await handleMetrics(request, response, await authorize(request, true), config, new URL(request.url, "http://core"));
+      } catch (error) {
+        return json(response, error instanceof HttpError ? error.status : 503,
+          { error: error instanceof HttpError ? error.message : "metrics_unavailable", requestId });
       }
     }
     if (path === TRUST_GRAPH_PATH) {
@@ -170,6 +214,16 @@ export function createApi(config) {
           { error: error instanceof HttpError ? error.message : "trust_unavailable", requestId });
       }
     }
+    if (isStoragePath(path)) {
+      const requestId = randomUUID();
+      response.setHeader("X-Request-Id", requestId);
+      try {
+        return await handleStorage(request, response, await authorize(request, true), config, new URL(request.url, "http://core"));
+      } catch (error) {
+        return json(response, error instanceof HttpError ? error.status : 503,
+          { error: error instanceof HttpError ? error.message : "storage_unavailable", requestId });
+      }
+    }
     if (path?.startsWith("/v1/data/") || path?.startsWith("/v2/data/")) {
       let identity = await authorize(request, true);
       if (path.startsWith("/v2/")) identity = await resourceIdentity(config, identity);
@@ -191,7 +245,7 @@ export function createApi(config) {
       return handleSecrets(request, response, identity, config, new URL(request.url, "http://core"));
     }
     if (path?.startsWith("/v1/workflows/")) {
-      const identity = await authorize(request);
+      const identity = await authorize(request, true);
       return handleWorkflow(request, response, identity, config, new URL(request.url, "http://core"));
     }
     if (path === "/internal/auth" || path === "/v1/identity") {

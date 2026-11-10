@@ -30,9 +30,9 @@ export const CodeBlock: React.FC<CodeBlockProps> = ({
 
   return (
     <div
-      className={`relative rounded-lg bg-slate-900 border border-slate-800 text-slate-100 font-mono text-xs overflow-hidden ${className}`}
+      className={`relative rounded-md bg-slate-900 border border-slate-800 text-slate-100 font-mono text-sm overflow-hidden ${className}`}
     >
-      <div className="flex items-center justify-between px-3.5 py-1.5 bg-slate-950/70 border-b border-slate-800/80 text-[11px] text-slate-400">
+      <div className="flex items-center justify-between px-3.5 py-1.5 bg-slate-950/70 border-b border-slate-800/80 text-xs text-slate-400">
         <span>{language}</span>
         <button
           onClick={handleCopy}

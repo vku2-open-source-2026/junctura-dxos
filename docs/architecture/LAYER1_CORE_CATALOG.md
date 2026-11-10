@@ -73,7 +73,7 @@ selection is changed by this document.
 
 Console is IMPLEMENTED, PARTIALLY VERIFIED management UI, not a new authority
 service or Layer-2 business product. [App](../../console/src/App.tsx),
-[API client](../../console/src/services/apiClient.ts), [tests](../../console/src/tests/App.test.tsx),
+[API client](../../console/src/services/apiClient.ts), [tests](../../console/src/tests/screens.test.tsx),
 [Vite config](../../console/vite.config.ts) and [Dockerfile](../../console/Dockerfile)
 are the evidence; the screen matrix in older documentation alone is insufficient.
 

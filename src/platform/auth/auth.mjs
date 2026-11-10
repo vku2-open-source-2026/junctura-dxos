@@ -14,7 +14,13 @@ export function validateIdentity(claims, issuer, now = Date.now() / 1000) {
   }
   const roles = claims.realm_access?.roles ?? [];
   if (!Array.isArray(roles) || !roles.includes("core-reader")) throw new HttpError(403, "insufficient_role");
-  return { subject: claims.sub, tenantId: claims.tenant_id, roles: roles.filter((role) => ["core-reader", "core-writer"].includes(role)) };
+  const preferredUsername = typeof claims.preferred_username === "string" &&
+    claims.preferred_username.isWellFormed() && claims.preferred_username.trim().length > 0 &&
+    [...claims.preferred_username].length <= 255 && !/[\u0000-\u001f\u007f]/u.test(claims.preferred_username)
+    ? claims.preferred_username : undefined;
+  return { subject: claims.sub, tenantId: claims.tenant_id,
+    roles: roles.filter((role) => ["core-reader", "core-writer"].includes(role)),
+    ...(preferredUsername ? { preferredUsername } : {}) };
 }
 
 export function createAuthorizer(config, fetcher = fetch) {

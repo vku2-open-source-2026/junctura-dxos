@@ -387,5 +387,54 @@
       "decision": "justified",
       "note": "Đã đối chiếu hồ sơ cấp cứu"
     }
+  },
+  "directoryPrincipals": {
+    "schema": "DirectoryPrincipalsPage",
+    "value": {
+      "items": [
+        {
+          "subject": "admin1",
+          "issuer": "https://identity.example.invalid/realms/junctura",
+          "managementClient": "management",
+          "permissions": [
+            "applications.approve",
+            "trust.approve",
+            "audit.read"
+          ],
+          "enabled": true,
+          "displayName": "Quản trị viên 1",
+          "organization": "Junctura",
+          "jobTitle": "Quản trị nền tảng",
+          "kind": "admin"
+        }
+      ],
+      "truncated": false
+    }
+  },
+  "directoryTree": {
+    "schema": "DirectoryTree",
+    "value": {
+      "root": {
+        "id": "tenant-a",
+        "name": "tenant-a",
+        "kind": "platform",
+        "children": [
+          {
+            "id": "9b1f3c2a-4d5e-4f60-8a71-0c2d3e4f5a6b",
+            "name": "Trạm y tế",
+            "kind": "application",
+            "children": []
+          }
+        ]
+      },
+      "relations": [
+        {
+          "from": "9b1f3c2a-4d5e-4f60-8a71-0c2d3e4f5a6b",
+          "to": "5e6f7a8b-9c0d-4e1f-8a2b-3c4d5e6f7a8b",
+          "label": "Tra cứu bệnh nhân"
+        }
+      ],
+      "truncated": false
+    }
   }
 }

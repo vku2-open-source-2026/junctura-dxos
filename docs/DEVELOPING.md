@@ -196,6 +196,66 @@ npm run check:schema-drift
 Do not claim a suite passed if it was not executed. Integration suites restart
 services and alter local test state; they are not unit tests.
 
+## Seed the health context
+
+`npm run seed:health` fills a running local stack with the fictional
+"Junctura Health" scenario: `benh-nhan`, `chuyen-tuyen` and `don-thuoc` records
+plus small referral-letter objects. Everything is generated deterministically
+from a seeded PRNG and written only through the v2 HTTP API of active Layer-2
+applications, so rerunning it does not duplicate rows or files.
+
+Prerequisites: the stack from `npm run local:up`, the `.env` created by
+`npm run setup` (including `KEYCLOAK_ADMIN_PASSWORD`), and Docker access to the
+Compose project. The default run uses the reviewed local operator flow in
+`scripts/lib/demo-stack.mjs` to enroll or reuse five Layer-2 applications
+(Trạm y tế, Bệnh viện, Nhà thuốc, Bảo hiểm, Sổ sức khỏe), binds their resource
+subjects exactly as `npm run app:enroll` does, publishes their example
+capabilities, and creates the five health trust relationships through the real
+Trust API (owner proposes, an independent approver approves and activates). It
+then writes presentation-only principal profiles directly (three administrators
+and two application service accounts, never permissions), seeds pending and
+rejected trust proposals for the approval queue through `/v1/trust/grants`, and
+creates workflow requests (pending, approved, rejected) for the installed
+"Chuyển tuyến bệnh nhân", "Xác minh đơn thuốc" and "Xác minh chi phí bảo hiểm"
+processes, plus two active and one revoked subject consent through the HTTP API.
+The health records and referral files are split across the scenario applications
+through each application's own token, and a generated EICAR test upload proves
+that ClamAV quarantine rejects unscanned bytes without publishing them. The administrator consent seed
+reads `console/public/login-hints.json` when present or accepts
+`SEED_HEALTH_ADMIN_TOKEN`/`SEED_HEALTH_ADMIN_PASSWORD`; it never prints
+credentials. Every step is idempotent, so reruns reuse existing rows. Capability
+execution and emergency access stay opt-in (`C4A_ENABLED`/`C4B_ENABLED`) and
+are skipped when that runtime is disabled.
+
+```sh
+npm run seed:health
+npm run seed:health -- --tenant tenant-a --seed 20261110
+```
+
+To reuse an already enrolled, active application instead of the operator flow,
+pass `--skip-apps` and provide its own credentials:
+
+```sh
+SEED_HEALTH_CLIENT_ID=app-so-suc-khoe \
+SEED_HEALTH_CLIENT_SECRET=<backend-secret> \
+npm run seed:health -- --skip-apps
+```
+
+The records and files are owned by their respective scenario applications and
+readable by those applications through `/v2/data` and `/v2/objects`. A browser or
+Console session cannot read application-private v2 resources without an explicit
+resource share; granting one is a separate operator decision. The aggregate
+management views are `GET /v1/storage/summary` and
+`GET /v1/workflows/executions`, both requiring `audit.read`. Business records, workflows,
+grants and consents are never written by SQL; only the presentation-only
+principal profiles use the reviewed local `docker compose exec ... psql` helper.
+The script contains no real patient data.
+
+Outside the local Compose demo flow, application enrollment and the
+`resource_subject` binding remain operator tasks under
+[APPLICATION_REGISTRATION.md](APPLICATION_REGISTRATION.md); the seed helper only
+automates the already reviewed local steps and never invents credentials.
+
 ## Developer journey and cleanup
 
 Prerequisites: a healthy local stack, an enrolled backend application and a

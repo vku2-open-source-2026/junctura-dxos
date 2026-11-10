@@ -5,9 +5,7 @@ export const BRAND = {
   name: "Junctura Console",
   version: "0.1.0",
   subtitle: "The Control Center for Junctura DX-OS",
-  concept: "One platform. Many applications. Connected capabilities.",
   layer: "Layer-1 Operational Control Plane",
-  copyright: "© 2026 Junctura Contributors. Apache-2.0 License.",
   githubUrl: "https://github.com/vku2-open-source-2026/junctura-dxos",
   docsUrl: "https://github.com/vku2-open-source-2026/junctura-dxos/tree/main/docs",
   cores: [

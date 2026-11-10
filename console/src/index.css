@@ -6,23 +6,53 @@
 @theme {
   --color-stone-ink: #172F3D;
   --color-junctura-blue: #176B80;
-  --color-app-bg: #F7F8F6;
+  --color-app-bg: #F4F6F6;
   --color-surface: #FFFFFF;
 }
 
 @layer base {
+  html {
+    font-size: 17.5px;
+  }
+
+  html[data-text-size="sm"] {
+    font-size: 16px;
+  }
+
+  html[data-text-size="md"] {
+    font-size: 17.5px;
+  }
+
+  html[data-text-size="lg"] {
+    font-size: 19px;
+  }
+
   :root {
+    /* Shell theme variables (light is the default) */
+    --bg: #F4F6F6;
+    --card: #FFFFFF;
+    --border: #DCE3E5;
+    --text: #172F3D;
+    --muted: #5B6B73;
+    --accent: #176B80;
+    --accent-hover: #0F5568;
+    --accent-soft: #E5F0F3;
+    --logo-tile: #172F3D;
+    --logo-blue: #4FB3C8;
+    --logo-green: #5FCDBE;
+    --logo-sand: #D8A581;
+
     /* Primitive Palette Tokens */
     --color-stone-ink: #172F3D;
     --color-junctura-blue: #176B80;
-    --color-junctura-blue-hover: #135566;
-    --color-junctura-blue-light: #E8F3F5;
+    --color-junctura-blue-hover: #0F5568;
+    --color-junctura-blue-light: #E5F0F3;
     --color-teal-mediterranean: #18877A;
     --color-teal-light: #E6F5F3;
     --color-sandstone: #C58B62;
     --color-sandstone-light: #FBF4EE;
     --color-limestone: #F0F2EE;
-    --color-app-bg: #F7F8F6;
+    --color-app-bg: #F4F6F6;
     --color-surface: #FFFFFF;
     --color-surface-elevated: #FFFFFF;
     
@@ -30,23 +60,23 @@
     --color-success: #18877A;
     --color-success-bg: #E6F5F3;
     --color-success-border: #BCE4DF;
-    --color-warning: #D97706;
-    --color-warning-bg: #FEF3C7;
-    --color-warning-border: #FDE68A;
-    --color-error: #DC2626;
-    --color-error-bg: #FEE2E2;
-    --color-error-border: #FECACA;
+    --color-warning: #A8772F;
+    --color-warning-bg: #FBF4EE;
+    --color-warning-border: #E8D0BF;
+    --color-error: #B4453F;
+    --color-error-bg: #F8E9E8;
+    --color-error-border: #E7C3C0;
     --color-info: #176B80;
-    --color-info-bg: #E8F3F5;
+    --color-info-bg: #E5F0F3;
     --color-info-border: #C2E1E7;
 
     /* Semantic Typography & UI Tokens */
     --text-primary: #172F3D;
-    --text-secondary: #475569;
-    --text-muted: #64748B;
-    --text-placeholder: #94A3B8;
-    --border-subtle: #E2E8F0;
-    --border-strong: #CBD5E1;
+    --text-secondary: #3E4F57;
+    --text-muted: #5B6B73;
+    --text-placeholder: #8C9BA1;
+    --border-subtle: #DCE3E5;
+    --border-strong: #C6D2D6;
     --border-focus: #176B80;
 
     /* Spacing & Radii (Dashboard Dense scale from ui-ux-pro-max) */
@@ -57,57 +87,91 @@
     --shadow-card: 0 1px 3px 0 rgba(23, 47, 61, 0.05), 0 1px 2px -1px rgba(23, 47, 61, 0.05);
     --shadow-elevated: 0 4px 6px -1px rgba(23, 47, 61, 0.07), 0 2px 4px -2px rgba(23, 47, 61, 0.07);
     --shadow-modal: 0 20px 25px -5px rgba(23, 47, 61, 0.12), 0 8px 10px -6px rgba(23, 47, 61, 0.12);
+
+    /* Chart palette: accent + sandstone, success green as a third accent only. */
+    --chart-blue: #176B80;
+    --chart-orange: #C58B62;
+    --chart-green: #18877A;
+    --chart-grid: #DCE3E5;
+    --chart-axis: #5B6B73;
   }
 
   .dark {
-    --color-stone-ink: #F1F5F9;
-    --color-junctura-blue: #38BDF8;
-    --color-junctura-blue-hover: #0284C7;
-    --color-junctura-blue-light: #0C4A6E;
-    --color-teal-mediterranean: #2DD4BF;
-    --color-teal-light: #134E48;
-    --color-sandstone: #E2A782;
-    --color-sandstone-light: #4A2E1D;
-    --color-limestone: #1E293B;
-    --color-app-bg: #0B161E;
-    --color-surface: #12232F;
-    --color-surface-elevated: #172E3C;
+    --bg: #0D1A22;
+    --card: #13242D;
+    --border: #243843;
+    --text: #E8F3F5;
+    --muted: #9DB1BA;
+    --accent: #4FB3C8;
+    --accent-hover: #6FC6D8;
+    --accent-soft: rgba(79, 179, 200, 0.1);
+    --logo-tile: #E8F3F5;
+    --logo-blue: #176B80;
+    --logo-green: #0F6F66;
+    --logo-sand: #8A5A38;
 
-    --color-success: #34D399;
-    --color-success-bg: #064E3B;
-    --color-success-border: #047857;
-    --color-warning: #FBBF24;
-    --color-warning-bg: #78350F;
-    --color-warning-border: #B45309;
-    --color-error: #F87171;
-    --color-error-bg: #7F1D1D;
-    --color-error-border: #B91C1C;
-    --color-info: #38BDF8;
-    --color-info-bg: #082F49;
-    --color-info-border: #0369A1;
+    --color-stone-ink: #E8F3F5;
+    --color-junctura-blue: #4FB3C8;
+    --color-junctura-blue-hover: #6FC6D8;
+    --color-junctura-blue-light: #123A44;
+    --color-teal-mediterranean: #5FCDBE;
+    --color-teal-light: #123A34;
+    --color-sandstone: #D8A581;
+    --color-sandstone-light: #3A2A20;
+    --color-limestone: #172A33;
+    --color-app-bg: #0D1A22;
+    --color-surface: #13242D;
+    --color-surface-elevated: #1B303B;
 
-    --text-primary: #F8FAFC;
-    --text-secondary: #CBD5E1;
-    --text-muted: #94A3B8;
-    --text-placeholder: #64748B;
-    --border-subtle: #223E50;
-    --border-strong: #33556D;
-    --border-focus: #38BDF8;
+    --color-success: #5FCDBE;
+    --color-success-bg: #123A34;
+    --color-success-border: #1E6B5F;
+    --color-warning: #E3B778;
+    --color-warning-bg: #3A2C18;
+    --color-warning-border: #6B5328;
+    --color-error: #F08A8A;
+    --color-error-bg: #3A1A1D;
+    --color-error-border: #7A3438;
+    --color-info: #4FB3C8;
+    --color-info-bg: rgba(79, 179, 200, 0.1);
+    --color-info-border: #2A5560;
+
+    --text-primary: #E8F3F5;
+    --text-secondary: #C3D2D8;
+    --text-muted: #9DB1BA;
+    --text-placeholder: #6F858E;
+    --border-subtle: #243843;
+    --border-strong: #33505C;
+    --border-focus: #4FB3C8;
 
     --shadow-card: 0 1px 3px 0 rgba(0, 0, 0, 0.3);
     --shadow-elevated: 0 4px 6px -1px rgba(0, 0, 0, 0.4);
     --shadow-modal: 0 20px 25px -5px rgba(0, 0, 0, 0.6);
+
+    --chart-blue: #4FB3C8;
+    --chart-orange: #D8A581;
+    --chart-green: #5FCDBE;
+    --chart-grid: #243843;
+    --chart-axis: #9DB1BA;
   }
+}
+
+/* Long-form text needs comfortable line height even when a text-size utility sets one. */
+p:not([class*="leading-"]),
+li:not([class*="leading-"]),
+dd:not([class*="leading-"]) {
+  line-height: 1.6;
 }
 
 /* Base element overrides */
 body {
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
-  background-color: var(--color-app-bg);
-  color: var(--text-primary);
+  background-color: var(--bg);
+  color: var(--text);
   min-height: 100vh;
   margin: 0;
   overflow-x: hidden;
+  line-height: 1.55;
 }
 
 code, kbd, samp, pre {

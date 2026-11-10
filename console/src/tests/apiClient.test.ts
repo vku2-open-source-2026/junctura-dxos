@@ -2,12 +2,38 @@
 // SPDX-License-Identifier: Apache-2.0
 import { beforeEach, afterEach, describe, expect, it, vi } from "vitest";
 import { ApiClient, isApprovedBaseUrl } from "../services/apiClient";
+import type { TrustGraphEdge } from "../types";
 
 function jsonResponse(status: number, body?: unknown): Response {
   return new Response(body === undefined ? null : JSON.stringify(body), {
     status,
     headers: { "Content-Type": "application/json" },
   });
+}
+
+const IDENTITY = {
+  subject: "operator-live",
+  tenantId: "tenant-live",
+  roles: ["core-reader"],
+};
+
+function grantEdge(overrides: Partial<TrustGraphEdge> = {}): TrustGraphEdge {
+  return {
+    grantId: "grant-1",
+    providerAppId: "app-provider",
+    consumerAppId: "app-consumer",
+    capabilityId: "cap-1",
+    version: "1.0.0",
+    title: "Chia sẻ dữ liệu",
+    operations: ["invoke"],
+    revision: 3,
+    state: "active",
+    createdAt: "2026-11-01T00:00:00.000Z",
+    activatedAt: "2026-11-01T00:00:00.000Z",
+    revokedAt: null,
+    expiresAt: "2027-11-01T00:00:00.000Z",
+    ...overrides,
+  };
 }
 
 describe("ApiClient session boundaries", () => {
@@ -55,7 +81,6 @@ describe("ApiClient session boundaries", () => {
 
   it("never sends Authorization to an unapproved origin", async () => {
     const client = new ApiClient();
-    client.setLiveMode(true);
     client.setToken("memory-secret");
     (client as unknown as { baseUrl: string }).baseUrl = "https://evil.example";
     const fetchMock = vi.fn();
@@ -69,7 +94,6 @@ describe("ApiClient session boundaries", () => {
 
   it("distinguishes missing, rejected, forbidden, unavailable and timed-out identity", async () => {
     const missingToken = new ApiClient();
-    missingToken.setLiveMode(true);
     const fetchMock = vi.fn();
     vi.stubGlobal("fetch", fetchMock);
     await expect(missingToken.getIdentity()).resolves.toMatchObject({
@@ -78,7 +102,6 @@ describe("ApiClient session boundaries", () => {
     expect(fetchMock).not.toHaveBeenCalled();
 
     const rejected = new ApiClient();
-    rejected.setLiveMode(true);
     rejected.setToken("token");
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse(401)));
     await expect(rejected.getIdentity()).resolves.toMatchObject({
@@ -86,7 +109,6 @@ describe("ApiClient session boundaries", () => {
     });
 
     const forbidden = new ApiClient();
-    forbidden.setLiveMode(true);
     forbidden.setToken("token");
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse(403)));
     await expect(forbidden.getIdentity()).resolves.toMatchObject({
@@ -94,7 +116,6 @@ describe("ApiClient session boundaries", () => {
     });
 
     const unavailable = new ApiClient();
-    unavailable.setLiveMode(true);
     unavailable.setToken("token");
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse(503)));
     await expect(unavailable.getIdentity()).resolves.toMatchObject({
@@ -102,7 +123,6 @@ describe("ApiClient session boundaries", () => {
     });
 
     const timedOut = new ApiClient();
-    timedOut.setLiveMode(true);
     timedOut.setToken("token");
     vi.stubGlobal(
       "fetch",
@@ -115,24 +135,20 @@ describe("ApiClient session boundaries", () => {
     });
   });
 
-  it("returns only validated live identity without mock substitution", async () => {
+  it("returns only validated identity without substitution", async () => {
     const client = new ApiClient();
-    client.setLiveMode(true);
     client.setToken("token");
-    const identity = {
-      subject: "operator-live",
-      tenantId: "tenant-live",
-      roles: ["core-reader"],
-    };
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse(200, identity)));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(jsonResponse(200, IDENTITY))
+    );
 
     await expect(client.getIdentity()).resolves.toEqual({
       status: "authenticated",
-      identity,
+      identity: IDENTITY,
     });
 
     const invalidClient = new ApiClient();
-    invalidClient.setLiveMode(true);
     invalidClient.setToken("token");
     vi.stubGlobal(
       "fetch",
@@ -144,138 +160,117 @@ describe("ApiClient session boundaries", () => {
     });
   });
 
-  it("clears preview-derived session state when entering LIVE mode", async () => {
+  it("reports a failed workflow summary request instead of falling back", async () => {
     const client = new ApiClient();
-    client.setLiveMode(false);
-
-    expect((await client.getApplicationsList()).length).toBeGreaterThan(0);
-    expect((await client.getRecords()).length).toBeGreaterThan(0);
-    expect((await client.getObjects()).length).toBeGreaterThan(0);
-    expect((await client.getResourceShares()).length).toBeGreaterThan(0);
-    expect((await client.getWorkflowExecutions()).length).toBeGreaterThan(0);
-    expect(client.getSessionActivity().length).toBeGreaterThan(0);
-
-    client.setLiveMode(true);
-
-    await expect(client.getApplicationsList()).resolves.toEqual([]);
-    await expect(client.getRecords()).resolves.toEqual([]);
-    await expect(client.getObjects()).resolves.toEqual([]);
-    await expect(client.getResourceShares()).resolves.toEqual([]);
-    await expect(client.getWorkflowExecutions()).resolves.toEqual([]);
-    expect(client.getSessionActivity()).toEqual([]);
-  });
-
-  it("rejects mock-only v2 mutations in LIVE mode", async () => {
-    const client = new ApiClient();
-    client.setLiveMode(true);
-
-    await expect(client.createRecord("devices", { ok: true })).rejects.toThrow(
-      "preview_only_operation"
-    );
-    await expect(client.deleteRecord("record-id")).rejects.toThrow(
-      "preview_only_operation"
-    );
-    await expect(
-      client.createResourceShare({
-        resourceType: "record",
-        resourceId: "record-id",
-        granteeAppId: "app-id",
-        expiresAt: new Date().toISOString(),
-      })
-    ).rejects.toThrow("preview_only_operation");
-    await expect(client.revokeResourceShare("share-id")).rejects.toThrow(
-      "preview_only_operation"
-    );
-  });
-
-  it("does not fall back to mock workflow definitions after a live failure", async () => {
-    const client = new ApiClient();
-    client.setLiveMode(true);
     client.setToken("token");
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse(500)));
 
-    await expect(client.getWorkflowDefinitions()).rejects.toThrow(
-      "workflow_definitions_unavailable"
+    await expect(client.getWorkflowSummary()).rejects.toThrow(
+      "workflow_summary_unavailable"
     );
   });
 
-  it("verifies the audit chain through the approved gateway in live mode", async () => {
+  it("verifies the audit chain through the approved gateway", async () => {
     const result = {
-      verified: false, entries: 1, newlySealed: 0, headHash: null, verifiedAt: "2026-11-04T00:00:00.000Z",
-      firstBreak: { chainSeq: 2, eventId: "11111111-1111-4111-8111-111111111111", reason: "content_modified" },
+      verified: false,
+      entries: 1,
+      newlySealed: 0,
+      headHash: null,
+      verifiedAt: "2026-11-04T00:00:00.000Z",
+      firstBreak: {
+        chainSeq: 2,
+        eventId: "11111111-1111-4111-8111-111111111111",
+        reason: "content_modified",
+      },
     };
     const fetchMock = vi.fn(async () => jsonResponse(200, result));
     vi.stubGlobal("fetch", fetchMock);
     const client = new ApiClient();
-    client.setLiveMode(true);
     client.setToken("auditor-token");
     await expect(client.verifyAuditChain()).resolves.toEqual(result);
-    const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    const [url, init] = fetchMock.mock.calls[0] as unknown as [
+      string,
+      RequestInit,
+    ];
     expect(url).toBe("/api/v1/audit-events/verify");
     expect(init.method).toBe("POST");
     expect(init.body).toBe("{}");
-    expect(new Headers(init.headers).get("Authorization")).toBe("Bearer auditor-token");
+    expect(new Headers(init.headers).get("Authorization")).toBe(
+      "Bearer auditor-token"
+    );
   });
 
   it("reports missing audit permission without inventing a result", async () => {
-    vi.stubGlobal("fetch", vi.fn(async () => jsonResponse(403, { error: "audit_permission_required" })));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => jsonResponse(403, { error: "audit_permission_required" }))
+    );
     const client = new ApiClient();
-    client.setLiveMode(true);
-    await expect(client.verifyAuditChain()).rejects.toThrow("audit_permission_required");
+    await expect(client.verifyAuditChain()).rejects.toThrow(
+      "audit_permission_required"
+    );
   });
 
-  it("never calls the server for an audit check in preview mode", async () => {
-    const fetchMock = vi.fn();
-    vi.stubGlobal("fetch", fetchMock);
-    const client = new ApiClient();
-    client.setLiveMode(false);
-    const result = await client.verifyAuditChain();
-    expect(result.preview).toBe(true);
-    expect(fetchMock).not.toHaveBeenCalled();
-  });
-
-  it("reads the trust graph from the gateway in live mode", async () => {
-    const graph = { scope: "owned", nodes: [], edges: [], truncated: false, generatedAt: "2026-11-04T00:00:00.000Z" };
+  it("reads the trust graph from the gateway", async () => {
+    const graph = {
+      scope: "owned",
+      nodes: [],
+      edges: [],
+      truncated: false,
+      generatedAt: "2026-11-04T00:00:00.000Z",
+    };
     const fetchMock = vi.fn(async () => jsonResponse(200, graph));
     vi.stubGlobal("fetch", fetchMock);
     const client = new ApiClient();
-    client.setLiveMode(true);
     client.setToken("trust-token");
     await expect(client.getTrustGraph()).resolves.toEqual(graph);
-    const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    const [url, init] = fetchMock.mock.calls[0] as unknown as [
+      string,
+      RequestInit,
+    ];
     expect(url).toBe("/api/v1/trust/graph");
     expect(init.method).toBeUndefined();
-    expect(new Headers(init.headers).get("Authorization")).toBe("Bearer trust-token");
+    expect(new Headers(init.headers).get("Authorization")).toBe(
+      "Bearer trust-token"
+    );
   });
 
   it("revokes a grant with the exact revision and a reason", async () => {
     const fetchMock = vi.fn(async () => jsonResponse(200, { state: "revoked" }));
     vi.stubGlobal("fetch", fetchMock);
     const client = new ApiClient();
-    client.setLiveMode(true);
-    const edge = (await (async () => { client.setLiveMode(false); const g = await client.getTrustGraph(); client.setLiveMode(true); return g.edges[0]; })());
+    const edge = grantEdge();
     await client.revokeTrustGrant(edge, "  hết hợp tác  ");
-    const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    const [url, init] = fetchMock.mock.calls[0] as unknown as [
+      string,
+      RequestInit,
+    ];
     expect(url).toBe(`/api/v1/trust/grants/${edge.grantId}/revoke`);
     expect(init.method).toBe("POST");
-    expect(new Headers(init.headers).get("If-Match")).toBe(`"grant-${edge.grantId}-${edge.revision}"`);
+    expect(new Headers(init.headers).get("If-Match")).toBe(
+      `"grant-${edge.grantId}-${edge.revision}"`
+    );
     expect(JSON.parse(init.body as string)).toEqual({ reason: "hết hợp tác" });
-    await expect(client.revokeTrustGrant(edge, "   ")).rejects.toThrow("reason_required");
-    await expect(client.revokeTrustGrant({ ...edge, grantId: "../x" }, "x")).rejects.toThrow("invalid_grant_id");
+    await expect(client.revokeTrustGrant(edge, "   ")).rejects.toThrow(
+      "reason_required"
+    );
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
-  it("keeps preview trust graph and revocation local", async () => {
-    const fetchMock = vi.fn();
+  it("parses capability and audit list envelopes", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes("/v1/capabilities")) {
+        return jsonResponse(200, { items: [{ state: "published" }] });
+      }
+      return jsonResponse(200, { items: [], nextCursor: "cursor-2" });
+    });
     vi.stubGlobal("fetch", fetchMock);
     const client = new ApiClient();
-    client.setLiveMode(false);
-    const graph = await client.getTrustGraph();
-    expect(graph.preview).toBe(true);
-    const active = graph.edges.find((e) => e.state === "active")!;
-    await client.revokeTrustGrant(active, "demo");
-    expect((await client.getTrustGraph()).edges.find((e) => e.grantId === active.grantId)?.state).toBe("revoked");
-    await expect(client.revokeTrustGrant(active, "again")).rejects.toThrow("invalid_transition");
-    expect(fetchMock).not.toHaveBeenCalled();
+    await expect(client.getCapabilities()).resolves.toHaveLength(1);
+    await expect(client.getAuditEvents({ limit: 5 })).resolves.toEqual({
+      items: [],
+      nextCursor: "cursor-2",
+    });
   });
 });

@@ -7,7 +7,6 @@ export type ButtonVariant =
   | "primary"
   | "secondary"
   | "teal"
-  | "sandstone"
   | "outline"
   | "ghost"
   | "destructive";
@@ -40,11 +39,9 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
     const getVariantStyles = () => {
       switch (variant) {
         case "primary":
-          return "bg-[#176B80] hover:bg-[#135566] text-white shadow-sm border border-transparent dark:bg-sky-600 dark:hover:bg-sky-500";
+          return "bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-white dark:text-[#0D1A22] shadow-sm border border-transparent";
         case "teal":
           return "bg-[#18877A] hover:bg-[#136e63] text-white shadow-sm border border-transparent dark:bg-teal-600 dark:hover:bg-teal-500";
-        case "sandstone":
-          return "bg-[#C58B62] hover:bg-[#af7850] text-white shadow-sm border border-transparent dark:bg-amber-600 dark:hover:bg-amber-500";
         case "secondary":
           return "bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-slate-200 dark:border-slate-700";
         case "outline":
@@ -52,7 +49,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
         case "ghost":
           return "bg-transparent hover:bg-slate-100 text-slate-700 dark:text-slate-300 dark:hover:bg-slate-800/50";
         case "destructive":
-          return "bg-rose-600 hover:bg-rose-700 text-white shadow-sm border border-transparent dark:bg-rose-600 dark:hover:bg-rose-500";
+          return "bg-rose-600 hover:bg-rose-700 text-white shadow-sm border border-transparent dark:bg-rose-800 dark:hover:bg-rose-700";
         default:
           return "";
       }
@@ -61,9 +58,9 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
     const getSizeStyles = () => {
       switch (size) {
         case "sm":
-          return "px-2.5 py-1 text-xs gap-1.5 rounded";
+          return "px-2.5 py-1 text-sm gap-1.5 rounded";
         case "lg":
-          return "px-5 py-2.5 text-base gap-2.5 rounded-lg";
+          return "px-5 py-2.5 text-base gap-2.5 rounded-md";
         default:
           return "px-3.5 py-1.5 text-sm gap-2 rounded-md";
       }
