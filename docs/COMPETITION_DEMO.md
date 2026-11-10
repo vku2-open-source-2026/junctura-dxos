@@ -4,9 +4,10 @@
 # Competition demo server
 
 This page reproduces the full local demo on a single public server so judges can
-open the Console, sign in with a prefilled administrator account and browse the
+open the Console, sign in with a prefilled read-only account and browse the
 seeded health scenario. It is a **demo deployment only**; it is not the production
-hosting model and it intentionally publishes administrator credentials.
+hosting model and it intentionally publishes the credentials of that one
+read-only account.
 
 ## What gets recreated
 
@@ -15,12 +16,13 @@ therefore needs the same scripts, not a database copy:
 
 | Local artifact | Recreated by |
 | --- | --- |
-| `admin1`, `admin2`, `admin3` Keycloak users | `npm run demo:provision` |
+| `admin1`, `admin2`, `admin3` and read-only `viewer` Keycloak users | `npm run demo:provision` |
 | Console permissions in `app_private.principals` | `npm run demo:provision` |
-| `console/public/login-hints.json` (Git-ignored) | `npm run demo:provision` |
+| `console/public/login-hints.json` (Git-ignored, `viewer` only) | `npm run demo:provision` |
+| `.junctura/demo-accounts.json` (Git-ignored, mode `0600`, every demo password) | `npm run demo:provision` |
 | Health applications, records, files, trust, workflows, consents | `npm run seed:health` |
 
-`npm run demo:seed` runs the first four in order. The generated hints file is
+`npm run demo:seed` runs all of them in order. The generated hints file is
 written with mode `0644` so the packaged Nginx container can serve it.
 
 ## Fresh server
@@ -55,7 +57,11 @@ npm run demo:console      # rebuild Console so the hints file is in the image
 
 Open `https://demo.example/`. The login form is prefilled from
 `/login-hints.json`; the same file is readable by anyone who visits the demo, by
-design.
+design. It contains only `viewer`, which holds the `core-reader` role and the
+`audit.read` permission: it can open every page, and Core rejects every approval,
+revocation, registration or other write it attempts. The administrator passwords
+are written to `.junctura/demo-accounts.json` on the host and are never served.
+Sign in as `admin1`–`admin3` by typing a password from that file.
 
 To verify the static hints and Console health:
 
@@ -112,8 +118,8 @@ Re-running the seed is idempotent and does not duplicate health records:
 npm run demo:seed
 ```
 
-Rotate the demo administrator passwords, then rebuild the Console so the new
-hints are shipped:
+Rotate every demo password, then rebuild the Console so the new hints are
+shipped:
 
 ```sh
 npm run demo:provision -- --reset-passwords
@@ -132,10 +138,15 @@ npm run demo:console
 
 ## Security checklist
 
-- These accounts have the full local administrator permission set. Anyone who
-  can open the login page can approve, revoke, register and change demo data.
-  Use a disposable server and reset it after the competition.
-- Do not commit `console/public/login-hints.json`; it is already Git-ignored.
+- Only the read-only `viewer` is published. `admin1`–`admin3` hold the full
+  local administrator permission set, so keep `.junctura/demo-accounts.json`
+  private and share those passwords out of band.
+- An administrator password that was ever served in `/login-hints.json` is
+  treated as disclosed: the first `demo:provision` after upgrading replaces it.
+- `--public-admins` publishes the administrators again. Use it on a loopback-only
+  development machine, never on a public server.
+- Do not commit `console/public/login-hints.json` or `.junctura/`; both are
+  already Git-ignored.
 - Keep HTTPS enabled. The password grant sends the password on every login.
 - Block `/identity/admin/` and `/identity/realms/master/` at the public proxy as
   shown above. Rotate `KEYCLOAK_ADMIN_PASSWORD` and disable the
@@ -149,6 +160,6 @@ npm run demo:console
 | --- | --- |
 | Login page has no prefilled account | Rebuild the Console after `demo:seed`; request `/login-hints.json` with `Accept: application/json`. |
 | `401`/`login_failed` on password login | Reverse proxy must route `/identity/` to the Gateway; `PUBLIC_URL` must match the public origin. |
-| `missing` in the Users page | Run `npm run demo:provision`; it upserts the three principals for the current issuer. |
+| `missing` in the Users page | Run `npm run demo:provision`; it upserts the four principals for the current issuer. |
 | Empty data pages | Run `npm run seed:health` with the stack running; the script is idempotent. |
 | Wrong issuer after changing `PUBLIC_URL` | Recreate the volumes, then run `demo:seed` again; existing principal rows are bound to the old issuer. |

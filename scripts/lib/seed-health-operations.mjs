@@ -273,11 +273,14 @@ export async function seedWorkflows({ api, token, dataset, log = () => {} }) {
 }
 
 export async function seedAdminConsents({ api, baseUrl, env, apps, published, log = () => {},
-  hintsFile = new URL("../../console/public/login-hints.json", import.meta.url) }) {
+  hintsFile = new URL("../../console/public/login-hints.json", import.meta.url),
+  credentialsFile = new URL("../../.junctura/demo-accounts.json", import.meta.url) }) {
   const username = env.SEED_HEALTH_ADMIN_USERNAME ?? "admin1";
   let token = env.SEED_HEALTH_ADMIN_TOKEN;
   if (!token) {
-    const hint = loginHints(hintsFile).find(account => account.username === username);
+    // The private credentials file wins; the public hints only carry the
+    // administrators when the operator provisioned with --public-admins.
+    const hint = [...loginHints(credentialsFile), ...loginHints(hintsFile)].find(account => account.username === username);
     const password = env.SEED_HEALTH_ADMIN_PASSWORD ?? hint?.password;
     if (!password) {
       log("• Bỏ qua đồng ý: chưa có thông tin đăng nhập quản trị cục bộ (đặt SEED_HEALTH_ADMIN_TOKEN)");

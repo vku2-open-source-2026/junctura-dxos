@@ -8,6 +8,12 @@ All notable changes to Junctura are recorded here. Versions follow
 
 ## Unreleased
 
+- **Public demo login is read-only:** `npm run demo:provision` now also creates a
+  `viewer` account (reader role, `audit.read` only) and publishes only that account
+  in `/login-hints.json`. The `admin1`–`admin3` passwords move to the private
+  `.junctura/demo-accounts.json` (mode `0600`) and are replaced on the first run,
+  because the previous ones were served publicly. `--public-admins` restores the
+  old behavior for loopback-only development.
 - **Health scenario follows the shared contracts:** `npm run seed:health` now registers
   exactly the six capabilities of the Junctura Health contracts with their agreed
   providers and consumers (seven grants), and its sample consents use the purposes
