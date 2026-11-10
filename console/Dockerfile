@@ -8,6 +8,7 @@ RUN npm ci --no-audit --no-fund
 COPY console/ ./
 COPY scripts/console-notices.mjs /scripts/console-notices.mjs
 RUN npm run build
+RUN chmod -R a+rX dist
 
 FROM nginx:stable-bookworm@sha256:552e7481ca93ffccd046aa658dbbed22caefbc09c66fa7cd247cbb90b8a5c609 AS runtime
 

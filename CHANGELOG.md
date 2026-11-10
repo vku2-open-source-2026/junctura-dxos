@@ -8,6 +8,13 @@ All notable changes to Junctura are recorded here. Versions follow
 
 ## Unreleased
 
+- **Competition demo provisioning:** `npm run demo:provision` recreates the
+  local `admin1`–`admin3` Keycloak users, upserts their Console permissions and
+  writes the Git-ignored browser login hints; `npm run demo:seed` follows it with
+  the idempotent health seed, and `npm run demo:console` rebuilds the packaged
+  Console. The packaged Nginx now serves a readable `/login-hints.json` without
+  changing the `/api` allowlist. See [the demo server guide](docs/COMPETITION_DEMO.md).
+
 - **Console layout cleanup:** Tổ chức now uses a full-width tree with an anchored detail note, Cài đặt uses the full width, Tài liệu opens the guide from the sidebar, and record collections are labelled datasets.
 
 - **Console data structure and folder file browser:** Dữ liệu now opens a
