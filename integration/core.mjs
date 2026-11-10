@@ -194,10 +194,9 @@ test("object storage round trips opaque bytes and rejects cross-tenant access an
 test("workflow engine enforces tenant ownership, durable idempotency, completion and cancellation", async () => {
   const definitions = await api("/v1/workflows/definitions", tokenA);
   assert.equal(definitions.status, 200);
-  const [definition] = (await definitions.json()).items;
-  assert.ok(definition.id);
-  assert.equal(definition.key, "junctura_checkpoint");
-  const [otherDefinition] = (await (await api("/v1/workflows/definitions", tokenB)).json()).items;
+  const definition = (await definitions.json()).items.find((item) => item.key === "junctura_checkpoint");
+  assert.ok(definition?.id);
+  const otherDefinition = (await (await api("/v1/workflows/definitions", tokenB)).json()).items.find((item) => item.key === "junctura_checkpoint");
   assert.notEqual(definition.id, otherDefinition.id);
   const key = randomUUID();
   const body = { definitionId: definition.id, input: { fixture: "checkpoint", nested: { b: 2, a: 1 } } };
@@ -259,7 +258,7 @@ test("all five Cores preserve a technical fixture through dependency failure and
   const saved = await api(`/v1/data/${collection}`, tokenA, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ data: { objectId, checksum } }) });
   assert.equal(saved.status, 201);
   const record = await saved.json();
-  const [definition] = (await (await api("/v1/workflows/definitions", tokenA)).json()).items;
+  const definition = (await (await api("/v1/workflows/definitions", tokenA)).json()).items.find((item) => item.key === "junctura_checkpoint");
   const input = { recordId: record.id, objectId, checksum };
   const started = await api("/v1/workflows/executions", tokenA, { method: "POST",
     headers: { "Content-Type": "application/json", "Idempotency-Key": randomUUID() },
