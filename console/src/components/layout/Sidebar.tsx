@@ -2,43 +2,33 @@
 // SPDX-License-Identifier: Apache-2.0
 import React from "react";
 import {
-  LayoutDashboard,
-  Server,
-  Layers,
-  Database,
-  GitBranch,
-  Terminal,
-  ShieldCheck,
-  Settings,
-  Share2,
-  BookOpen,
   ChevronLeft,
   ChevronRight,
-  ExternalLink,
-  LucideIcon,
+  Code2,
+  type LucideIcon,
 } from "lucide-react";
-import { ScreenId } from "../../types";
+import {
+  SIDEBAR_ITEM_IDS,
+  SIDEBAR_SCREEN_MAP,
+  getModule,
+  type ModuleId,
+  type ScreenId,
+} from "../../constants/modules";
+import { PLATFORM_SIDEBAR_ITEM } from "../../constants/platformFunctions";
+import { platformIdFromHash } from "../../services/appRouting";
 import { useI18n } from "../../locales/i18n";
+import { usePendingApprovals } from "../../services/pendingApprovals";
+import { useSession } from "../../services/session";
 import { JuncturaLogo } from "../common/JuncturaLogo";
-import { BRAND } from "../../constants/brand";
+import { SidebarAccount } from "./SidebarAccount";
 
 interface SidebarProps {
   currentScreen: ScreenId;
   onNavigate: (screen: ScreenId) => void;
   isCollapsed: boolean;
   onToggleCollapse: () => void;
-}
-
-interface NavItem {
-  id: ScreenId;
-  label: string;
-  icon: LucideIcon;
-  isRoadmap?: boolean;
-}
-
-interface NavSection {
-  label: string;
-  items: NavItem[];
+  showCollapse?: boolean;
+  embedded?: boolean;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -46,142 +36,159 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onNavigate,
   isCollapsed,
   onToggleCollapse,
+  showCollapse = true,
+  embedded = false,
 }) => {
   const { t } = useI18n();
+  const { can } = useSession();
+  const { items: pendingItems } = usePendingApprovals();
+  const rail = isCollapsed && !embedded;
+  const activeFunction = platformIdFromHash();
+  const activeItem: ModuleId | "docs" | null =
+    currentScreen === "docs"
+      ? "docs"
+      : currentScreen === "platform" && activeFunction
+        ? PLATFORM_SIDEBAR_ITEM[activeFunction] ?? null
+        : (SIDEBAR_SCREEN_MAP[currentScreen] ?? null);
 
-  const navSections: NavSection[] = [
-    {
-      label: t.nav.workspace,
-      items: [
-        { id: "overview", label: t.nav.overview, icon: LayoutDashboard },
-      ],
-    },
-    {
-      label: t.nav.platform,
-      items: [
-        { id: "cores", label: t.nav.cores, icon: Server },
-        { id: "resources", label: t.nav.resources, icon: Database },
-        { id: "workflows", label: t.nav.workflows, icon: GitBranch },
-      ],
-    },
-    {
-      label: t.nav.applicationsSection,
-      items: [
-        { id: "applications", label: t.nav.applications, icon: Layers },
-        { id: "capabilities", label: t.nav.capabilities, icon: Share2 },
-      ],
-    },
-    {
-      label: t.nav.developers,
-      items: [
-        { id: "getting-started", label: t.nav.gettingStarted, icon: BookOpen },
-        { id: "api-explorer", label: t.nav.apiExplorer, icon: Terminal },
-      ],
-    },
-    {
-      label: t.nav.operations,
-      items: [
-        { id: "security", label: t.nav.security, icon: ShieldCheck },
-        { id: "settings", label: t.nav.settings, icon: Settings },
-      ],
-    },
-  ];
+  const canSee = (id: ScreenId): boolean => {
+    const module = getModule(id);
+    return !module?.perm || can(module.perm);
+  };
+
+  const itemClass = (active: boolean) =>
+    `relative flex min-h-9 w-full items-center gap-3 rounded-lg px-3 text-sm transition-colors ${
+      active
+        ? "bg-[var(--accent-soft)] font-semibold text-[var(--accent)] before:absolute before:bottom-1.5 before:left-0 before:top-1.5 before:w-0.5 before:rounded-full before:bg-[var(--accent)] before:content-['']"
+        : "font-medium text-slate-600 hover:bg-[var(--accent-soft)]/60 dark:text-slate-300"
+    } ${rail ? "justify-center px-0" : ""}`;
+
+  const renderItem = (
+    id: ModuleId,
+    label: string,
+    Icon: LucideIcon,
+    badgeCount = 0
+  ) => {
+    const active = activeItem === id;
+    return (
+      <button
+        key={id}
+        type="button"
+        onClick={() => onNavigate(id)}
+        aria-label={rail ? label : undefined}
+        aria-current={active ? "page" : undefined}
+        title={rail ? label : undefined}
+        className={itemClass(active)}
+      >
+        <Icon className="h-[18px] w-[18px] flex-shrink-0" aria-hidden="true" />
+        {!rail && <span className="min-w-0 flex-1 truncate text-left">{label}</span>}
+        {badgeCount > 0 && !rail && (
+          <span
+            aria-label={`${badgeCount} ${t.modules.queue.label}`}
+            className="flex h-4 min-w-4 items-center justify-center rounded-full bg-[#C58B62] px-1 text-xs font-semibold text-white"
+          >
+            {badgeCount}
+          </span>
+        )}
+      </button>
+    );
+  };
+
+  const renderDocsItem = () => {
+    const label = t.platform.docsApi;
+    const active = activeItem === "docs";
+    return (
+      <button
+        type="button"
+        onClick={() => onNavigate("docs")}
+        aria-label={rail ? label : undefined}
+        aria-current={active ? "page" : undefined}
+        title={rail ? label : undefined}
+        className={itemClass(active)}
+      >
+        <Code2 className="h-[18px] w-[18px] flex-shrink-0" aria-hidden="true" />
+        {!rail && <span className="min-w-0 flex-1 truncate text-left">{label}</span>}
+      </button>
+    );
+  };
 
   return (
     <aside
-      className={`fixed top-0 left-0 bottom-0 z-40 bg-white dark:bg-[#0E1A23] border-r border-slate-200/80 dark:border-[#223E50] flex flex-col transition-all duration-300 select-none ${
-        isCollapsed ? "w-16" : "w-64"
-      }`}
-      aria-label="Sidebar navigation"
+      className={
+        embedded
+          ? "flex h-full w-full flex-col bg-transparent"
+          : `fixed bottom-3 left-3 top-3 z-40 flex select-none flex-col rounded-lg border border-[var(--border)] bg-[var(--card)] shadow-lg transition-[width] duration-300 ${
+              isCollapsed ? "w-[4.5rem]" : "w-64"
+            }`
+      }
+      aria-label={t.session.navigation}
     >
-      {/* Brand Header */}
-      <div className="h-16 px-4 border-b border-slate-100 dark:border-[#223E50]/70 flex items-center justify-between">
+      <div
+        className={`flex items-center border-b border-[var(--border)] p-3 ${
+          rail ? "flex-col gap-2" : "justify-between"
+        }`}
+      >
         <button
-          onClick={() => onNavigate("overview")}
-          className="flex items-center text-left focus:outline-none"
+          type="button"
+          onClick={() => onNavigate("dashboard")}
+          className="flex min-w-0 items-center text-left focus:outline-none"
+          aria-label={t.modules.dashboard.label}
         >
-          <JuncturaLogo size={32} showText={!isCollapsed} />
+          <JuncturaLogo size={30} showText={!rail} className={rail ? "justify-center" : ""} />
         </button>
-        <button
-          onClick={onToggleCollapse}
-          className="p-1 rounded text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-          title={isCollapsed ? "Mở rộng sidebar" : "Thu gọn sidebar"}
-          aria-label={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
-        >
-          {isCollapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronLeft className="w-4 h-4" />}
-        </button>
-      </div>
-
-      {/* Nav Items */}
-      <nav className="flex-1 overflow-y-auto px-2 py-4 space-y-6">
-        {navSections.map((section, idx) => (
-          <div key={idx} className="space-y-1">
-            {!isCollapsed && (
-              <div className="px-3 pb-1.5 text-[10px] font-bold tracking-wider text-slate-400 dark:text-slate-500 uppercase">
-                {section.label}
-              </div>
+        {showCollapse && (
+          <button
+            type="button"
+            onClick={onToggleCollapse}
+            className="rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-slate-500/10 hover:text-[var(--text)]"
+            aria-label={isCollapsed ? t.session.expandSidebar : t.session.collapseSidebar}
+            title={isCollapsed ? t.session.expandSidebar : t.session.collapseSidebar}
+          >
+            {isCollapsed ? (
+              <ChevronRight className="h-4 w-4" aria-hidden="true" />
+            ) : (
+              <ChevronLeft className="h-4 w-4" aria-hidden="true" />
             )}
-            {section.items.map((item) => {
-              const Icon = item.icon;
-              const isActive = currentScreen === item.id;
-              return (
-                <button
-                  key={item.id}
-                  onClick={() => onNavigate(item.id)}
-                  title={isCollapsed ? item.label : undefined}
-                  className={`w-full flex items-center gap-3 px-3 py-2 rounded-md text-xs font-medium transition-colors relative group ${
-                    isActive
-                      ? "bg-[#E8F3F5] text-[#176B80] dark:bg-[#172E3C] dark:text-sky-300 font-semibold"
-                      : "text-slate-600 dark:text-slate-400 hover:bg-slate-100/80 dark:hover:bg-[#172E3C]/50 hover:text-stone-ink dark:hover:text-slate-200"
-                  }`}
-                >
-                  <Icon
-                    className={`w-4 h-4 flex-shrink-0 transition-transform ${
-                      isActive ? "text-[#176B80] dark:text-sky-300" : "text-slate-400 group-hover:text-slate-600 dark:group-hover:text-slate-300"
-                    }`}
-                  />
-                  {!isCollapsed && (
-                    <span className="truncate flex-1 text-left">{item.label}</span>
-                  )}
-                  {!isCollapsed && item.isRoadmap && (
-                    <span className="text-[9px] px-1.5 py-0.2 rounded bg-amber-100 text-amber-800 dark:bg-amber-950/80 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
-                      Roadmap
-                    </span>
-                  )}
-                  {isActive && (
-                    <span className="absolute left-0 top-1.5 bottom-1.5 w-1 rounded-r bg-[#176B80] dark:bg-sky-400" />
-                  )}
-                </button>
-              );
-            })}
-          </div>
-        ))}
-      </nav>
-
-      {/* Footer Info */}
-      <div className="p-3 border-t border-slate-100 dark:border-[#223E50]/70 bg-slate-50/50 dark:bg-[#12232F]/30 text-[11px] text-slate-500 dark:text-slate-400">
-        {!isCollapsed ? (
-          <div className="space-y-1">
-            <div className="flex items-center justify-between">
-              <span className="font-semibold text-stone-ink dark:text-slate-200">
-                {BRAND.layer}
-              </span>
-              <span className="text-[10px] text-slate-400">v{BRAND.version}</span>
-            </div>
-            <a
-              href={BRAND.githubUrl}
-              target="_blank"
-              rel="noreferrer"
-              className="flex items-center gap-1 text-[10px] text-junctura-blue dark:text-sky-400 hover:underline mt-1"
-            >
-              <span>Mã nguồn GitHub</span>
-              <ExternalLink className="w-3 h-3" />
-            </a>
-          </div>
-        ) : (
-          <div className="text-center font-bold text-slate-400 text-xs">v1</div>
+          </button>
         )}
       </div>
+
+      <nav className="flex min-h-0 flex-1 flex-col overflow-y-auto px-2 py-2">
+        <div className="space-y-0.5">
+          {SIDEBAR_ITEM_IDS.filter(canSee).map((id) => {
+            const module = getModule(id);
+            if (!module) return null;
+            const count = module.badgeKey === "pending" ? pendingItems.length : 0;
+            return renderItem(id, t.modules[id].label, module.icon, count);
+          })}
+        </div>
+
+        <div className="mt-auto space-y-0.5 border-t border-[var(--border)] pt-2">
+          {renderDocsItem()}
+          {canSee("settings") && (
+            <button
+              type="button"
+              onClick={() => onNavigate("settings")}
+              aria-label={rail ? t.modules.settings.label : undefined}
+              aria-current={activeItem === "settings" ? "page" : undefined}
+              title={rail ? t.modules.settings.label : undefined}
+              className={itemClass(activeItem === "settings")}
+            >
+              {React.createElement(getModule("settings")?.icon ?? Code2, {
+                className: "h-[18px] w-[18px] flex-shrink-0",
+                "aria-hidden": true,
+              })}
+              {!rail && (
+                <span className="min-w-0 flex-1 truncate text-left">
+                  {t.modules.settings.label}
+                </span>
+              )}
+            </button>
+          )}
+        </div>
+      </nav>
+
+      <SidebarAccount onNavigate={onNavigate} isCollapsed={isCollapsed} embedded={embedded} />
     </aside>
   );
 };

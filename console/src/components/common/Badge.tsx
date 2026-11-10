@@ -31,7 +31,7 @@ export const Badge: React.FC<BadgeProps> = ({
   const getVariantStyles = () => {
     switch (variant) {
       case "junctura":
-        return "bg-[#E8F3F5] text-[#176B80] border-[#C2E1E7] dark:bg-sky-950/60 dark:text-sky-300 dark:border-sky-800";
+        return "bg-[#E8F3F5] text-[#176B80] border-[#C2E1E7] dark:bg-[var(--accent)]/10 dark:text-[var(--accent)] dark:border-[var(--accent)]/30";
       case "teal":
         return "bg-[#E6F5F3] text-[#18877A] border-[#BCE4DF] dark:bg-teal-950/60 dark:text-teal-300 dark:border-teal-800";
       case "sandstone":
@@ -45,14 +45,14 @@ export const Badge: React.FC<BadgeProps> = ({
       case "outline":
         return "bg-transparent text-slate-700 border-slate-300 dark:text-slate-300 dark:border-slate-700";
       case "method-get":
-        return "bg-sky-100 text-sky-800 border-sky-300 dark:bg-sky-950/60 dark:text-sky-300 dark:border-sky-700 font-mono font-bold text-[10px]";
+        return "bg-[var(--accent-soft)] text-[var(--accent)] border-[var(--accent)]/30 dark:bg-[var(--accent)]/10 font-mono font-bold text-xs";
       case "method-post":
-        return "bg-emerald-100 text-emerald-800 border-emerald-300 dark:bg-emerald-950/60 dark:text-emerald-300 dark:border-emerald-700 font-mono font-bold text-[10px]";
+        return "bg-emerald-100 text-emerald-800 border-emerald-300 dark:bg-emerald-950/60 dark:text-emerald-300 dark:border-emerald-700 font-mono font-bold text-xs";
       case "method-put":
       case "method-patch":
-        return "bg-amber-100 text-amber-800 border-amber-300 dark:bg-amber-950/60 dark:text-amber-300 dark:border-amber-700 font-mono font-bold text-[10px]";
+        return "bg-amber-100 text-amber-800 border-amber-300 dark:bg-amber-950/60 dark:text-amber-300 dark:border-amber-700 font-mono font-bold text-xs";
       case "method-delete":
-        return "bg-rose-100 text-rose-800 border-rose-300 dark:bg-rose-950/60 dark:text-rose-300 dark:border-rose-700 font-mono font-bold text-[10px]";
+        return "bg-rose-100 text-rose-800 border-rose-300 dark:bg-rose-950/60 dark:text-rose-300 dark:border-rose-700 font-mono font-bold text-xs";
       default:
         return "bg-slate-100 text-slate-800 border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700";
     }

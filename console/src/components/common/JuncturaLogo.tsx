@@ -6,12 +6,14 @@ interface JuncturaLogoProps {
   size?: number;
   showText?: boolean;
   className?: string;
+  onDark?: boolean;
 }
 
 export const JuncturaLogo: React.FC<JuncturaLogoProps> = ({
   size = 32,
   showText = true,
   className = "",
+  onDark = false,
 }) => {
   return (
     <div className={`flex items-center gap-3 select-none ${className}`}>
@@ -25,21 +27,26 @@ export const JuncturaLogo: React.FC<JuncturaLogoProps> = ({
         aria-hidden="true"
       >
         {/* Base tile */}
-        <rect width="48" height="48" rx="10" fill="#172F3D" />
+        <rect
+          width="48"
+          height="48"
+          rx="10"
+          fill={onDark ? "#E8F3F5" : "var(--logo-tile, #172F3D)"}
+        />
         
         {/* Layer 1 Facet: Junctura Blue */}
         <path
           d="M17 12H34V17H31V27C31 32.5228 26.5228 37 21 37H15V32H21C23.7614 32 26 29.7614 26 27V17H17V12Z"
-          fill="#176B80"
+          fill={onDark ? "#176B80" : "var(--logo-blue, #4FB3C8)"}
         />
 
         {/* Junction node: where applications meet */}
-        <circle cx="28.5" cy="22" r="3.2" fill="#18877A" />
+        <circle cx="28.5" cy="22" r="3.2" fill={onDark ? "#0F6F66" : "var(--logo-green, #5FCDBE)"} />
 
         {/* Junction accent: Sandstone */}
         <path
           d="M17 12H24V17H17V12Z"
-          fill="#C58B62"
+          fill={onDark ? "#8A5A38" : "var(--logo-sand, #D8A581)"}
         />
       </svg>
 
@@ -48,7 +55,7 @@ export const JuncturaLogo: React.FC<JuncturaLogoProps> = ({
           <span className="font-bold text-base leading-tight tracking-tight text-stone-ink dark:text-slate-100 font-sans">
             Junctura
           </span>
-          <span className="text-[11px] font-medium uppercase tracking-wider text-junctura-blue dark:text-sky-400">
+          <span className="text-xs font-medium uppercase tracking-wider text-[var(--muted)]">
             Console
           </span>
         </div>

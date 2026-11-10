@@ -15,6 +15,7 @@ path = [
   "console/package.json",
   "console/package-lock.json",
   "console/src/constants/foundationEndpoints.json",
+  "console/src/constants/apiReference.json",
   "infra/keycloak/realm.json",
   "docs/contracts/**/*.json",
   "docs/security/**",

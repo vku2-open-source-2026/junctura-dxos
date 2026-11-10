@@ -128,6 +128,58 @@ Migration 021 adds `execution_private.subject_consents` and
 (trust role), and replaces the 020 execution wrapper and `core.subject_access`. The
 C4A base authority stays unchanged.
 
+## Tenant directory (022)
+
+Migration 022 only adds two read-only functions and the `junctura_directory_api`
+role: `core.directory_principals(jsonb)` lists the caller tenant's enrolled
+principals, and `core.directory_organizations(jsonb)` builds the tenant/application
+tree plus current trust relations. Both require `audit.read` on the verified
+caller; no table or column changes are made.
+
+## Principal profile (023)
+
+Migration 023 adds nullable `display_name`, `organization`, `job_title` and
+`kind` (`admin` or `application`) columns plus bounded, control-character-free
+checks to `app_private.principals`, and replaces the read-only
+`core.directory_principals(jsonb)` function so it also returns `displayName`,
+`organization`, `jobTitle` and `kind`. No existing row is rewritten; absent
+profiles stay `NULL`. The local operator seed (`npm run seed:health`) fills the
+profiles directly with `docker compose exec ... psql`; it is not part of the
+migration history and never stores credentials.
+
+## Active directory relations (024)
+
+Migration 024 replaces only `core.directory_organizations(jsonb)`, leaving the
+022/023 history untouched. The organization tree now lists a trust relation only
+when the grant is `active` and not expired, so proposals still awaiting approval
+no longer appear as granted access. Roles, function ownership, ACLs, row limits
+and the `NOTIFY pgrst` reload are preserved from 022.
+
+## Storage and workflow audit summary (025)
+
+Migration 025 adds two read-only aggregate functions and the private
+`junctura_storage_api` / `junctura_workflow_audit_api` roles.
+`core.storage_summary(jsonb)` counts structured records per collection and
+application in the caller tenant, including legacy `core.records`, and returns
+only names, counts and timestamps. `core.workflow_audit_access(jsonb)` is a
+boolean `audit.read` gate for the tenant workflow history list. Both require a
+verified principal with `audit.read` and never return record contents, object
+keys, object names or bytes. The migration also grants the application owner a
+tenant-scoped read policy on `core.records` so the aggregate function can run
+under forced row-level security.
+
+## Storage collection structure (026)
+
+Migration 026 adds `core.storage_collections(jsonb)` and the private
+`junctura_storage_collections_api` role. The function verifies `audit.read` in
+PL/pgSQL from the verified caller claims, confines the lookup to the caller
+tenant and issuer, and returns each collection's record count, latest creation
+time and inferred field structure. Types come from `jsonb_typeof` over at most
+the 200 newest records; the function never returns a record value, sample row or
+object key. It is `SECURITY DEFINER`, owned by `junctura_app_owner`, executable
+only by the private role, and ends with the pgREST schema reload. Migration 025
+stays immutable.
+
 ## C4B forward corrections
 
 Migrations 013-017 are additive corrections to 012, preserving existing records,

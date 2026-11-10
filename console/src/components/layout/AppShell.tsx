@@ -4,15 +4,39 @@ import React, { useState } from "react";
 import { ScreenId, IdentityState } from "../../types";
 import { Sidebar } from "./Sidebar";
 import { Header } from "./Header";
-import { BRAND } from "../../constants/brand";
+import { ServicePanel } from "./ServicePanel";
+import { PageTabs } from "./PageTabs";
+import { CommandPalette } from "./CommandPalette";
 import { JuncturaLogo } from "../common/JuncturaLogo";
+import { useI18n } from "../../locales/i18n";
+import { PlatformServicesProvider } from "../../services/platformStatus";
+import type { PlatformFunctionId } from "../../constants/platformFunctions";
 import { X } from "lucide-react";
+
+const COLLAPSED_STORAGE_KEY = "junctura_sidebar_collapsed";
+const PANEL_OPEN_STORAGE_KEY = "junctura_service_panel_open";
+
+function readStored(key: string): string | null {
+  try {
+    return localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+function writeStored(key: string, value: string): void {
+  try {
+    localStorage.setItem(key, value);
+  } catch {
+    // Storage is optional; the current tab keeps the state.
+  }
+}
 
 interface AppShellProps {
   currentScreen: ScreenId;
   onNavigate: (screen: ScreenId) => void;
-  isLiveMode: boolean;
-  onToggleLiveMode: () => void;
+  onNavigatePlatform: (serviceId: PlatformFunctionId | null) => void;
+  onOpenDocsApi: () => void;
   identityState: IdentityState;
   children: React.ReactNode;
 }
@@ -20,13 +44,43 @@ interface AppShellProps {
 export const AppShell: React.FC<AppShellProps> = ({
   currentScreen,
   onNavigate,
-  isLiveMode,
-  onToggleLiveMode,
+  onNavigatePlatform,
+  onOpenDocsApi,
   identityState,
   children,
 }) => {
-  const [isCollapsed, setIsCollapsed] = useState(false);
+  const { t } = useI18n();
+  const [isCollapsed, setIsCollapsed] = useState(
+    () => readStored(COLLAPSED_STORAGE_KEY) === "1"
+  );
   const [isMobileOpen, setIsMobileOpen] = useState(false);
+  const [isPaletteOpen, setIsPaletteOpen] = useState(false);
+  const [isPanelOpen, setIsPanelOpen] = useState(
+    () => readStored(PANEL_OPEN_STORAGE_KEY) === "1"
+  );
+
+  const toggleCollapsed = () => {
+    setIsCollapsed((previous) => {
+      const next = !previous;
+      writeStored(COLLAPSED_STORAGE_KEY, next ? "1" : "0");
+      return next;
+    });
+  };
+
+  const setPanelOpen = (open: boolean) => {
+    setIsPanelOpen(open);
+    writeStored(PANEL_OPEN_STORAGE_KEY, open ? "1" : "0");
+  };
+
+  const handleServiceNavigate = (serviceId: PlatformFunctionId | null) => {
+    onNavigatePlatform(serviceId);
+    setIsMobileOpen(false);
+  };
+
+  const handlePanelNavigate = (screen: ScreenId) => {
+    onNavigate(screen);
+    setIsMobileOpen(false);
+  };
 
   const handleMobileNavigate = (screen: ScreenId) => {
     onNavigate(screen);
@@ -34,71 +88,89 @@ export const AppShell: React.FC<AppShellProps> = ({
   };
 
   return (
-    <div className="min-h-screen bg-app-bg text-stone-ink dark:text-slate-100 flex flex-col font-sans transition-colors duration-200">
-      {/* Desktop Persistent Sidebar */}
-      <div className="hidden md:block">
-        <Sidebar
-          currentScreen={currentScreen}
-          onNavigate={onNavigate}
-          isCollapsed={isCollapsed}
-          onToggleCollapse={() => setIsCollapsed(!isCollapsed)}
-        />
-      </div>
+    <PlatformServicesProvider>
+      <div className="flex min-h-screen flex-col bg-[var(--bg)] font-sans text-[var(--text)] transition-colors duration-200">
+        <div className="hidden md:block">
+          <Sidebar
+            currentScreen={currentScreen}
+            onNavigate={onNavigate}
+            isCollapsed={isCollapsed}
+            onToggleCollapse={toggleCollapsed}
+          />
+        </div>
 
-      {/* Mobile Drawer */}
-      {isMobileOpen && (
-        <div
-          className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs md:hidden"
-          onClick={() => setIsMobileOpen(false)}
-        >
+        {isMobileOpen && (
           <div
-            className="w-64 bg-white dark:bg-[#0E1A23] h-full shadow-2xl flex flex-col"
-            onClick={(e) => e.stopPropagation()}
+            className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs md:hidden"
+            onClick={() => setIsMobileOpen(false)}
           >
-            <div className="h-16 px-4 border-b border-slate-100 dark:border-[#223E50]/70 flex items-center justify-between">
-              <JuncturaLogo size={28} showText={true} />
-              <button
-                onClick={() => setIsMobileOpen(false)}
-                className="p-1 rounded text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-            <div className="flex-1 overflow-y-auto">
-              <Sidebar
-                currentScreen={currentScreen}
-                onNavigate={handleMobileNavigate}
-                isCollapsed={false}
-                onToggleCollapse={() => {}}
-              />
+            <div
+              className="h-full w-[17rem] p-2"
+              onClick={(event) => event.stopPropagation()}
+            >
+              <div className="flex h-full flex-col overflow-hidden rounded-lg border border-[var(--border)] bg-[var(--card)] shadow-2xl">
+                <div className="flex items-center justify-between border-b border-[var(--border)] px-4 py-3">
+                  <JuncturaLogo size={28} showText />
+                  <button
+                    type="button"
+                    onClick={() => setIsMobileOpen(false)}
+                    className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-500/10 hover:text-[var(--text)]"
+                    aria-label={t.common.close}
+                  >
+                    <X className="h-5 w-5" aria-hidden="true" />
+                  </button>
+                </div>
+                <div className="min-h-0 flex-1">
+                  <Sidebar
+                    currentScreen={currentScreen}
+                    onNavigate={handleMobileNavigate}
+                    isCollapsed={false}
+                    onToggleCollapse={() => {}}
+                    showCollapse={false}
+                    embedded
+                  />
+                </div>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        )}
 
-      {/* Main Content Area */}
-      <div
-        className={`min-w-0 w-full flex-1 flex flex-col transition-all duration-300 ${
-          isCollapsed ? "md:pl-16" : "md:pl-64"
-        }`}
-      >
-        <Header
-          currentScreen={currentScreen}
-          onNavigate={onNavigate}
-          onOpenMobileMenu={() => setIsMobileOpen(true)}
-          isLiveMode={isLiveMode}
-          onToggleLiveMode={onToggleLiveMode}
-          identityState={identityState}
+        <div
+          className={`flex w-full min-w-0 flex-1 flex-col transition-all duration-300 ${
+            isCollapsed ? "md:pl-[5.5rem]" : "md:pl-[17.5rem]"
+          }`}
+        >
+          <Header
+            currentScreen={currentScreen}
+            onNavigate={onNavigate}
+            onOpenMobileMenu={() => setIsMobileOpen(true)}
+            onOpenPalette={() => setIsPaletteOpen(true)}
+            identityState={identityState}
+            isPanelOpen={isPanelOpen}
+            onTogglePanel={() => setPanelOpen(!isPanelOpen)}
+          />
+
+          <main className="mx-auto w-full min-w-0 max-w-7xl flex-1 p-4 md:p-8">
+            <PageTabs currentScreen={currentScreen} onNavigate={onNavigate} />
+            {children}
+          </main>
+        </div>
+
+        <ServicePanel
+          open={isPanelOpen}
+          onClose={() => setPanelOpen(false)}
+          onNavigate={handlePanelNavigate}
+          onOpenService={handleServiceNavigate}
+          onOpenDocs={onOpenDocsApi}
         />
 
-        <main className="min-w-0 flex-1 p-4 md:p-8 max-w-7xl mx-auto w-full">
-          {children}
-        </main>
-
-        <footer className="py-4 px-6 border-t border-slate-200/70 dark:border-[#223E50]/50 text-center text-xs text-slate-500 dark:text-slate-400 bg-white/40 dark:bg-[#0E1A23]/30">
-          <p>{BRAND.copyright} — {BRAND.concept}</p>
-        </footer>
+        <CommandPalette
+          open={isPaletteOpen}
+          onOpenChange={setIsPaletteOpen}
+          onNavigate={onNavigate}
+          onNavigatePlatform={handleServiceNavigate}
+        />
       </div>
-    </div>
+    </PlatformServicesProvider>
   );
 };

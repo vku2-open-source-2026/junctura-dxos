@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 import React, { useEffect } from "react";
 import { X } from "lucide-react";
+import { useI18n } from "../../locales/i18n";
 
 interface DetailDrawerProps {
   isOpen: boolean;
@@ -20,6 +21,7 @@ export const DetailDrawer: React.FC<DetailDrawerProps> = ({
   children,
   width = "lg",
 }) => {
+  const { t } = useI18n();
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape" && isOpen) onClose();
@@ -55,17 +57,18 @@ export const DetailDrawer: React.FC<DetailDrawerProps> = ({
       }}
       role="dialog"
       aria-modal="true"
+      aria-label={title}
     >
       <div
-        className={`w-full ${getWidthClass()} bg-white dark:bg-[#12232F] h-full shadow-2xl border-l border-slate-200 dark:border-[#223E50] flex flex-col animate-slide-left`}
+        className={`w-full ${getWidthClass()} bg-white dark:bg-[#13242D] h-full shadow-2xl border-l border-slate-200 dark:border-[#243843] flex flex-col animate-slide-left`}
       >
-        <div className="px-6 py-5 border-b border-slate-100 dark:border-[#223E50]/70 flex items-center justify-between gap-4 bg-slate-50/50 dark:bg-[#172E3C]/30">
+        <div className="px-6 py-5 border-b border-slate-100 dark:border-[#243843]/70 flex items-center justify-between gap-4 bg-slate-50/50 dark:bg-[#1B303B]/30">
           <div>
             <h3 className="text-base font-semibold text-stone-ink dark:text-slate-100">
               {title}
             </h3>
             {subtitle && (
-              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 font-mono">
+              <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5 font-mono">
                 {subtitle}
               </p>
             )}
@@ -73,7 +76,7 @@ export const DetailDrawer: React.FC<DetailDrawerProps> = ({
           <button
             onClick={onClose}
             className="p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800"
-            aria-label="Close drawer"
+            aria-label={t.common.close}
           >
             <X className="w-5 h-5" />
           </button>

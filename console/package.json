@@ -10,7 +10,9 @@
     "build": "tsc && vite build",
     "test": "vitest run",
     "generate:endpoints": "node scripts/generate-endpoints.mjs",
-    "check:endpoints": "node scripts/generate-endpoints.mjs --check"
+    "check:endpoints": "node scripts/generate-endpoints.mjs --check",
+    "generate:api-reference": "node scripts/generate-api-reference.mjs",
+    "check:api-reference": "node scripts/generate-api-reference.mjs --check"
   },
   "dependencies": {
     "clsx": "^2.1.1",

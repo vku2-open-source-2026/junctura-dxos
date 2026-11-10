@@ -12,6 +12,7 @@ interface ConfirmationDialogProps {
   cancelLabel?: string;
   variant?: "danger" | "warning" | "info";
   isLoading?: boolean;
+  confirmDisabled?: boolean;
   onConfirm: () => void;
   onCancel: () => void;
   children?: React.ReactNode;
@@ -25,6 +26,7 @@ export const ConfirmationDialog: React.FC<ConfirmationDialogProps> = ({
   cancelLabel = "Hủy bỏ",
   variant = "warning",
   isLoading = false,
+  confirmDisabled = false,
   onConfirm,
   onCancel,
   children,
@@ -58,7 +60,7 @@ export const ConfirmationDialog: React.FC<ConfirmationDialogProps> = ({
       case "warning":
         return <AlertTriangle className="w-5 h-5 text-amber-600 dark:text-amber-400" />;
       default:
-        return <Info className="w-5 h-5 text-sky-600 dark:text-sky-400" />;
+        return <Info className="w-5 h-5 text-[var(--accent)]" />;
     }
   };
 
@@ -75,11 +77,11 @@ export const ConfirmationDialog: React.FC<ConfirmationDialogProps> = ({
     >
       <div
         ref={dialogRef}
-        className="w-full max-w-md bg-white dark:bg-[#12232F] rounded-xl border border-slate-200 dark:border-[#223E50] shadow-2xl overflow-hidden"
+        className="w-full max-w-md bg-white dark:bg-[#13242D] rounded-md border border-slate-200 dark:border-[#243843] shadow-2xl overflow-hidden"
       >
         <div className="p-6">
           <div className="flex items-start gap-4">
-            <div className="p-2 rounded-full bg-slate-100 dark:bg-[#172E3C] flex-shrink-0">
+            <div className="p-2 rounded-full bg-slate-100 dark:bg-[#1B303B] flex-shrink-0">
               {getIcon()}
             </div>
             <div className="flex-1 min-w-0">
@@ -108,7 +110,7 @@ export const ConfirmationDialog: React.FC<ConfirmationDialogProps> = ({
 
           {children && <div className="mt-4">{children}</div>}
 
-          <div className="mt-6 flex items-center justify-end gap-3 pt-3 border-t border-slate-100 dark:border-[#223E50]/70">
+          <div className="mt-6 flex items-center justify-end gap-3 pt-3 border-t border-slate-100 dark:border-[#243843]/70">
             <Button
               variant="outline"
               size="md"
@@ -122,6 +124,7 @@ export const ConfirmationDialog: React.FC<ConfirmationDialogProps> = ({
               variant={variant === "danger" ? "destructive" : "primary"}
               size="md"
               isLoading={isLoading}
+              disabled={confirmDisabled}
               onClick={onConfirm}
             >
               {confirmLabel}

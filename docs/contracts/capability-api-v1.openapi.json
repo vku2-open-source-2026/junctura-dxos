@@ -3517,9 +3517,9 @@
     },
     "/v1/audit-events": {
       "get": {
-        "operationId": "listCapabilityAuditEvents",
-        "summary": "Read tenant-scoped audit events under explicit audit authority",
-        "description": "DESIGN ONLY. Not served by current Junctura Core. Apply all semantic and live authorization checks in the linked specification.",
+        "operationId": "listAuditEvents",
+        "summary": "List the caller tenant's audit events, newest first",
+        "description": "Implemented. Returns a page of the caller tenant's protected audit events, newest first, filtered by time. Requires a verified management principal with audit.read in its own tenant; the database function enforces the tenant and the permission. The response never carries tokens, secrets or request bodies.",
         "tags": [
           "audit-events"
         ],
@@ -3529,7 +3529,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/AuditPage"
+                  "$ref": "#/components/schemas/AuditLogPage"
                 }
               }
             }
@@ -3546,24 +3546,6 @@
           "404": {
             "$ref": "#/components/responses/NotFound"
           },
-          "409": {
-            "$ref": "#/components/responses/Conflict"
-          },
-          "412": {
-            "$ref": "#/components/responses/PreconditionFailed"
-          },
-          "413": {
-            "$ref": "#/components/responses/ContentTooLarge"
-          },
-          "415": {
-            "$ref": "#/components/responses/UnsupportedMediaType"
-          },
-          "422": {
-            "$ref": "#/components/responses/UnprocessableContent"
-          },
-          "428": {
-            "$ref": "#/components/responses/PreconditionRequired"
-          },
           "429": {
             "$ref": "#/components/responses/TooManyRequests"
           },
@@ -3576,24 +3558,46 @@
         ],
         "parameters": [
           {
+            "name": "since",
+            "in": "query",
+            "description": "Inclusive lower bound on occurredAt (RFC 3339 timestamp).",
+            "schema": {
+              "type": "string",
+              "maxLength": 1024
+            }
+          },
+          {
+            "name": "until",
+            "in": "query",
+            "description": "Inclusive upper bound on occurredAt (RFC 3339 timestamp); must not be earlier than since.",
+            "schema": {
+              "type": "string",
+              "maxLength": 1024
+            }
+          },
+          {
             "name": "limit",
             "in": "query",
             "schema": {
               "type": "integer",
               "minimum": 1,
               "maximum": 100,
-              "default": 100
+              "default": 50
             }
           },
           {
             "name": "cursor",
             "in": "query",
+            "description": "Opaque token returned as nextCursor.",
             "schema": {
               "type": "string",
               "maxLength": 1024
             }
           }
-        ]
+        ],
+        "x-junctura-status": "implemented-audit-query",
+        "x-junctura-source": "src/modules/audit/audit.mjs",
+        "x-junctura-test-suite": "audit"
       }
     },
     "/v1/audit-events/verify": {
@@ -3656,6 +3660,234 @@
         "x-junctura-status": "implemented-audit-chain",
         "x-junctura-source": "src/modules/audit/audit.mjs",
         "x-junctura-test-suite": "applications"
+      }
+    },
+    "/v1/directory/principals": {
+      "get": {
+        "operationId": "listDirectoryPrincipals",
+        "summary": "List the caller tenant's enrolled management principals",
+        "description": "Implemented. Returns up to 1000 enrolled principals of the caller's tenant and issuer with subject, issuer, managementClient, permissions, enabled, and the optional presentation profile displayName, organization, jobTitle and kind (admin or application), each null when unset. Never returns secrets, tokens or request bodies and never calls the identity provider's admin API. Requires a verified management principal with audit.read in its own tenant; the database function enforces the tenant, issuer and permission. No query parameters.",
+        "tags": [
+          "directory"
+        ],
+        "responses": {
+          "200": {
+            "description": "Enrolled principals of the caller tenant",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DirectoryPrincipalsPage"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "405": {
+            "$ref": "#/components/responses/MethodNotAllowed"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          }
+        },
+        "x-junctura-required-permissions": [
+          "audit.read"
+        ],
+        "x-junctura-status": "implemented-directory",
+        "x-junctura-source": "src/modules/directory/directory.mjs",
+        "x-junctura-test-suite": "directory",
+        "x-junctura-core-roles": [
+          "core-reader"
+        ]
+      }
+    },
+    "/v1/directory/organizations": {
+      "get": {
+        "operationId": "getDirectoryOrganizations",
+        "summary": "Read the tenant/application tree with current trust relations",
+        "description": "Implemented. Builds a read-only tree from real data: the root is the caller tenant (kind platform), children are the applications registered in that tenant (kind application), and relations are non-revoked, unexpired direct trust grants between those applications. Relation labels are the real published capability title, falling back to the exact capabilityId. There is no separate organization table, so applications appear directly under the tenant. At most 1000 applications and 500 relations; truncated reports more. Requires a verified management principal with audit.read in its own tenant. No query parameters.",
+        "tags": [
+          "directory"
+        ],
+        "responses": {
+          "200": {
+            "description": "Tenant organization tree",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DirectoryTree"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "405": {
+            "$ref": "#/components/responses/MethodNotAllowed"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          }
+        },
+        "x-junctura-required-permissions": [
+          "audit.read"
+        ],
+        "x-junctura-status": "implemented-directory",
+        "x-junctura-source": "src/modules/directory/directory.mjs",
+        "x-junctura-test-suite": "directory",
+        "x-junctura-core-roles": [
+          "core-reader"
+        ]
+      }
+    },
+    "/v1/metrics/traffic": {
+      "get": {
+        "operationId": "getTrafficMetrics",
+        "summary": "Read one-minute traffic buckets for the recent window",
+        "description": "Implemented. Returns exactly minutes chronological one-minute buckets ending with the current minute, including empty minutes as zeroes, with requests, 4xx/5xx errors, average latency and maximum latency, plus totals for the window. Counters are real observations recorded as responses finish. They live in the Core process only, are per instance and reset when Core restarts; no database or persistence is involved. Metrics requests are counted like any other request. A verified management principal with audit.read is required. Query parameters are closed; unknown, repeated or malformed values return 400.",
+        "tags": [
+          "metrics"
+        ],
+        "parameters": [
+          {
+            "name": "minutes",
+            "in": "query",
+            "description": "Number of one-minute buckets ending with the current minute.",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 1440,
+              "default": 60
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Traffic series for the requested window",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TrafficSeries"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          }
+        },
+        "x-junctura-required-permissions": [
+          "audit.read"
+        ],
+        "x-junctura-status": "implemented-traffic-metrics",
+        "x-junctura-source": "src/modules/metrics/metrics.mjs",
+        "x-junctura-test-suite": "metrics",
+        "x-junctura-core-roles": [
+          "core-reader"
+        ]
+      }
+    },
+    "/v1/metrics/requests": {
+      "get": {
+        "operationId": "listRecentRequests",
+        "summary": "Read the newest requests observed by Core",
+        "description": "Implemented. Returns up to limit of the newest requests, newest first. Each entry contains only the observation time, method, normalized path, status and duration. Query strings, fragments, headers, bodies, tokens, subjects and recognizable UUID/token path segments are never retained. The in-memory ring holds at most the newest 200 requests; it is per Core process and resets when Core restarts. A verified management principal with audit.read is required. Query parameters are closed; unknown, repeated or malformed values return 400.",
+        "tags": [
+          "metrics"
+        ],
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Maximum number of newest requests to return.",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Newest observed requests",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecentRequestsPage"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          }
+        },
+        "x-junctura-required-permissions": [
+          "audit.read"
+        ],
+        "x-junctura-status": "implemented-traffic-metrics",
+        "x-junctura-source": "src/modules/metrics/metrics.mjs",
+        "x-junctura-test-suite": "metrics",
+        "x-junctura-core-roles": [
+          "core-reader"
+        ]
       }
     },
     "/v1/me/data-access": {
@@ -4169,6 +4401,389 @@
               "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
             }
           }
+        ]
+      }
+    },
+    "/v1/storage/summary": {
+      "get": {
+        "operationId": "getStorageSummary",
+        "summary": "Read aggregate record and file counts for the caller tenant",
+        "description": "Implemented. Returns per-application structured record counts by collection plus aggregate file count, bytes, quarantine count and last modification time, and tenant totals. Requires a verified management principal with audit.read in its own tenant; the database function and private role enforce tenant scope. Record content, object keys, file names and bytes are never returned. Object metadata is reduced from the object filer; if the filer is not configured files is null for every application, and if it is configured but unavailable the request fails closed. No query parameters.",
+        "tags": [
+          "storage"
+        ],
+        "responses": {
+          "200": {
+            "description": "Aggregate storage summary",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StorageSummary"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "405": {
+            "$ref": "#/components/responses/MethodNotAllowed"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          }
+        },
+        "x-junctura-required-permissions": [
+          "audit.read"
+        ],
+        "x-junctura-status": "implemented-storage-summary",
+        "x-junctura-source": "src/modules/storage/storage.mjs",
+        "x-junctura-test-suite": "storage",
+        "x-junctura-core-roles": [
+          "core-reader"
+        ]
+      }
+    },
+    "/v1/storage/files": {
+      "get": {
+        "operationId": "getStorageFiles",
+        "summary": "Browse one directory level of an application's object store",
+        "description": "Implemented. Returns exactly one level of the application's private file tree: folders with aggregate file count, bytes and latest modification time, and files with a partially masked name, extension, size, scan status and modification time. Requires a verified management principal with audit.read in its own tenant; the storage summary function and private role enforce the permission. The path defaults to the root, is canonicalised, rejects traversal, control characters and segments longer than 255 characters, and is limited to 512 characters. Object keys, internal filer paths, versions and bytes are never returned. The object filer must be configured; if it is unavailable the request fails closed.",
+        "tags": [
+          "storage"
+        ],
+        "parameters": [
+          {
+            "name": "application",
+            "in": "query",
+            "required": true,
+            "description": "Application whose private file tree is listed.",
+            "schema": {
+              "$ref": "#/components/schemas/Uuid"
+            }
+          },
+          {
+            "name": "path",
+            "in": "query",
+            "required": false,
+            "description": "Folder path relative to the application root; defaults to the root.",
+            "schema": {
+              "type": "string",
+              "maxLength": 512
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "One level of the application file tree",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StorageFileListing"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "405": {
+            "$ref": "#/components/responses/MethodNotAllowed"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          }
+        },
+        "x-junctura-required-permissions": [
+          "audit.read"
+        ],
+        "x-junctura-status": "implemented-storage-files",
+        "x-junctura-source": "src/modules/storage/files.mjs",
+        "x-junctura-test-suite": "storage",
+        "x-junctura-core-roles": [
+          "core-reader"
+        ],
+        "x-junctura-query-policy": "closed"
+      }
+    },
+    "/v1/storage/collections": {
+      "get": {
+        "operationId": "getStorageCollections",
+        "summary": "Read the inferred field structure of an application's collections",
+        "description": "Implemented. Returns each collection owned by the application with its record count, latest update time and the field names inferred from at most the 200 newest records. Field types are string, number, boolean, object, array, mixed or null; fillRate is the percentage of sampled records where the field is present and not null. Requires a verified management principal with audit.read in its own tenant; the new migration-026 function and private role enforce permission and tenant scope. Record values, sample rows, object keys and bytes are never returned.",
+        "tags": [
+          "storage"
+        ],
+        "parameters": [
+          {
+            "name": "application",
+            "in": "query",
+            "required": true,
+            "description": "Application whose collection structure is read.",
+            "schema": {
+              "$ref": "#/components/schemas/Uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Collection structure without record values",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StorageCollections"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "405": {
+            "$ref": "#/components/responses/MethodNotAllowed"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          }
+        },
+        "x-junctura-required-permissions": [
+          "audit.read"
+        ],
+        "x-junctura-status": "implemented-storage-collections",
+        "x-junctura-source": "src/modules/storage/files.mjs",
+        "x-junctura-test-suite": "storage",
+        "x-junctura-core-roles": [
+          "core-reader"
+        ],
+        "x-junctura-query-policy": "closed"
+      }
+    },
+    "/v1/workflows/executions": {
+      "get": {
+        "operationId": "listWorkflowExecutions",
+        "summary": "List the caller tenant workflow executions, newest first",
+        "description": "Implemented. Returns a bounded page of Flowable history scoped to the caller tenant. Requires a verified management principal with audit.read in its own tenant; the private workflow audit role enforces the permission. Running rows include the active task name, assignee and candidate groups. The business title contains only the workflow kind and record code, never patient names, identifiers, record content or workflow variables. The internal junctura_c4a_single definition is excluded.",
+        "tags": [
+          "workflow-runs"
+        ],
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "running",
+                "completed",
+                "cancelled"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Workflow executions of the caller tenant",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkflowExecutionList"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "405": {
+            "$ref": "#/components/responses/MethodNotAllowed"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          }
+        },
+        "x-junctura-required-permissions": [
+          "audit.read"
+        ],
+        "x-junctura-query-policy": "closed",
+        "x-junctura-status": "implemented-workflow-history",
+        "x-junctura-source": "src/modules/workflow/workflow.mjs",
+        "x-junctura-test-suite": "workflow-list",
+        "x-junctura-core-roles": [
+          "core-reader"
+        ]
+      }
+    },
+    "/v1/metrics/features": {
+      "get": {
+        "operationId": "getFeatureMetrics",
+        "summary": "Read per-feature call counts for the recent window",
+        "description": "Implemented. Groups the same real, in-memory one-minute observations as getTrafficMetrics by product feature (data, files, workflows, approvals, sharing, capabilities, applications, consents, secrets, audit, other), derived from the normalized request path. Each feature carries requests, 4xx/5xx errors, average and maximum latency and a per-minute request series, sorted by requests descending. Counters live in the Core process only, are per instance and reset when Core restarts. A verified management principal with audit.read is required. Query parameters are closed; unknown, repeated or malformed values return 400.",
+        "tags": [
+          "metrics"
+        ],
+        "parameters": [
+          {
+            "name": "minutes",
+            "in": "query",
+            "description": "Number of one-minute buckets ending with the current minute.",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 1440,
+              "default": 60
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Per-feature traffic for the requested window",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FeatureMetrics"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          }
+        },
+        "x-junctura-required-permissions": [
+          "audit.read"
+        ],
+        "x-junctura-status": "implemented-traffic-metrics",
+        "x-junctura-source": "src/modules/metrics/metrics.mjs",
+        "x-junctura-test-suite": "metrics",
+        "x-junctura-core-roles": [
+          "core-reader"
+        ]
+      }
+    },
+    "/v1/workflows/summary": {
+      "get": {
+        "operationId": "getWorkflowSummary",
+        "summary": "Read the read-only workflow dashboard for the caller tenant",
+        "description": "Implemented. Returns every business workflow definition with its owning product, ordered steps with responsible parties, and counts of running, completed and cancelled executions, plus totals. It is a read-only aggregate: it never starts, completes or cancels anything and never reads workflow variables or patient data. Technical definitions used only for Core verification are excluded. Requires a verified management principal with audit.read in its own tenant. The query string must be empty.",
+        "tags": [
+          "workflow-runs"
+        ],
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Workflow dashboard for the caller tenant",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkflowSummary"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "405": {
+            "$ref": "#/components/responses/MethodNotAllowed"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          }
+        },
+        "x-junctura-required-permissions": [
+          "audit.read"
+        ],
+        "x-junctura-query-policy": "closed",
+        "x-junctura-status": "implemented-workflow-summary",
+        "x-junctura-source": "src/modules/workflow/summary.mjs",
+        "x-junctura-test-suite": "workflow-list",
+        "x-junctura-core-roles": [
+          "core-reader"
         ]
       }
     }
@@ -5793,6 +6408,349 @@
           }
         }
       },
+      "TrafficBucket": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "at",
+          "requests",
+          "errors4xx",
+          "errors5xx",
+          "avgLatencyMs",
+          "maxLatencyMs"
+        ],
+        "properties": {
+          "at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Start of the one-minute bucket."
+          },
+          "requests": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "errors4xx": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "errors5xx": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "avgLatencyMs": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Rounded mean request duration; zero for an empty bucket."
+          },
+          "maxLatencyMs": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      },
+      "TrafficTotals": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "requests",
+          "errors4xx",
+          "errors5xx",
+          "avgLatencyMs",
+          "maxLatencyMs"
+        ],
+        "properties": {
+          "requests": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "errors4xx": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "errors5xx": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "avgLatencyMs": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "maxLatencyMs": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      },
+      "TrafficSeries": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "from",
+          "to",
+          "intervalSeconds",
+          "buckets",
+          "totals"
+        ],
+        "properties": {
+          "from": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "to": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "intervalSeconds": {
+            "type": "integer",
+            "const": 60
+          },
+          "buckets": {
+            "type": "array",
+            "maxItems": 1440,
+            "items": {
+              "$ref": "#/components/schemas/TrafficBucket"
+            }
+          },
+          "totals": {
+            "$ref": "#/components/schemas/TrafficTotals"
+          }
+        }
+      },
+      "RecentRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "at",
+          "method",
+          "path",
+          "status",
+          "durationMs"
+        ],
+        "properties": {
+          "at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "method": {
+            "type": "string",
+            "maxLength": 16
+          },
+          "path": {
+            "type": "string",
+            "maxLength": 512,
+            "description": "Normalized path without query, fragment, tokens or UUID identifiers."
+          },
+          "status": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 599
+          },
+          "durationMs": {
+            "type": "number",
+            "minimum": 0
+          }
+        }
+      },
+      "RecentRequestsPage": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "items"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "maxItems": 100,
+            "items": {
+              "$ref": "#/components/schemas/RecentRequest"
+            }
+          }
+        }
+      },
+      "DirectoryPrincipal": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "subject",
+          "issuer",
+          "managementClient",
+          "permissions",
+          "enabled",
+          "displayName",
+          "organization",
+          "jobTitle",
+          "kind"
+        ],
+        "properties": {
+          "subject": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255
+          },
+          "issuer": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255
+          },
+          "managementClient": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255
+          },
+          "permissions": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64
+            }
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "displayName": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "organization": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "jobTitle": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "kind": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "admin",
+              "application",
+              null
+            ]
+          }
+        }
+      },
+      "DirectoryPrincipalsPage": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "items",
+          "truncated"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "maxItems": 1000,
+            "items": {
+              "$ref": "#/components/schemas/DirectoryPrincipal"
+            }
+          },
+          "truncated": {
+            "type": "boolean"
+          }
+        }
+      },
+      "DirectoryNode": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "name",
+          "kind",
+          "children"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "platform",
+              "organization",
+              "application"
+            ]
+          },
+          "children": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DirectoryNode"
+            }
+          }
+        }
+      },
+      "DirectoryRelation": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "from",
+          "to",
+          "label"
+        ],
+        "properties": {
+          "from": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255
+          },
+          "to": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255
+          },
+          "label": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512
+          }
+        }
+      },
+      "DirectoryTree": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "root",
+          "relations",
+          "truncated"
+        ],
+        "properties": {
+          "root": {
+            "$ref": "#/components/schemas/DirectoryNode"
+          },
+          "relations": {
+            "type": "array",
+            "maxItems": 500,
+            "items": {
+              "$ref": "#/components/schemas/DirectoryRelation"
+            }
+          },
+          "truncated": {
+            "type": "boolean"
+          }
+        }
+      },
       "TrustGraphNode": {
         "type": "object",
         "additionalProperties": false,
@@ -6465,6 +7423,841 @@
             "format": "date-time"
           }
         }
+      },
+      "AuditLogPage": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "items",
+          "nextCursor"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "maxItems": 100,
+            "items": {
+              "$ref": "#/components/schemas/AuditLogEntry"
+            }
+          },
+          "nextCursor": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 1024
+          }
+        }
+      },
+      "AuditLogEntry": {
+        "type": "object",
+        "additionalProperties": true,
+        "required": [
+          "eventId",
+          "occurredAt",
+          "event",
+          "outcome"
+        ],
+        "properties": {
+          "eventId": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+          },
+          "occurredAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "tenantId": {
+            "type": "string",
+            "maxLength": 63
+          },
+          "schemaVersion": {
+            "type": "integer"
+          },
+          "event": {
+            "type": "string",
+            "maxLength": 100
+          },
+          "resourceType": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 100
+          },
+          "resourceId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 256
+          },
+          "revision": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "actorAppId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "issuer": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "subject": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 255
+          },
+          "managementClient": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "outcome": {
+            "type": "string",
+            "maxLength": 80
+          },
+          "reasonCode": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 100
+          },
+          "reason": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 500
+          }
+        }
+      },
+      "StorageCollection": {
+        "type": "object",
+        "required": [
+          "name",
+          "records",
+          "updatedAt"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_-]{0,62}$"
+          },
+          "records": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "updatedAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          }
+        }
+      },
+      "StorageFiles": {
+        "type": [
+          "object",
+          "null"
+        ],
+        "required": [
+          "count",
+          "bytes",
+          "quarantined",
+          "updatedAt"
+        ],
+        "properties": {
+          "count": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "bytes": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "quarantined": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "updatedAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          }
+        }
+      },
+      "StorageApplication": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "state",
+          "collections",
+          "files"
+        ],
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/Uuid"
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "active",
+              "suspended",
+              "revoked"
+            ]
+          },
+          "collections": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/StorageCollection"
+            }
+          },
+          "files": {
+            "$ref": "#/components/schemas/StorageFiles"
+          }
+        }
+      },
+      "StorageSummary": {
+        "type": "object",
+        "required": [
+          "applications",
+          "totals"
+        ],
+        "properties": {
+          "applications": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/StorageApplication"
+            }
+          },
+          "totals": {
+            "type": "object",
+            "required": [
+              "collections",
+              "files"
+            ],
+            "properties": {
+              "collections": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/StorageCollection"
+                }
+              },
+              "files": {
+                "$ref": "#/components/schemas/StorageFiles"
+              }
+            }
+          }
+        }
+      },
+      "StorageFileListing": {
+        "type": "object",
+        "required": [
+          "application",
+          "path",
+          "folders",
+          "files",
+          "truncated"
+        ],
+        "properties": {
+          "application": {
+            "type": "object",
+            "required": [
+              "id",
+              "name"
+            ],
+            "properties": {
+              "id": {
+                "$ref": "#/components/schemas/Uuid"
+              },
+              "name": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200
+              }
+            }
+          },
+          "path": {
+            "type": "string",
+            "maxLength": 513
+          },
+          "folders": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/StorageFolderEntry"
+            }
+          },
+          "files": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/StorageFileEntry"
+            }
+          },
+          "truncated": {
+            "type": "boolean"
+          }
+        }
+      },
+      "StorageFolderEntry": {
+        "type": "object",
+        "required": [
+          "name",
+          "files",
+          "bytes",
+          "updatedAt"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255
+          },
+          "files": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "bytes": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "updatedAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          }
+        }
+      },
+      "StorageFileEntry": {
+        "type": "object",
+        "required": [
+          "name",
+          "extension",
+          "bytes",
+          "status",
+          "updatedAt"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255
+          },
+          "extension": {
+            "type": "string",
+            "maxLength": 16
+          },
+          "bytes": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "clean",
+              "quarantined",
+              "unknown"
+            ]
+          },
+          "updatedAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          }
+        }
+      },
+      "StorageCollections": {
+        "type": "object",
+        "required": [
+          "application",
+          "collections"
+        ],
+        "properties": {
+          "application": {
+            "type": "object",
+            "required": [
+              "id",
+              "name"
+            ],
+            "properties": {
+              "id": {
+                "$ref": "#/components/schemas/Uuid"
+              },
+              "name": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200
+              }
+            }
+          },
+          "collections": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/StorageCollectionStructure"
+            }
+          }
+        }
+      },
+      "StorageCollectionStructure": {
+        "type": "object",
+        "required": [
+          "name",
+          "records",
+          "updatedAt",
+          "fields"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_-]{0,62}$"
+          },
+          "records": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "updatedAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "fields": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/StorageField"
+            }
+          }
+        }
+      },
+      "StorageField": {
+        "type": "object",
+        "required": [
+          "name",
+          "type",
+          "fillRate"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "string",
+              "number",
+              "boolean",
+              "object",
+              "array",
+              "mixed",
+              "null"
+            ]
+          },
+          "fillRate": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 100
+          }
+        }
+      },
+      "WorkflowExecutionDefinition": {
+        "type": "object",
+        "required": [
+          "id",
+          "key",
+          "name",
+          "version"
+        ],
+        "properties": {
+          "id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 200
+          },
+          "key": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 128
+          },
+          "name": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 200
+          },
+          "version": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          }
+        }
+      },
+      "WorkflowExecutionStep": {
+        "type": "object",
+        "required": [
+          "name",
+          "assignee",
+          "groups"
+        ],
+        "properties": {
+          "name": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 200
+          },
+          "assignee": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 128
+          },
+          "groups": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 128
+            }
+          }
+        }
+      },
+      "WorkflowExecutionSummary": {
+        "type": "object",
+        "required": [
+          "id",
+          "definition",
+          "status",
+          "startedAt",
+          "updatedAt",
+          "title",
+          "currentStep"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "maxLength": 128
+          },
+          "definition": {
+            "$ref": "#/components/schemas/WorkflowExecutionDefinition"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "running",
+              "completed",
+              "cancelled"
+            ]
+          },
+          "startedAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "title": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 64
+          },
+          "currentStep": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/WorkflowExecutionStep"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "WorkflowExecutionList": {
+        "type": "object",
+        "required": [
+          "items",
+          "limit"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WorkflowExecutionSummary"
+            }
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100
+          }
+        }
+      },
+      "FeatureMetric": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "feature",
+          "requests",
+          "errors4xx",
+          "errors5xx",
+          "avgLatencyMs",
+          "maxLatencyMs",
+          "series"
+        ],
+        "properties": {
+          "feature": {
+            "type": "string"
+          },
+          "requests": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "errors4xx": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "errors5xx": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "avgLatencyMs": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "maxLatencyMs": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "series": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "at",
+                "requests"
+              ],
+              "properties": {
+                "at": {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                "requests": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              }
+            }
+          }
+        }
+      },
+      "FeatureMetrics": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "from",
+          "to",
+          "features"
+        ],
+        "properties": {
+          "from": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "to": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "features": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FeatureMetric"
+            }
+          }
+        }
+      },
+      "WorkflowSummaryDefinition": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "key",
+          "name",
+          "application",
+          "steps",
+          "counts",
+          "updatedAt"
+        ],
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "application": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "id",
+                  "name"
+                ],
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "name": {
+                    "type": "string"
+                  }
+                }
+              }
+            ]
+          },
+          "steps": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "name",
+                "owner"
+              ],
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "owner": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              }
+            }
+          },
+          "counts": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "running",
+              "completed",
+              "cancelled"
+            ],
+            "properties": {
+              "running": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "completed": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "cancelled": {
+                "type": "integer",
+                "minimum": 0
+              }
+            }
+          },
+          "updatedAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          }
+        }
+      },
+      "WorkflowSummary": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "definitions",
+          "totals"
+        ],
+        "properties": {
+          "definitions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WorkflowSummaryDefinition"
+            }
+          },
+          "totals": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "definitions",
+              "running",
+              "completed",
+              "cancelled"
+            ],
+            "properties": {
+              "definitions": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "running": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "completed": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "cancelled": {
+                "type": "integer",
+                "minimum": 0
+              }
+            }
+          }
+        }
       }
     },
     "responses": {
@@ -6603,6 +8396,16 @@
             }
           }
         }
+      },
+      "MethodNotAllowed": {
+        "description": "Method not allowed",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
       }
     }
   },
@@ -6621,6 +8424,12 @@
       "name": "audit-events"
     },
     {
+      "name": "metrics"
+    },
+    {
+      "name": "directory"
+    },
+    {
       "name": "capabilities"
     },
     {
@@ -6637,6 +8446,12 @@
     },
     {
       "name": "trust"
+    },
+    {
+      "name": "storage"
+    },
+    {
+      "name": "workflow-runs"
     }
   ]
 }

@@ -8,8 +8,10 @@
 Junctura appends authority and control-plane audit events in the same database
 transaction as the mutation they describe. Migration 005 adds a restricted
 tenant read contract, server-derived actor metadata, redaction and explicit role
-separation around the existing `app_private.audit` table. There is no public
-audit HTTP route.
+separation around the existing `app_private.audit` table. Core exposes two
+read-only/verification routes for management principals with `audit.read`:
+`GET /v1/audit-events` (a tenant page, newest first) and
+`POST /v1/audit-events/verify`. There is no PostgREST route and no write route.
 
 ## Threat model
 
@@ -86,6 +88,13 @@ JSON payload. A failed claim/authority/constraint check rejects the insert and
 therefore the enclosing transaction.
 
 ## Internal read contract
+
+Core serves it as `GET /v1/audit-events?since=&until=&limit=&cursor=` (Capability
+OpenAPI `listAuditEvents`). Authorization mapping: the caller must be a verified
+management client; Core only asserts `junctura_audit_api` and the database function
+still requires `audit.read` in the caller's own tenant. Pagination policy: newest
+first, at most 100 items per page, opaque `nextCursor`, responses `no-store`.
+Unknown or repeated query parameters are rejected before the database is called.
 
 `core.audit_query(jsonb)` is a `SECURITY DEFINER` function owned by
 `junctura_app_owner`, callable only as `junctura_audit_api`. It accepts only

@@ -1,0 +1,68 @@
+// SPDX-FileCopyrightText: 2026 Junctura Contributors
+// SPDX-License-Identifier: Apache-2.0
+import type { TrustGrantState } from "../../types";
+
+const vi = {
+  title: "Sơ đồ kết nối",
+  desc: "Mỗi vòng tròn là một ứng dụng. Mũi tên đi từ ứng dụng cung cấp chức năng tới ứng dụng được dùng. Bấm một ứng dụng hoặc một đường để xem chi tiết.",
+  all: "Tất cả",
+  state: { active: "Đang hiệu lực", pending: "Chờ duyệt", expired: "Hết hạn", revoked: "Đã thu hồi" } as Record<TrustGrantState, string>,
+  appState: { active: "Đang hoạt động", pending: "Chờ duyệt", suspended: "Tạm ngưng", revoked: "Đã thu hồi" } as Record<string, string>,
+  soon: "sắp hết hạn",
+  hint: "Chọn một ứng dụng hoặc một đường nối trên sơ đồ.",
+  appCard: "Ứng dụng",
+  edgeCard: "Quyền dùng năng lực",
+  provides: (n: number) => `Cho ứng dụng khác dùng ${n} quyền`,
+  uses: (n: number) => `Được dùng ${n} quyền của ứng dụng khác`,
+  connections: "Các kết nối",
+  noConnections: "Chưa có kết nối nào.",
+  arrow: (a: string, b: string) => `${a} cho ${b} dùng`,
+  status: "Trạng thái",
+  expires: "Hạn dùng",
+  activated: "Bắt đầu từ",
+  revokedAt: "Thu hồi lúc",
+  can: "Được phép",
+  op: { discover: "xem thông tin", invoke: "gọi chức năng" } as Record<string, string>,
+  revoke: "Thu hồi quyền này",
+  reason: "Lý do thu hồi",
+  reasonPh: "Ví dụ: hết nhu cầu sử dụng",
+  confirm: "Xác nhận thu hồi",
+  cancel: "Hủy",
+  close: "Đóng",
+  empty: "Chưa có ứng dụng nào chia sẻ năng lực.",
+  diagram: (n: number, m: number) => `Sơ đồ kết nối: ${n} ứng dụng, ${m} quyền.`,
+};
+export type TrustGraphStrings = typeof vi;
+
+const en: TrustGraphStrings = {
+  title: "Connection map",
+  desc: "Each circle is an application. Arrows go from the application offering a function to the one allowed to use it. Click an application or a line for details.",
+  all: "All",
+  state: { active: "Active", pending: "Awaiting approval", expired: "Expired", revoked: "Revoked" },
+  appState: { active: "Active", pending: "Awaiting approval", suspended: "Suspended", revoked: "Revoked" },
+  soon: "expiring soon",
+  hint: "Select an application or a connection on the map.",
+  appCard: "Application",
+  edgeCard: "Capability access",
+  provides: (n) => `Lets other applications use ${n} grant(s)`,
+  uses: (n) => `Uses ${n} grant(s) from other applications`,
+  connections: "Connections",
+  noConnections: "No connections yet.",
+  arrow: (a, b) => `${a} lets ${b} use`,
+  status: "Status",
+  expires: "Expires",
+  activated: "Active since",
+  revokedAt: "Revoked at",
+  can: "Allowed to",
+  op: { discover: "view details", invoke: "call the function" },
+  revoke: "Revoke this access",
+  reason: "Reason",
+  reasonPh: "For example: no longer needed",
+  confirm: "Confirm revoke",
+  cancel: "Cancel",
+  close: "Close",
+  empty: "No application shares a capability yet.",
+  diagram: (n, m) => `Connection map: ${n} applications, ${m} grants.`,
+};
+
+export const TRUST_GRAPH_STRINGS: Record<"vi" | "en", TrustGraphStrings> = { vi, en };

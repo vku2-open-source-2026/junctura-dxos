@@ -82,6 +82,11 @@ services:
       - ./infra/postgres/019-trust-graph.sql:/migrations/019-trust-graph.sql:ro
       - ./infra/postgres/020-subject-access.sql:/migrations/020-subject-access.sql:ro
       - ./infra/postgres/021-consent-emergency.sql:/migrations/021-consent-emergency.sql:ro
+      - ./infra/postgres/022-directory.sql:/migrations/022-directory.sql:ro
+      - ./infra/postgres/023-principal-profile.sql:/migrations/023-principal-profile.sql:ro
+      - ./infra/postgres/024-directory-active-only.sql:/migrations/024-directory-active-only.sql:ro
+      - ./infra/postgres/025-storage-summary.sql:/migrations/025-storage-summary.sql:ro
+      - ./infra/postgres/026-storage-collections.sql:/migrations/026-storage-collections.sql:ro
     depends_on:
       database:
         condition: service_healthy
@@ -196,6 +201,7 @@ services:
       WORKFLOW_ADMIN_PASSWORD: ${WORKFLOW_ADMIN_PASSWORD:?Run npm run setup first}
     volumes:
       - ./infra/flowable/checkpoint.bpmn20.xml:/definitions/checkpoint.bpmn20.xml:ro
+      - ./src/modules/workflow/definitions:/definitions/business:ro
     depends_on:
       workflow:
         condition: service_healthy

@@ -165,3 +165,4 @@ kind-data/
 # Copied into the SDK package only at publish time
 sdk/node/LICENSE
 sdk/node/NOTICE
+console/public/login-hints.json
