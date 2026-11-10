@@ -260,7 +260,8 @@ docker compose --profile console up --build -d
 
 The Console is available at `http://127.0.0.1:3000/`. Nginx proxies the Console's
 `/api` calls to `http://gateway:8080` over the Compose `edge` network. The host
-Gateway port is not used by the container. The runtime is non-root (`nginx`),
+Gateway port is not used by the container. For a public competition demo with
+prefilled administrator accounts, see [COMPETITION_DEMO](COMPETITION_DEMO.md). The runtime is non-root (`nginx`),
 read-only, capability-free and uses a small writable `/tmp` tmpfs; no Node/Vite
 runtime is shipped.
 

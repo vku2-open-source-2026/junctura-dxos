@@ -196,6 +196,7 @@ const same = await junctura.getRecord("students", record.id);
 | `npm run provider:pki -- <tên>…` | Tạo CA và chứng chỉ TLS cho dịch vụ cung cấp năng lực chạy nội bộ (Tầng 2) |
 | `npm run backup` · `npm run restore -- <thư-mục> --yes` | Sao lưu · khôi phục toàn bộ dữ liệu |
 | `npm run console` | Chạy Console ở chế độ phát triển |
+| `npm run demo:seed` · `demo:console` | Tạo tài khoản admin + dữ liệu demo · build lại Console kèm login hints ([hướng dẫn](docs/COMPETITION_DEMO.md)) |
 | `npm test` · `npm run test:integration` | Kiểm thử đơn vị · kiểm thử tích hợp |
 
 ## API chính
@@ -247,6 +248,7 @@ Phiên bản chính xác và giấy phép của từng thành phần: [THIRD-PAR
 | [Capability](docs/CAPABILITY_REGISTRY.md) | Registry, [Trust](docs/CAPABILITY_DIRECT_TRUST.md), [Invocation](docs/CAPABILITY_EXECUTION.md), [Composition](docs/CAPABILITY_COMPOSITION.md) |
 | [Kiểm toán](docs/AUDIT.md) · [Bảo mật](docs/SECURITY_REVIEW.md) | Mô hình đe dọa, kết quả quét, vấn đề còn mở |
 | [Vận hành](docs/OPERATIONS.md) · [Phát hành](docs/RELEASE.md) | Khởi động, migration, sao lưu, đóng gói |
+| [Triển khai demo thi](docs/COMPETITION_DEMO.md) | Server demo, tài khoản mẫu, reverse proxy, reset dữ liệu |
 | [Đối chiếu đề thi OLP'26](docs/OLP_REQUIREMENTS.md) | Yêu cầu của đề và cách Junctura đáp ứng |
 | [Mục lục đầy đủ](docs/index.md) | Toàn bộ thiết kế và quyết định kiến trúc |
 
