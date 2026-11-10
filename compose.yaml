@@ -4,6 +4,7 @@ name: junctura
 services:
   database:
     image: postgres:17-bookworm@sha256:858bb5e98eed02eb8cafbcdc007f9a65d1b613972028944a8ec2133ccaf80d27
+    restart: unless-stopped
     environment:
       POSTGRES_USER: junctura_admin
       POSTGRES_DB: postgres
@@ -22,6 +23,7 @@ services:
     networks: [identity, data, workflow]
   identity:
     image: quay.io/keycloak/keycloak:26.8.1@sha256:79c623a22abacf3fe6c00a5fb30f5b7843d717b234033b80995891c06116d244
+    restart: unless-stopped
     command: [start, --import-realm]
     environment:
       KC_DB: postgres
@@ -93,6 +95,7 @@ services:
     networks: [data]
   data:
     image: postgrest/postgrest:v16.5@sha256:1347d7552b88f17832912c06afbf7c43209af6eeeb60834b04aae12c9bd9d5cc
+    restart: unless-stopped
     environment:
       PGRST_DB_URI: postgres://junctura_data:${DATA_DB_PASSWORD:?Run npm run setup first}@database:5432/junctura_data
       PGRST_DB_SCHEMAS: core
@@ -105,6 +108,7 @@ services:
     networks: [data]
   objects:
     image: chrislusf/seaweedfs:4.48@sha256:4e61d15fd35994cb1e43e1e553dff106794841fd9a99ade2fc8c8bfce4d7872d
+    restart: unless-stopped
     command: [server, -dir=/data, -ip=objects, -ip.bind=0.0.0.0, -master.volumeSizeLimitMB=64, -volume.max=4, -filer]
     volumes:
       - object-data:/data
@@ -112,6 +116,7 @@ services:
     networks: [objects]
   clamav:
     image: clamav/clamav-debian:1.5.4@sha256:c21aa18cc0a358678255a3dfb343a4555b58f71b97d7b869df8fdf7ea0a5b4b1
+    restart: unless-stopped
     environment:
       CLAMD_STARTUP_TIMEOUT: "1800"
     volumes:
@@ -130,6 +135,7 @@ services:
     # Internal only: no published ports. Signature updates use FreshClam inside the image.
   secrets:
     image: openbao/openbao:2.7.2@sha256:5046911075e137e154ce49ab051502f4ec7cf367d484ae4a4dce665d9b90561f
+    restart: unless-stopped
     command: [server]
     environment:
       BAO_ADDR: http://127.0.0.1:8200
@@ -166,6 +172,7 @@ services:
     # Docker Desktop; Core remains non-root and mounts only core-token.
   workflow:
     image: flowable/flowable-rest:8.0.0@sha256:708dfa32f27b93180bb6e7a30684d881d995fe257f5b8413e14b20a55c25672d
+    restart: unless-stopped
     environment:
       SPRING_DATASOURCE_URL: jdbc:postgresql://database:5432/junctura_workflow
       SPRING_DATASOURCE_USERNAME: junctura_workflow
@@ -209,6 +216,7 @@ services:
   core:
     build: .
     image: junctura-core:local
+    restart: unless-stopped
     environment:
       HOST: 0.0.0.0
       PORT: "8080"
@@ -259,6 +267,7 @@ services:
     networks: [identity, data, objects, scanner, secrets, workflow, edge]
   gateway:
     image: nginx:stable-bookworm@sha256:552e7481ca93ffccd046aa658dbbed22caefbc09c66fa7cd247cbb90b8a5c609
+    restart: unless-stopped
     volumes:
       - ./infra/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
     ports:
@@ -278,6 +287,7 @@ services:
     build:
       context: .
       dockerfile: console/Dockerfile
+    restart: unless-stopped
     ports:
       - "127.0.0.1:${CONSOLE_PORT:-3000}:3000"
     depends_on:
