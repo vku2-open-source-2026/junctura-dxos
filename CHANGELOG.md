@@ -8,6 +8,15 @@ All notable changes to Junctura are recorded here. Versions follow
 
 ## Unreleased
 
+- **Junctura sign-in page for applications (issue #30):** applications that sign in
+  through Keycloak (Clinic, Hospital, ...) now show a Junctura-branded page instead of the
+  default one: the Junctura mark, a centred card on the pattern background, light and dark
+  colours, Vietnamese by default with English available. The theme
+  (`infra/keycloak/themes/junctura/login/`) only adds styles and messages on top of Keycloak's
+  `keycloak.v2` templates. New stacks get it from `realm.json`; a running stack applies it with
+  `npm run login-theme:apply` (see [docs/OPERATIONS.md](docs/OPERATIONS.md)). Console code and
+  the Console's own sign-in form are unchanged.
+
 - **Plainer Console text (issue #29):** the Vietnamese and English Console text drops
   unexplained jargon ("tenant", "token", "idempotency key", "digest", ...) in
   favour of one shared set of terms, documented in

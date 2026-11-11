@@ -1,0 +1,219 @@
+/* SPDX-FileCopyrightText: 2026 Junctura Contributors */
+/* SPDX-License-Identifier: Apache-2.0 */
+/*
+ * Junctura sign-in look: same card, colours and mark as the Junctura Console sign-in.
+ * Loaded after the Keycloak v2 stylesheet and only overrides colours, shape and the header.
+ * Tokens follow console/src/index.css; Inter is used when installed, system fonts otherwise.
+ */
+:root {
+  --jh-app: #F4F6F6;
+  --jh-surface: #FFFFFF;
+  --jh-surface-2: #F0F2EE;
+  --jh-line: #DCE3E5;
+  --jh-control: #73868D;
+  --jh-ink: #172F3D;
+  --jh-ink-2: #3E4F57;
+  --jh-muted: #5B6B73;
+  --jh-brand: #176B80;
+  --jh-brand-hover: #0F5568;
+  --jh-on-brand: #FFFFFF;
+  --jh-danger: #B4453F;
+  --jh-danger-soft: #F8E9E8;
+  --jh-ok: #136B61;
+  --jh-ok-soft: #E6F5F3;
+  --jh-warn: #8A5F1B;
+  --jh-warn-soft: #FBF4EE;
+  --jh-info-soft: #E5F0F3;
+  --jh-dots: rgba(23, 107, 128, 0.1);
+  --jh-glow-a: rgba(24, 135, 122, 0.1);
+  --jh-glow-b: rgba(197, 139, 98, 0.1);
+  --jh-logo-tile: #172F3D;
+  --jh-logo-blue: #4FB3C8;
+  --jh-logo-green: #5FCDBE;
+  --jh-logo-sand: #D8A581;
+}
+
+.pf-v5-theme-dark {
+  --jh-app: #0D1A22;
+  --jh-surface: #13242D;
+  --jh-surface-2: #172A33;
+  --jh-line: #243843;
+  --jh-control: #6B8895;
+  --jh-ink: #E8F3F5;
+  --jh-ink-2: #C3D2D8;
+  --jh-muted: #9DB1BA;
+  --jh-brand: #4FB3C8;
+  --jh-brand-hover: #6FC6D8;
+  --jh-on-brand: #0D1A22;
+  --jh-danger: #F08A8A;
+  --jh-danger-soft: #3A1A1D;
+  --jh-ok: #5FCDBE;
+  --jh-ok-soft: #123A34;
+  --jh-warn: #E3B778;
+  --jh-warn-soft: #3A2C18;
+  --jh-info-soft: #123A44;
+  --jh-dots: rgba(79, 179, 200, 0.1);
+  --jh-glow-a: rgba(45, 212, 191, 0.1);
+  --jh-glow-b: rgba(245, 158, 11, 0.1);
+  --jh-logo-tile: #E8F3F5;
+  --jh-logo-blue: #176B80;
+  --jh-logo-green: #0F6F66;
+  --jh-logo-sand: #8A5A38;
+}
+
+/* Page: pattern and soft glows, as in the Console sign-in */
+.login-pf body {
+  background: var(--jh-app);
+  color: var(--jh-ink);
+  font-family: Inter, "Inter Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+  min-height: 100vh;
+}
+.login-pf body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(18rem 18rem at -3rem 30%, var(--jh-glow-a), transparent 70%),
+    radial-gradient(20rem 20rem at calc(100% + 3rem) 70%, var(--jh-glow-b), transparent 70%),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='56' height='56'%3E%3Ccircle cx='2' cy='2' r='1.4' fill='%23176B80' fill-opacity='0.12'/%3E%3Cpath d='M0 28h56M28 0v56' stroke='%23176B80' stroke-opacity='0.08' stroke-width='0.35'/%3E%3C/svg%3E");
+}
+.pf-v5-c-login {
+  --pf-v5-c-login--BackgroundColor: transparent;
+  --pf-v5-c-login--BackgroundImage: none;
+  position: relative;
+  background: transparent;
+}
+.pf-v5-c-login__container {
+  grid-template-columns: minmax(0, 28rem);
+  justify-content: center;
+}
+
+/* Header: the Junctura mark and name above the card */
+#kc-header-wrapper {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.75rem;
+  font-size: 1.25rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  text-transform: none;
+  line-height: 1.2;
+  color: var(--jh-ink) !important;
+}
+#kc-header-wrapper::before {
+  content: "";
+  width: 3rem;
+  height: 3rem;
+  background: no-repeat center / contain url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 48 48' fill='none'%3E%3Crect width='48' height='48' rx='10' fill='%23172F3D'/%3E%3Cpath d='M17 12H34V17H31V27C31 32.5228 26.5228 37 21 37H15V32H21C23.7614 32 26 29.7614 26 27V17H17V12Z' fill='%234FB3C8'/%3E%3Ccircle cx='28.5' cy='22' r='3.2' fill='%235FCDBE'/%3E%3Cpath d='M17 12H24V17H17V12Z' fill='%23D8A581'/%3E%3C/svg%3E");
+}
+.pf-v5-theme-dark #kc-header-wrapper::before {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 48 48' fill='none'%3E%3Crect width='48' height='48' rx='10' fill='%23E8F3F5'/%3E%3Cpath d='M17 12H34V17H31V27C31 32.5228 26.5228 37 21 37H15V32H21C23.7614 32 26 29.7614 26 27V17H17V12Z' fill='%23176B80'/%3E%3Ccircle cx='28.5' cy='22' r='3.2' fill='%230F6F66'/%3E%3Cpath d='M17 12H24V17H17V12Z' fill='%238A5A38'/%3E%3C/svg%3E");
+}
+
+/* Card */
+.pf-v5-c-login__main {
+  --pf-v5-c-login__main--BackgroundColor: var(--jh-surface);
+  background: var(--jh-surface);
+  color: var(--jh-ink);
+  border: 1px solid var(--jh-line);
+  border-radius: 0.5rem;
+  box-shadow: 0 20px 25px -5px rgba(23, 47, 61, 0.1), 0 8px 10px -6px rgba(23, 47, 61, 0.1);
+  overflow: hidden;
+}
+.pf-v5-c-login__main-header {
+  display: block;
+  position: relative;
+  border-top: 0;
+  padding-top: 3.25rem;
+  text-align: center;
+}
+.pf-v5-c-login__main-header .pf-v5-c-title {
+  color: var(--jh-ink);
+  font-size: 1.5rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+.pf-v5-c-login__main-body { padding-bottom: 2rem; }
+
+/* Fields */
+.pf-v5-c-form__label-text { color: var(--jh-ink); font-weight: 500; }
+.pf-v5-c-form-control {
+  --pf-v5-c-form-control--BackgroundColor: var(--jh-surface);
+  --pf-v5-c-form-control--Color: var(--jh-ink);
+  --pf-v5-c-form-control--BorderColor: var(--jh-control);
+  --pf-v5-c-form-control--BorderRadius: 0.375rem;
+  --pf-v5-c-form-control--before--BorderColor: var(--jh-control);
+  --pf-v5-c-form-control--hover--after--BorderBottomColor: var(--jh-brand);
+  --pf-v5-c-form-control--focus--after--BorderBottomColor: var(--jh-brand);
+  --pf-v5-c-form-control--after--BorderBottomColor: var(--jh-control);
+  --pf-v5-c-form-control--m-error--after--BorderBottomColor: var(--jh-danger);
+  border: 1px solid var(--jh-control);
+  border-radius: 0.375rem;
+}
+.pf-v5-c-form-control::before, .pf-v5-c-form-control::after { display: none; }
+.pf-v5-c-form-control.pf-m-error, .pf-v5-c-form-control.pf-m-error:focus-within { border-color: var(--jh-danger); }
+.pf-v5-c-form-control input { color: var(--jh-ink); }
+.pf-v5-c-form-control:focus-within { outline: 2px solid var(--jh-brand); outline-offset: 2px; }
+.pf-v5-c-form__helper-text, .pf-v5-c-helper-text__item-text { color: var(--jh-muted); }
+.pf-v5-c-helper-text__item.pf-m-error .pf-v5-c-helper-text__item-text { color: var(--jh-danger); }
+
+/* Buttons and links */
+.pf-v5-c-button.pf-m-primary {
+  --pf-v5-c-button--m-primary--BackgroundColor: var(--jh-brand);
+  --pf-v5-c-button--m-primary--Color: var(--jh-on-brand);
+  --pf-v5-c-button--m-primary--hover--BackgroundColor: var(--jh-brand-hover);
+  --pf-v5-c-button--m-primary--hover--Color: var(--jh-on-brand);
+  --pf-v5-c-button--m-primary--focus--BackgroundColor: var(--jh-brand-hover);
+  --pf-v5-c-button--m-primary--focus--Color: var(--jh-on-brand);
+  --pf-v5-c-button--m-primary--active--BackgroundColor: var(--jh-brand-hover);
+  --pf-v5-c-button--m-primary--active--Color: var(--jh-on-brand);
+  --pf-v5-c-button--BorderRadius: 0.5rem;
+  min-height: 2.75rem;
+  font-weight: 600;
+}
+.pf-v5-c-button.pf-m-secondary, .pf-v5-c-button.pf-m-control, .pf-v5-c-button.pf-m-tertiary {
+  --pf-v5-c-button--BorderRadius: 0.375rem;
+  --pf-v5-c-button--m-control--BackgroundColor: var(--jh-surface);
+  --pf-v5-c-button--m-control--Color: var(--jh-ink);
+  color: var(--jh-ink);
+}
+.pf-v5-c-input-group { gap: 0.5rem; }
+.pf-v5-c-input-group .pf-v5-c-button.pf-m-control { border: 1px solid var(--jh-control); }
+.pf-v5-c-input-group .pf-v5-c-button.pf-m-control::before, .pf-v5-c-input-group .pf-v5-c-button.pf-m-control::after { display: none; }
+.pf-v5-c-login a, .pf-v5-c-login .pf-v5-c-button.pf-m-link { color: var(--jh-brand); }
+.pf-v5-c-login a:hover { color: var(--jh-brand-hover); }
+:focus-visible { outline: 2px solid var(--jh-brand); outline-offset: 2px; }
+
+/* Messages */
+.pf-v5-c-alert {
+  --pf-v5-c-alert--BackgroundColor: var(--jh-info-soft);
+  --pf-v5-c-alert__title--Color: var(--jh-ink);
+  --pf-v5-c-alert--BorderRadius: 0.5rem;
+  border-radius: 0.5rem;
+  border: 1px solid var(--jh-line);
+  box-shadow: none;
+  color: var(--jh-ink);
+}
+.pf-v5-c-alert.pf-m-danger { --pf-v5-c-alert--BackgroundColor: var(--jh-danger-soft); --pf-v5-c-alert__icon--Color: var(--jh-danger); }
+.pf-v5-c-alert.pf-m-success { --pf-v5-c-alert--BackgroundColor: var(--jh-ok-soft); --pf-v5-c-alert__icon--Color: var(--jh-ok); }
+.pf-v5-c-alert.pf-m-warning { --pf-v5-c-alert--BackgroundColor: var(--jh-warn-soft); --pf-v5-c-alert__icon--Color: var(--jh-warn); }
+.pf-v5-c-alert__title { color: var(--jh-ink); }
+
+/* Language selector in the card header: pill with the flag of the current language and VI / EN */
+.pf-v5-c-login__main-header-utilities { position: absolute; top: 0.75rem; right: 0.75rem; width: auto; }
+.pf-v5-c-login__main-header-utilities .pf-v5-c-form-control { border-radius: 9999px; }
+.pf-v5-c-login__main-header-utilities select {
+  color: var(--jh-ink);
+  background: no-repeat 0.65rem center / 1.25rem 0.85rem transparent;
+  font-size: 0.875rem;
+  font-weight: 600;
+  padding-left: 2.4rem;
+  cursor: pointer;
+}
+.pf-v5-c-login__main-header-utilities select:has(option[value*="kc_locale=vi"]:checked) { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 30 20'%3E%3Crect width='30' height='20' fill='%23DA251D'/%3E%3Cpath fill='%23FFFF00' d='M15 4l2.35 7.23h-4.7zm0 0l-2.35 7.23 6.15-4.47h-7.6l6.15 4.47z'/%3E%3C/svg%3E"); }
+.pf-v5-c-login__main-header-utilities select:has(option[value*="kc_locale=en"]:checked) { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 60 40'%3E%3Crect width='60' height='40' fill='%23012169'/%3E%3Cpath d='M0 0l60 40M60 0L0 40' stroke='%23fff' stroke-width='8'/%3E%3Cpath d='M0 0l60 40M60 0L0 40' stroke='%23C8102E' stroke-width='3'/%3E%3Cpath d='M30 0v40M0 20h60' stroke='%23fff' stroke-width='12'/%3E%3Cpath d='M30 0v40M0 20h60' stroke='%23C8102E' stroke-width='7'/%3E%3C/svg%3E"); }
+.pf-v5-c-login__main-header-utilities select option { color: #172F3D; background: #FFFFFF; }
+
+@media (prefers-reduced-motion: reduce) { * { transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; } }

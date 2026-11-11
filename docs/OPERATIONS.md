@@ -73,6 +73,24 @@ its database schema initialization. Review each upstream migration before an
 image upgrade, retain the old pins and take a consistent backup first. Reverting
 an image is not proof its previous version can read a migrated database.
 
+## Sign-in page theme
+
+Applications sign in on a Keycloak page that carries the Junctura look (mark, card, colours,
+Vietnamese by default), defined in `infra/keycloak/themes/junctura/login/`. It only adds a
+stylesheet and messages on top of Keycloak's own `keycloak.v2` templates, so Keycloak
+upgrades keep working. `compose.yaml` mounts the directory into the `identity` service.
+
+A new stack picks the theme up from `realm.json`. The realm import never changes an existing
+realm, so on a stack that already runs, apply it once without touching any volume:
+
+```sh
+docker compose up -d identity
+npm run login-theme:apply
+```
+
+Or set it by hand: Keycloak admin console, realm `junctura`, Realm settings, Themes, Login
+theme `junctura`; Localization, enable internationalization with `vi` default and `en`.
+
 ## Backup and restore
 
 ```sh

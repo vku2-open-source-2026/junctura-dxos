@@ -1,6 +1,11 @@
 {
   "realm": "junctura",
   "enabled": true,
+  "displayName": "Junctura",
+  "loginTheme": "junctura",
+  "internationalizationEnabled": true,
+  "supportedLocales": ["vi", "en"],
+  "defaultLocale": "vi",
   "sslRequired": "none",
   "registrationAllowed": false,
   "accessTokenLifespan": 300,
