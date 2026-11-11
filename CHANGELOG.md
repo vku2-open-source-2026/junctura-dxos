@@ -8,6 +8,11 @@ All notable changes to Junctura are recorded here. Versions follow
 
 ## Unreleased
 
+- **One-click language switch on the sign-in page (issue #33):** the language drop-down on the
+  Keycloak sign-in page is now a single button showing the flag and code of the current
+  language (VI or EN); one click switches to the other. It has an accessible name and a visible
+  keyboard focus, and the standard drop-down still works if the small script cannot run.
+
 ## 0.2.0 — Console on live APIs (2026-11-11)
 
 - **Junctura sign-in page for applications (issue #30):** applications that sign in
