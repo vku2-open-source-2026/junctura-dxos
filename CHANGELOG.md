@@ -8,6 +8,8 @@ All notable changes to Junctura are recorded here. Versions follow
 
 ## Unreleased
 
+## 0.2.0 — Console on live APIs (2026-11-11)
+
 - **Junctura sign-in page for applications (issue #30):** applications that sign in
   through Keycloak (Clinic, Hospital, ...) now show a Junctura-branded page instead of the
   default one: the Junctura mark, a centred card on the pattern background, light and dark

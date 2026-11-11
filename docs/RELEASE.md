@@ -12,7 +12,7 @@ final GitHub Release is authorized by this workflow.
 
 Use semantic `MAJOR.MINOR.PATCH-rc.N` versions in root `package.json` for candidates
 and `MAJOR.MINOR.PATCH` for an owner-approved final version. `v0.1.0` is the Layer 1
-competition release; see [Publishing a GitHub Release](#publishing-a-github-release). Versioning
+competition release and `v0.2.0` adds the live-API Console; see [Publishing a GitHub Release](#publishing-a-github-release). Versioning
 does not change the existing `/v1` and `/v2` API contracts. Additive database versions
 are independent; applied migrations are immutable. No downgrade migration is supplied.
 

@@ -1,6 +1,6 @@
 {
   "name": "@junctura/server-client",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Server-side Node.js client for Junctura DX-OS: OIDC client credentials, records, objects, workflows and capability calls with consent context.",
   "keywords": [
     "junctura",
