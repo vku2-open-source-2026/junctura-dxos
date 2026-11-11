@@ -196,7 +196,7 @@ const same = await junctura.getRecord("students", record.id);
 | `npm run provider:pki -- <tên>…` | Tạo CA và chứng chỉ TLS cho dịch vụ cung cấp năng lực chạy nội bộ (Tầng 2) |
 | `npm run backup` · `npm run restore -- <thư-mục> --yes` | Sao lưu · khôi phục toàn bộ dữ liệu |
 | `npm run console` | Chạy Console ở chế độ phát triển |
-| `npm run demo:seed` · `demo:console` | Tạo tài khoản admin + dữ liệu demo · build lại Console kèm login hints ([hướng dẫn](docs/COMPETITION_DEMO.md)) |
+| `npm run demo:provision` · `demo:console` | Tạo tài khoản admin demo · build lại Console kèm login hints ([hướng dẫn](docs/COMPETITION_DEMO.md)) |
 | `npm test` · `npm run test:integration` | Kiểm thử đơn vị · kiểm thử tích hợp |
 
 ## API chính

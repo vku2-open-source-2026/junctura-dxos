@@ -196,73 +196,21 @@ npm run check:schema-drift
 Do not claim a suite passed if it was not executed. Integration suites restart
 services and alter local test state; they are not unit tests.
 
-## Seed the health context
+## Demo data for a domain
 
-`npm run seed:health` fills a running local stack with the fictional
-"Junctura Health" scenario: `benh-nhan`, `chuyen-tuyen` and `don-thuoc` records
-plus small referral-letter objects. Everything is generated deterministically
-from a seeded PRNG and written only through the v2 HTTP API of active Layer-2
-applications, so rerunning it does not duplicate rows or files.
+Layer 1 contains no domain data and no domain scenario. A domain (for example
+health) registers its own applications, capabilities, grants and records through
+the public APIs from its Layer-2 repository. For the health scenario, run
+`npm run demo:setup` in
+[`junctura-health`](https://github.com/vku2-open-source-2026/junctura-health);
+the Console then shows the applications, capabilities and grants it created.
 
-Prerequisites: the stack from `npm run local:up`, the `.env` created by
-`npm run setup` (including `KEYCLOAK_ADMIN_PASSWORD`), and Docker access to the
-Compose project. The default run uses the reviewed local operator flow in
-`scripts/lib/demo-stack.mjs` to enroll or reuse five Layer-2 applications
-(Trạm y tế, Bệnh viện, Nhà thuốc, Bảo hiểm, Sổ sức khỏe), binds their resource
-subjects exactly as `npm run app:enroll` does, publishes the six capabilities
-of the shared [Junctura Health contracts](https://github.com/vku2-open-source-2026/junctura-health/tree/main/contracts)
-with their agreed providers, and creates the seven contract trust relationships through the real
-Trust API (owner proposes, an independent approver approves and activates). It
-then writes presentation-only principal profiles directly (three administrators
-and two application service accounts, never permissions), seeds pending and
-rejected trust proposals for the approval queue through `/v1/trust/grants`, and
-creates workflow requests (pending, approved, rejected) for the installed
-"Chuyển tuyến bệnh nhân", "Xác minh đơn thuốc" and "Xác minh chi phí bảo hiểm"
-processes, plus two active and one revoked subject consent through the HTTP API.
-The health records and referral files are split across the scenario applications
-through each application's own token, and a generated EICAR test upload proves
-that ClamAV quarantine rejects unscanned bytes without publishing them. The administrator consent seed
-reads `.junctura/demo-accounts.json` (or `console/public/login-hints.json` when
-the administrators were provisioned with `--public-admins`) or accepts
-`SEED_HEALTH_ADMIN_TOKEN`/`SEED_HEALTH_ADMIN_PASSWORD`; it never prints
-credentials. Every step is idempotent, so reruns reuse existing rows. Capability
-execution and emergency access stay opt-in (`C4A_ENABLED`/`C4B_ENABLED`) and
-are skipped when that runtime is disabled.
-
-This scenario is a Console illustration that mirrors those contracts; the
-contracts repository stays the source of truth. Its applications (`app-tram-y-te`,
-...) are separate from the ones `npm run demo:setup` of `junctura-health` enrolls
-(`health-clinic`, ...), so do not run both on the same tenant: the Console would
-show two sets of health applications.
-
-```sh
-npm run seed:health
-npm run seed:health -- --tenant tenant-a --seed 20261110
-```
-
-To reuse an already enrolled, active application instead of the operator flow,
-pass `--skip-apps` and provide its own credentials:
-
-```sh
-SEED_HEALTH_CLIENT_ID=app-so-suc-khoe \
-SEED_HEALTH_CLIENT_SECRET=<backend-secret> \
-npm run seed:health -- --skip-apps
-```
-
-The records and files are owned by their respective scenario applications and
-readable by those applications through `/v2/data` and `/v2/objects`. A browser or
-Console session cannot read application-private v2 resources without an explicit
-resource share; granting one is a separate operator decision. The aggregate
-management views are `GET /v1/storage/summary` and
-`GET /v1/workflows/executions`, both requiring `audit.read`. Business records, workflows,
-grants and consents are never written by SQL; only the presentation-only
-principal profiles use the reviewed local `docker compose exec ... psql` helper.
-The script contains no real patient data.
-
-Outside the local Compose demo flow, application enrollment and the
-`resource_subject` binding remain operator tasks under
-[APPLICATION_REGISTRATION.md](APPLICATION_REGISTRATION.md); the seed helper only
-automates the already reviewed local steps and never invents credentials.
+`npm run demo:provision` only creates the demo administrators and the read-only
+`viewer` of this repository (see [COMPETITION_DEMO.md](COMPETITION_DEMO.md)).
+Application enrollment and the `resource_subject` binding remain operator tasks
+under [APPLICATION_REGISTRATION.md](APPLICATION_REGISTRATION.md); the reviewed
+local steps are automated by `scripts/lib/demo-stack.mjs`, which Layer-2
+repositories reuse and which never invents credentials.
 
 ## Developer journey and cleanup
 

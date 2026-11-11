@@ -3,7 +3,8 @@
 import assert from "node:assert/strict";
 import { readFileSync, readdirSync } from "node:fs";
 import { test } from "node:test";
-import { WORKFLOW_DEFINITION_KEYS } from "../scripts/lib/seed-health-operations.mjs";
+
+const WORKFLOW_DEFINITION_KEYS = ["junctura_chuyen_tuyen", "junctura_xac_minh_don_thuoc", "junctura_xac_minh_chi_phi"];
 
 const directory = new URL("../src/modules/workflow/definitions/", import.meta.url);
 
