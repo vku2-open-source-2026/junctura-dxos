@@ -8,6 +8,15 @@ All notable changes to Junctura are recorded here. Versions follow
 
 ## Unreleased
 
+- **Layer 1 no longer seeds health data (removed):** `npm run seed:health`, its
+  `scripts/lib/seed-health-*` helpers and tests, and `npm run demo:seed` are gone.
+  Layer 1 stays domain-neutral; the health scenario (applications, capabilities,
+  grants, records) is created from the Layer-2 repository with `npm run demo:setup`
+  in `junctura-health`. `npm run demo:provision` is unchanged and still creates the
+  demo administrators and the read-only `viewer`. Earlier Unreleased notes that
+  mention `seed:health` describe behavior that no longer exists. The Console shows
+  no applications or capabilities until a Layer-2 scenario registers them.
+
 - **Stack survives a host reboot:** long-running Compose services now use
   `restart: unless-stopped`, while init and migration jobs stay one-shot. After a
   reboot, OpenBao may return sealed; `npm run local:up` re-runs the init jobs.
@@ -17,16 +26,10 @@ All notable changes to Junctura are recorded here. Versions follow
   `.junctura/demo-accounts.json` (mode `0600`) and are replaced on the first run,
   because the previous ones were served publicly. `--public-admins` restores the
   old behavior for loopback-only development.
-- **Health scenario follows the shared contracts:** `npm run seed:health` now registers
-  exactly the six capabilities of the Junctura Health contracts with their agreed
-  providers and consumers (seven grants), and its sample consents use the purposes
-  those contracts allow. The five ad-hoc capabilities and the reversed provider roles
-  are gone. Do not run it on the same tenant as `demo:setup` of `junctura-health`.
 - **Competition demo provisioning:** `npm run demo:provision` recreates the
   local `admin1`–`admin3` Keycloak users, upserts their Console permissions and
-  writes the Git-ignored browser login hints; `npm run demo:seed` follows it with
-  the idempotent health seed, and `npm run demo:console` rebuilds the packaged
-  Console. The packaged Nginx now serves a readable `/login-hints.json` without
+  writes the Git-ignored browser login hints, and `npm run demo:console` rebuilds
+  the packaged Console. The packaged Nginx now serves a readable `/login-hints.json` without
   changing the `/api` allowlist. See [the demo server guide](docs/COMPETITION_DEMO.md).
 
 - **Console layout cleanup:** Tổ chức now uses a full-width tree with an anchored detail note, Cài đặt uses the full width, Tài liệu opens the guide from the sidebar, and record collections are labelled datasets.

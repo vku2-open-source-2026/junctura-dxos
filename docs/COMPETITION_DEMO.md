@@ -4,8 +4,8 @@
 # Competition demo server
 
 This page reproduces the full local demo on a single public server so judges can
-open the Console, sign in with a prefilled read-only account and browse the
-seeded health scenario. It is a **demo deployment only**; it is not the production
+open the Console, sign in with a prefilled read-only account and browse what
+the Layer-2 scenario registered. It is a **demo deployment only**; it is not the production
 hosting model and it intentionally publishes the credentials of that one
 read-only account.
 
@@ -20,9 +20,9 @@ therefore needs the same scripts, not a database copy:
 | Console permissions in `app_private.principals` | `npm run demo:provision` |
 | `console/public/login-hints.json` (Git-ignored, `viewer` only) | `npm run demo:provision` |
 | `.junctura/demo-accounts.json` (Git-ignored, mode `0600`, every demo password) | `npm run demo:provision` |
-| Health applications, records, files, trust, workflows, consents | `npm run seed:health` |
+| Applications, capabilities, grants and records of a domain scenario | The Layer-2 repository, for health `npm run demo:setup` in `junctura-health` |
 
-`npm run demo:seed` runs all of them in order. The generated hints file is
+The generated hints file is
 written with mode `0644` so the packaged Nginx container can serve it.
 
 ## Fresh server
@@ -51,7 +51,7 @@ fresh stack.
 
 ```sh
 npm run local:up          # build and start Core + Console
-npm run demo:seed         # administrators, principals, hints, health data
+npm run demo:provision    # administrators, viewer, principals, hints
 npm run demo:console      # rebuild Console so the hints file is in the image
 ```
 
@@ -112,10 +112,10 @@ domain is a separate decision and is not required for the prefilled login flow.
 
 ## Update, rotate and reset
 
-Re-running the seed is idempotent and does not duplicate health records:
+Re-running the provisioning is idempotent and does not duplicate accounts:
 
 ```sh
-npm run demo:seed
+npm run demo:provision
 ```
 
 Rotate every demo password, then rebuild the Console so the new hints are
@@ -132,7 +132,7 @@ destructive and deletes every database and object; keep `.env`:
 ```sh
 docker compose --profile console down -v
 npm run local:up
-npm run demo:seed
+npm run demo:provision
 npm run demo:console
 ```
 
@@ -158,8 +158,8 @@ npm run demo:console
 
 | Symptom | Check |
 | --- | --- |
-| Login page has no prefilled account | Rebuild the Console after `demo:seed`; request `/login-hints.json` with `Accept: application/json`. |
+| Login page has no prefilled account | Rebuild the Console after `demo:provision`; request `/login-hints.json` with `Accept: application/json`. |
 | `401`/`login_failed` on password login | Reverse proxy must route `/identity/` to the Gateway; `PUBLIC_URL` must match the public origin. |
 | `missing` in the Users page | Run `npm run demo:provision`; it upserts the four principals for the current issuer. |
-| Empty data pages | Run `npm run seed:health` with the stack running; the script is idempotent. |
-| Wrong issuer after changing `PUBLIC_URL` | Recreate the volumes, then run `demo:seed` again; existing principal rows are bound to the old issuer. |
+| Empty data pages | Layer 1 holds no domain data. Register a Layer-2 scenario, for health run `npm run demo:setup` in `junctura-health` with the stack running. |
+| Wrong issuer after changing `PUBLIC_URL` | Recreate the volumes, then run `demo:provision` again; existing principal rows are bound to the old issuer. |

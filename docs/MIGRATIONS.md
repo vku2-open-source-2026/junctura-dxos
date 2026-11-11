@@ -143,8 +143,8 @@ Migration 023 adds nullable `display_name`, `organization`, `job_title` and
 checks to `app_private.principals`, and replaces the read-only
 `core.directory_principals(jsonb)` function so it also returns `displayName`,
 `organization`, `jobTitle` and `kind`. No existing row is rewritten; absent
-profiles stay `NULL`. The local operator seed (`npm run seed:health`) fills the
-profiles directly with `docker compose exec ... psql`; it is not part of the
+profiles stay `NULL`. The local demo provisioning (`npm run demo:provision`) fills the
+administrator profiles directly with `docker compose exec ... psql`; it is not part of the
 migration history and never stores credentials.
 
 ## Active directory relations (024)
