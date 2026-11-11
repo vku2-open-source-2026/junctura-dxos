@@ -23,6 +23,7 @@
     "audit:demo": "node --env-file=.env scripts/audit-demo.mjs",
     "trust:demo": "node --env-file=.env scripts/trust-demo.mjs",
     "demo:provision": "node --env-file-if-exists=.env scripts/provision-demo-admins.mjs",
+    "login-theme:apply": "node --env-file-if-exists=.env scripts/apply-login-theme.mjs",
     "demo:console": "docker compose --profile console build console && docker compose --profile console up -d --no-build console",
     "provider:pki": "node scripts/provider-pki.mjs",
     "backup": "node scripts/backup.mjs backup",

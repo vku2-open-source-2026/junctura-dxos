@@ -45,6 +45,7 @@ services:
       SSO_USER_PASSWORD: ${SSO_USER_PASSWORD:?Run npm run setup first}
     volumes:
       - ./infra/keycloak/realm.json:/opt/keycloak/data/import/realm.json:ro
+      - ./infra/keycloak/themes/junctura:/opt/keycloak/themes/junctura:ro
     depends_on:
       database:
         condition: service_healthy
