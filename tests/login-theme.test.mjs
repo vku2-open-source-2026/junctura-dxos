@@ -18,12 +18,13 @@ test("the realm uses the Junctura login theme and Vietnamese by default", () => 
 test("the theme extends Keycloak's own templates and ships its stylesheet and messages", () => {
   const properties = readFileSync(`${THEME}/theme.properties`, "utf8");
   assert.match(properties, /^parent=keycloak\.v2$/m);
-  assert.match(properties, /^styles=.*css\/junctura\.css/m);
-  for (const file of ["resources/css/junctura.css", "messages/messages_vi.properties", "messages/messages_en.properties"]) assert.ok(existsSync(`${THEME}/${file}`), file);
+  assert.match(properties, /^styles=.*css\/junctura-login\.css/m);
+  assert.match(properties, /^scripts=js\/language-switch\.js$/m);
+  for (const file of ["resources/css/junctura-login.css", "resources/js/language-switch.js", "messages/messages_vi.properties", "messages/messages_en.properties"]) assert.ok(existsSync(`${THEME}/${file}`), file);
 });
 
 test("the stylesheet defines light and dark colours and the Junctura mark", () => {
-  const css = readFileSync(`${THEME}/resources/css/junctura.css`, "utf8");
+  const css = readFileSync(`${THEME}/resources/css/junctura-login.css`, "utf8");
   assert.match(css, /\.pf-v5-theme-dark\s*{/);
   assert.match(css, /--jh-brand: #176B80/);
   assert.match(css, /#kc-header-wrapper::before/);

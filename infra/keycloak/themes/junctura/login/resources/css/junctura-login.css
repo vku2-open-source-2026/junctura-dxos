@@ -201,9 +201,31 @@
 .pf-v5-c-alert.pf-m-warning { --pf-v5-c-alert--BackgroundColor: var(--jh-warn-soft); --pf-v5-c-alert__icon--Color: var(--jh-warn); }
 .pf-v5-c-alert__title { color: var(--jh-ink); }
 
-/* Language selector in the card header: pill with the flag of the current language and VI / EN */
+/* Language button in the card header: flag and code of the current language; one click switches. */
 .pf-v5-c-login__main-header-utilities { position: absolute; top: 0.75rem; right: 0.75rem; width: auto; }
-.pf-v5-c-login__main-header-utilities .pf-v5-c-form-control { border-radius: 9999px; }
+.pf-v5-c-login__main-header-utilities .pf-v5-c-form-control { border: 0; background: transparent; box-shadow: none; padding: 0; }
+.pf-v5-c-login__main-header-utilities .pf-v5-c-form-control::before, .pf-v5-c-login__main-header-utilities .pf-v5-c-form-control::after { display: none; }
+.jh-lang {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.35rem 0.8rem 0.35rem 2.5rem;
+  border: 1px solid var(--jh-line);
+  border-radius: 9999px;
+  background: no-repeat 0.8rem center / 1.25rem 0.85rem var(--jh-surface);
+  color: var(--jh-ink);
+  font: inherit;
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color 0.15s, background-color 0.15s;
+}
+.jh-lang:hover { border-color: var(--jh-brand); background-color: var(--jh-surface-2); }
+.jh-lang:focus-visible { outline: 2px solid var(--jh-brand); outline-offset: 2px; }
+.jh-lang[data-lang="vi"] { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 30 20'%3E%3Crect width='30' height='20' fill='%23DA251D'/%3E%3Cpath fill='%23FFFF00' d='M15 4l2.35 7.23h-4.7zm0 0l-2.35 7.23 6.15-4.47h-7.6l6.15 4.47z'/%3E%3C/svg%3E"); }
+.jh-lang[data-lang="en"] { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 60 40'%3E%3Crect width='60' height='40' fill='%23012169'/%3E%3Cpath d='M0 0l60 40M60 0L0 40' stroke='%23fff' stroke-width='8'/%3E%3Cpath d='M0 0l60 40M60 0L0 40' stroke='%23C8102E' stroke-width='3'/%3E%3Cpath d='M30 0v40M0 20h60' stroke='%23fff' stroke-width='12'/%3E%3Cpath d='M30 0v40M0 20h60' stroke='%23C8102E' stroke-width='7'/%3E%3C/svg%3E"); }
+.jh-lang ~ span { display: none; }
+/* Without the script the standard drop-down keeps working: same pill, with the flag of the current language. */
 .pf-v5-c-login__main-header-utilities select {
   color: var(--jh-ink);
   background: no-repeat 0.65rem center / 1.25rem 0.85rem transparent;
