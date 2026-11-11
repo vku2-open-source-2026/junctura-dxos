@@ -40,6 +40,11 @@ process can return readiness `503` during an outage. Nginx resolves recreated
 Core/Identity containers using Docker DNS without a manual proxy reload.
 Readiness is a bounded dependency check, not a guarantee of transaction success.
 
+Long-running services use `restart: unless-stopped`, so they return after a host
+reboot or Docker restart; the init and migration jobs (`data-migrate`,
+`secrets-init`, `workflow-init`) do not restart. OpenBao may come back sealed, and
+`npm run local:up` re-runs the init jobs.
+
 The integration suite intentionally stops dependencies and restarts PostgreSQL,
 recreates data/object/workflow/Core containers, and stops/starts Identity. It
 checks denied access during outages and recovery with persistent state. Use a

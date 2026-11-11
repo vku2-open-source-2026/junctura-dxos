@@ -222,7 +222,8 @@ processes, plus two active and one revoked subject consent through the HTTP API.
 The health records and referral files are split across the scenario applications
 through each application's own token, and a generated EICAR test upload proves
 that ClamAV quarantine rejects unscanned bytes without publishing them. The administrator consent seed
-reads `console/public/login-hints.json` when present or accepts
+reads `.junctura/demo-accounts.json` (or `console/public/login-hints.json` when
+the administrators were provisioned with `--public-admins`) or accepts
 `SEED_HEALTH_ADMIN_TOKEN`/`SEED_HEALTH_ADMIN_PASSWORD`; it never prints
 credentials. Every step is idempotent, so reruns reuse existing rows. Capability
 execution and emergency access stay opt-in (`C4A_ENABLED`/`C4B_ENABLED`) and

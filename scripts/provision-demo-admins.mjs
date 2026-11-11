@@ -1,9 +1,11 @@
 // SPDX-FileCopyrightText: 2026 Junctura Contributors
 // SPDX-License-Identifier: Apache-2.0
-// Recreate the local competition demo administrators on a running stack. The
-// accounts, their console principals and the browser login hints are generated
-// here instead of being committed so a fresh server deploy can reproduce the
-// local demo without carrying credentials or database volumes in Git.
+// Recreate the competition demo accounts on a running stack: the administrators
+// and one read-only viewer. The accounts, their console principals and the
+// browser login hints are generated here instead of being committed so a fresh
+// server deploy can reproduce the demo without carrying credentials or database
+// volumes in Git. Only the viewer is published in the browser hints; the
+// administrator passwords stay in a private, Git-ignored file on the host.
 import { chmodSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { randomBytes } from "node:crypto";
@@ -22,6 +24,15 @@ export const ADMIN_PERMISSIONS = [
   "audit.read", "capabilities.write", "capabilities.publish", "capabilities.approve",
   "compositions.write", "compositions.publish", "compositions.approve",
 ];
+
+// The account whose password is published to every visitor. It holds the
+// reader role and audit.read only, so it can open every page but Core rejects
+// each approval, revocation, registration or other write it attempts.
+export const DEMO_VIEWER = { username: "viewer", firstName: "Demo", lastName: "Viewer", label: "Khách tham quan", displayName: "Khách tham quan", jobTitle: "Chỉ xem", viewer: true };
+
+export const VIEWER_PERMISSIONS = ["audit.read"];
+
+export const DEMO_ACCOUNTS = [...DEMO_ADMINS, DEMO_VIEWER];
 
 const MANAGEMENT_CLIENT = "junctura-console";
 
@@ -56,11 +67,28 @@ export function toLoginHints(accounts) {
   };
 }
 
+// Browser hints are world-readable: publish the viewer only, unless the
+// operator explicitly asks for the administrators too (local development).
+export function publicAccounts(accounts, publicAdmins = false) {
+  return publicAdmins ? accounts : accounts.filter(account => account.viewer === true);
+}
+
+// Administrator passwords are trusted only from the private file. A password
+// that was ever served in the public hints is treated as disclosed, so an
+// administrator missing from the private file gets a fresh one. The viewer may
+// be reused from either file because it is public by design.
+export function knownPasswords(privatePasswords, publicPasswords, publicAdmins = false) {
+  const known = new Map(publicAdmins ? publicPasswords : []);
+  if (publicPasswords.has(DEMO_VIEWER.username)) known.set(DEMO_VIEWER.username, publicPasswords.get(DEMO_VIEWER.username));
+  for (const [username, password] of privatePasswords) known.set(username, password);
+  return known;
+}
+
 export function buildPrincipalStatement({ tenant, issuer, subject, profile }) {
   return `INSERT INTO app_private.principals
     (tenant_id,issuer,subject,management_client,permissions,display_name,organization,job_title,kind,enabled)
     VALUES (${q(tenant)},${q(issuer)},${q(subject)},${q(MANAGEMENT_CLIENT)},
-      ARRAY[${ADMIN_PERMISSIONS.map(q).join(",")}]::text[],
+      ARRAY[${(profile.viewer === true ? VIEWER_PERMISSIONS : ADMIN_PERMISSIONS).map(q).join(",")}]::text[],
       ${q(profile.displayName)},${q("Junctura")},${q(profile.jobTitle)},'admin',true)
     ON CONFLICT (tenant_id,issuer,subject,management_client) DO UPDATE SET
       permissions=EXCLUDED.permissions, display_name=EXCLUDED.display_name,
@@ -78,6 +106,8 @@ async function main() {
     base: { type: "string", default: process.env.PUBLIC_URL ?? "http://127.0.0.1:8080" },
     "admin-base": { type: "string", default: process.env.ADMIN_BASE ?? `http://127.0.0.1:${process.env.PORT ?? "8080"}` },
     hints: { type: "string", default: "console/public/login-hints.json" },
+    credentials: { type: "string", default: ".junctura/demo-accounts.json" },
+    "public-admins": { type: "boolean", default: false },
     "reset-passwords": { type: "boolean", default: false },
     help: { type: "boolean", default: false },
   } });
@@ -87,7 +117,9 @@ async function main() {
   --tenant <name>          Tenant for the demo administrators (default tenant-a)
   --base <url>             Public URL used for the token issuer (default PUBLIC_URL)
   --admin-base <url>       Internal Gateway URL for Keycloak admin calls (default loopback)
-  --hints <path>           Browser login hints output (default console/public/login-hints.json)
+  --hints <path>           Public browser login hints (default console/public/login-hints.json)
+  --credentials <path>     Private file with every demo password (default .junctura/demo-accounts.json)
+  --public-admins          Also publish the administrators in the browser hints (local development only)
   --reset-passwords        Rotate passwords even when hints already exist
 `);
     return;
@@ -96,12 +128,13 @@ async function main() {
   if (!values.base.trim()) throw new Error("--base must not be empty");
   if (!values["admin-base"].trim()) throw new Error("--admin-base must not be empty");
 
-  let existing = new Map();
-  try { existing = parseHints(readFileSync(values.hints, "utf8")); } catch { /* create below */ }
-  const accounts = planPasswords(DEMO_ADMINS, existing, undefined, values["reset-passwords"]);
+  const read = (path) => { try { return parseHints(readFileSync(path, "utf8")); } catch { return new Map(); } };
+  const existing = knownPasswords(read(values.credentials), read(values.hints), values["public-admins"]);
+  const accounts = planPasswords(DEMO_ACCOUNTS, existing, undefined, values["reset-passwords"]);
   const issuer = `${publicBase(values.base)}/identity/realms/junctura`;
   const stack = await connectDemoStack({ tenant: values.tenant, base: publicBase(values["admin-base"]) });
   const { admin, must, idFrom, group, roles, sql } = stack;
+  const writerRoles = roles.filter(role => role.name !== "core-reader");
   const created = [];
   const reset = [];
 
@@ -128,17 +161,27 @@ async function main() {
       reset.push(account.username);
     }
     await must(await admin(`users/${id}/groups/${group.id}`, undefined, "PUT"), [204], `Add ${account.username} to ${values.tenant}`);
-    await must(await admin(`users/${id}/role-mappings/realm`, roles), [204], `Assign roles to ${account.username}`);
+    if (account.viewer === true) {
+      await must(await admin(`users/${id}/role-mappings/realm`, roles.filter(role => role.name === "core-reader")), [204], `Assign reader role to ${account.username}`);
+      await must(await admin(`users/${id}/role-mappings/realm`, writerRoles, "DELETE"), [204], `Remove writer roles from ${account.username}`);
+    } else {
+      await must(await admin(`users/${id}/role-mappings/realm`, roles), [204], `Assign roles to ${account.username}`);
+    }
     await sql(buildPrincipalStatement({ tenant: values.tenant, issuer, subject: id, profile: account }));
   }
 
+  mkdirSync(dirname(values.credentials), { recursive: true });
+  writeFileSync(values.credentials, `${JSON.stringify(toLoginHints(accounts), null, 2)}\n`, { mode: 0o600 });
+  chmodSync(values.credentials, 0o600);
+  const published = publicAccounts(accounts, values["public-admins"]);
   mkdirSync(dirname(values.hints), { recursive: true });
-  writeFileSync(values.hints, `${JSON.stringify(toLoginHints(accounts), null, 2)}\n`, { mode: 0o644 });
+  writeFileSync(values.hints, `${JSON.stringify(toLoginHints(published), null, 2)}\n`, { mode: 0o644 });
   chmodSync(values.hints, 0o644);
 
   console.log(`• Tài khoản demo: ${accounts.map(account => account.username).join(", ")}`);
   console.log(`• Tạo mới: ${created.length ? created.join(", ") : "không"}; đặt lại mật khẩu: ${reset.length ? reset.join(", ") : "không"}`);
-  console.log(`• Login hints: ${values.hints} (đọc được bởi nginx, KHÔNG commit)`);
+  console.log(`• Login hints công khai: ${values.hints} — ${published.map(account => account.username).join(", ")} (đọc được bởi nginx, KHÔNG commit)`);
+  console.log(`• Mật khẩu mọi tài khoản demo: ${values.credentials} (chỉ chủ máy đọc được, KHÔNG commit)`);
   console.log("• Rebuild Console để đưa hints vào image: docker compose --profile console build console && docker compose --profile console up -d console");
 }
 

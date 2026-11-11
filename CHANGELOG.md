@@ -8,6 +8,15 @@ All notable changes to Junctura are recorded here. Versions follow
 
 ## Unreleased
 
+- **Stack survives a host reboot:** long-running Compose services now use
+  `restart: unless-stopped`, while init and migration jobs stay one-shot. After a
+  reboot, OpenBao may return sealed; `npm run local:up` re-runs the init jobs.
+- **Public demo login is read-only:** `npm run demo:provision` now also creates a
+  `viewer` account (reader role, `audit.read` only) and publishes only that account
+  in `/login-hints.json`. The `admin1`–`admin3` passwords move to the private
+  `.junctura/demo-accounts.json` (mode `0600`) and are replaced on the first run,
+  because the previous ones were served publicly. `--public-admins` restores the
+  old behavior for loopback-only development.
 - **Health scenario follows the shared contracts:** `npm run seed:health` now registers
   exactly the six capabilities of the Junctura Health contracts with their agreed
   providers and consumers (seven grants), and its sample consents use the purposes

@@ -283,6 +283,8 @@ The proxy allowlist is limited to the routes the Console currently calls:
 | GET | `/v1/storage/files` | Kho tệp one directory level |
 | GET | `/v1/workflows/summary` | Read-only workflow dashboard |
 | GET | `/v1/workflows/executions` | Every tenant workflow case with status filter |
+| GET | `/v1/capabilities` | Năng lực capability catalogue |
+| GET | `/v1/me/consents`, `/v1/emergency-accesses` | Consent and emergency-access tabs on the audit screen |
 
 All other `/api` paths return 404. Unsupported methods return 405. Paths with
 encoded slash/backslash/dot segments or duplicate slashes return 400. The proxy
