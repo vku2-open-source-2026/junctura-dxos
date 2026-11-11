@@ -20,23 +20,23 @@ const summary = {
   applications: [
     {
       id: appOne,
-      name: "Trạm Y tế xã",
+      name: "Đơn vị tiếp nhận",
       state: "active",
       collections: [
-        { name: "benh-nhan", records: 12, updatedAt: "2026-01-02T03:04:05.000Z" },
+        { name: "nguoi-nop", records: 12, updatedAt: "2026-01-02T03:04:05.000Z" },
       ],
     },
     {
       id: appTwo,
-      name: "Bệnh viện",
+      name: "Đơn vị xét duyệt",
       state: "active",
       collections: [],
     },
   ],
   totals: {
     collections: [
-      { name: "benh-nhan", records: 12, updatedAt: "2026-01-02T03:04:05.000Z" },
-      { name: "chuyen-tuyen", records: 3, updatedAt: "2026-01-03T03:04:05.000Z" },
+      { name: "nguoi-nop", records: 12, updatedAt: "2026-01-02T03:04:05.000Z" },
+      { name: "yeu-cau", records: 3, updatedAt: "2026-01-03T03:04:05.000Z" },
     ],
   },
 };

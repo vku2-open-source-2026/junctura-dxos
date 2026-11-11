@@ -4737,7 +4737,7 @@
       "get": {
         "operationId": "getWorkflowSummary",
         "summary": "Read the read-only workflow dashboard for the caller tenant",
-        "description": "Implemented. Returns every business workflow definition with its owning product, ordered steps with responsible parties, and counts of running, completed and cancelled executions, plus totals. It is a read-only aggregate: it never starts, completes or cancels anything and never reads workflow variables or patient data. Technical definitions used only for Core verification are excluded. Requires a verified management principal with audit.read in its own tenant. The query string must be empty.",
+        "description": "Implemented. Returns every business workflow definition with its owning product, ordered steps with responsible parties, and counts of running, completed and cancelled executions, plus totals. It is a read-only aggregate: it never starts, completes or cancels anything and never reads workflow variables or personal data. Technical definitions used only for Core verification are excluded. Requires a verified management principal with audit.read in its own tenant. The query string must be empty.",
         "tags": [
           "workflow-runs"
         ],
@@ -5986,7 +5986,7 @@
           "purpose": {
             "type": "string",
             "pattern": "^[a-z][a-z0-9_]{1,62}$",
-            "description": "Why the consumer calls, e.g. treatment or insurance_claim. Sealed into the audit chain."
+            "description": "Why the consumer calls, e.g. review or verification. Sealed into the audit chain."
           },
           "dataSubject": {
             "type": "string",
@@ -6932,7 +6932,7 @@
           "purpose": {
             "type": "string",
             "pattern": "^[a-z][a-z0-9_]{1,62}$",
-            "description": "Why the consumer calls, e.g. treatment or insurance_claim. Sealed into the audit chain."
+            "description": "Why the consumer calls, e.g. review or verification. Sealed into the audit chain."
           },
           "dataSubject": {
             "type": "string",
@@ -6987,7 +6987,7 @@
           "purpose": {
             "type": "string",
             "pattern": "^[a-z][a-z0-9_]{1,62}$",
-            "description": "Why the consumer calls, e.g. treatment or insurance_claim. Sealed into the audit chain."
+            "description": "Why the consumer calls, e.g. review or verification. Sealed into the audit chain."
           },
           "state": {
             "type": "string",
@@ -7132,7 +7132,7 @@
             "items": {
               "type": "string",
               "pattern": "^[a-z][a-z0-9_]{1,62}$",
-              "description": "Why the consumer calls, e.g. treatment or insurance_claim. Sealed into the audit chain."
+              "description": "Why the consumer calls, e.g. review or verification. Sealed into the audit chain."
             }
           },
           "expiresAt": {
@@ -7199,7 +7199,7 @@
             "items": {
               "type": "string",
               "pattern": "^[a-z][a-z0-9_]{1,62}$",
-              "description": "Why the consumer calls, e.g. treatment or insurance_claim. Sealed into the audit chain."
+              "description": "Why the consumer calls, e.g. review or verification. Sealed into the audit chain."
             }
           },
           "createdAt": {
@@ -7279,7 +7279,7 @@
           "purpose": {
             "type": "string",
             "pattern": "^[a-z][a-z0-9_]{1,62}$",
-            "description": "Why the consumer calls, e.g. treatment or insurance_claim. Sealed into the audit chain."
+            "description": "Why the consumer calls, e.g. review or verification. Sealed into the audit chain."
           },
           "justification": {
             "type": "string",

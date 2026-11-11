@@ -10,9 +10,9 @@ import { workflowSummary } from "./summary.mjs";
 const engineId = /^[A-Za-z0-9:_-]{1,128}$/;
 const executionStatuses = new Set(["running", "completed", "cancelled"]);
 const businessLabels = {
-  "chuyen-tuyen": "Chuyển tuyến",
-  "xac-minh-don-thuoc": "Xác minh đơn thuốc",
-  "xac-minh-chi-phi": "Xác minh chi phí",
+  "phe-duyet-yeu-cau": "Phê duyệt yêu cầu",
+  "xac-minh-ho-so": "Xác minh hồ sơ",
+  "doi-soat-chung-tu": "Đối soát chứng từ",
 };
 
 export function canonicalInput(value, depth = 0) {

@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- SPDX-FileCopyrightText: 2026 Junctura Contributors -->
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:flowable="http://flowable.org/bpmn"
+             targetNamespace="https://junctura.invalid/core/workflows">
+  <process id="junctura_xac_minh_ho_so" name="Xác minh hồ sơ" isExecutable="true">
+    <startEvent id="start" />
+    <sequenceFlow id="to_gui_ho_so" sourceRef="start" targetRef="gui_ho_so" />
+    <userTask id="gui_ho_so" name="Gửi hồ sơ" flowable:candidateGroups="don-vi-de-nghi" />
+    <sequenceFlow id="to_xac_nhan" sourceRef="gui_ho_so" targetRef="xac_nhan" />
+    <userTask id="xac_nhan" name="Xác nhận" flowable:candidateGroups="don-vi-xet-duyet" />
+    <sequenceFlow id="to_hoan_tat" sourceRef="xac_nhan" targetRef="hoan_tat" />
+    <userTask id="hoan_tat" name="Hoàn tất" flowable:candidateGroups="don-vi-xet-duyet" />
+    <sequenceFlow id="to_end" sourceRef="hoan_tat" targetRef="end" />
+    <endEvent id="end" />
+  </process>
+</definitions>

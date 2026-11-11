@@ -92,20 +92,20 @@ function directoryFixture() {
       children: [
         {
           id: "app-1",
-          name: "Trạm y tế xã",
+          name: "Đơn vị tiếp nhận",
           kind: "application",
           children: [],
         },
         {
           id: "app-2",
-          name: "Nhà thuốc An Khang",
+          name: "Đơn vị đề nghị An Khang",
           kind: "application",
           children: [],
         },
       ],
     },
     relations: [
-      { from: "app-1", to: "app-2", label: "chuyển tuyến" },
+      { from: "app-1", to: "app-2", label: "hồ sơ" },
     ],
     truncated: false,
   };
@@ -121,7 +121,7 @@ function principalsFixture() {
         permissions: ["applications.write", "audit.read"],
         enabled: true,
         displayName: "Nguyễn Văn A",
-        organization: "Bệnh viện Đà Nẵng",
+        organization: "Đơn vị xét duyệt Đà Nẵng",
         jobTitle: "Quản trị nền tảng",
         kind: "admin",
       },
@@ -132,7 +132,7 @@ function principalsFixture() {
         permissions: ["trust.approve"],
         enabled: false,
         displayName: null,
-        organization: "Nhà thuốc An Khang",
+        organization: "Đơn vị đề nghị An Khang",
         jobTitle: null,
         kind: "application",
       },
@@ -272,7 +272,7 @@ describe("Task 34 — users and organisations from the directory API", () => {
     expect(screen.getByText(viStrings.users.self)).toBeInTheDocument();
     expect(screen.getByText(viStrings.users.unnamed)).toBeInTheDocument();
     expect(
-      screen.getAllByText("Bệnh viện Đà Nẵng").length
+      screen.getAllByText("Đơn vị xét duyệt Đà Nẵng").length
     ).toBeGreaterThan(0);
     expect(
       screen.getAllByText(viStrings.users.kindAdmin).length
@@ -341,10 +341,10 @@ describe("Task 34 — users and organisations from the directory API", () => {
     ).toBeInTheDocument();
     expect(screen.queryByText("tenant-test")).toBeNull();
     fireEvent.click(
-      await screen.findByRole("button", { name: "Trạm y tế xã" })
+      await screen.findByRole("button", { name: "Đơn vị tiếp nhận" })
     );
     expect(
-      (await screen.findAllByText("chuyển tuyến")).length
+      (await screen.findAllByText("hồ sơ")).length
     ).toBeGreaterThan(0);
     expect(screen.queryByText("app-1")).toBeNull();
   });

@@ -8,15 +8,15 @@ import { jsonDigest, reserveExecution, validateExecutionContext, validateExecuti
 import { HttpError, json } from "../src/platform/http/http.mjs";
 
 const capability = { capabilityId: "urn:junctura:capability:22222222-2222-4222-8222-222222222222:vaccination", version: "1.0.0", manifestDigest: `sha256:${"b".repeat(64)}` };
-const body = context => ({ target: { kind: "capability", capability }, input: { patient: "p1" }, ...(context ? { context } : {}) });
+const body = context => ({ target: { kind: "capability", capability }, input: { subject: "p1" }, ...(context ? { context } : {}) });
 
 test("execution context is optional, closed and strictly shaped", () => {
   assert.ok(validateExecutionCreate(body()));
-  assert.ok(validateExecutionCreate(body({ purpose: "treatment" })));
-  assert.ok(validateExecutionCreate(body({ purpose: "insurance_claim", dataSubject: "8f14e45f-ceea-4672-9a2b-1f3c5d7e9a01" })));
-  for (const context of [{}, { purpose: "Treatment" }, { purpose: "kham-benh" }, { purpose: "t" }, { purpose: "treatment", extra: 1 },
-    { purpose: "treatment", dataSubject: "" }, { purpose: "treatment", dataSubject: "a\nb" }, { purpose: "treatment", dataSubject: 7 },
-    { purpose: "treatment", dataSubject: "x".repeat(256) }, [], "treatment", null]) {
+  assert.ok(validateExecutionCreate(body({ purpose: "review" })));
+  assert.ok(validateExecutionCreate(body({ purpose: "verification", dataSubject: "8f14e45f-ceea-4672-9a2b-1f3c5d7e9a01" })));
+  for (const context of [{}, { purpose: "Review" }, { purpose: "kiem-tra" }, { purpose: "t" }, { purpose: "review", extra: 1 },
+    { purpose: "review", dataSubject: "" }, { purpose: "review", dataSubject: "a\nb" }, { purpose: "review", dataSubject: 7 },
+    { purpose: "review", dataSubject: "x".repeat(256) }, [], "review", null]) {
     assert.throws(() => validateExecutionContext(context), error => error instanceof HttpError && error.status === 422, JSON.stringify(context));
   }
   assert.throws(() => validateExecutionCreate({ ...body(), extra: 1 }), error => error.status === 400);
@@ -35,10 +35,10 @@ test("a context is bound into the idempotent request digest and sent with the re
   const resolved = { manifest: { timeoutMs: 5000 }, authorityExpiresAt: new Date(Date.now() + 60000).toISOString() };
   const leases = { has: () => true };
   await reserveExecution(config, identity, request("11111111-1111-4111-8111-111111111111"), body(), leases, resolved);
-  const context = { purpose: "treatment", dataSubject: "patient-1" };
+  const context = { purpose: "review", dataSubject: "subject-1" };
   await reserveExecution(config, identity, request("22222222-2222-4222-8222-222222222222"), body(context), leases, resolved);
   const [plain, withContext] = sent.map(item => item.payload);
-  const inputDigest = jsonDigest({ patient: "p1" });
+  const inputDigest = jsonDigest({ subject: "p1" });
   assert.equal(plain.requestDigest, jsonDigest({ target: body().target, inputDigest }), "requests without context keep their digest");
   assert.equal(plain.context, undefined);
   assert.deepEqual(withContext.context, context);
@@ -46,7 +46,7 @@ test("a context is bound into the idempotent request digest and sent with the re
   assert.notEqual(withContext.requestDigest, plain.requestDigest);
 });
 
-const identity = { tenantId: "tenant-a", subject: "patient-1", issuer: "https://identity.example.invalid", clientId: "portal", roles: ["core-reader"] };
+const identity = { tenantId: "tenant-a", subject: "subject-1", issuer: "https://identity.example.invalid", clientId: "portal", roles: ["core-reader"] };
 const log = { entries: [], truncated: false, generatedAt: "2026-11-04T00:00:00.000Z" };
 let reply = { status: 200, value: log };
 let seen = [];
@@ -78,7 +78,7 @@ test("the subject access log asserts only the subject role for the caller itself
   assert.deepEqual(JSON.parse(seen[0].body), { payload: {} });
   const claims = JSON.parse(Buffer.from(seen[0].authorization.split(".")[1], "base64url"));
   assert.equal(claims.role, "junctura_subject_api");
-  assert.deepEqual([claims.tenant_id, claims.sub], ["tenant-a", "patient-1"]);
+  assert.deepEqual([claims.tenant_id, claims.sub], ["tenant-a", "subject-1"]);
   assert.equal((await fetch(`${base}/v1/me/data-access?subject=someone-else`)).status, 400, "no caller-chosen subject");
   assert.equal((await fetch(`${base}/v1/me/data-access`, { method: "POST" })).status, 405);
   reply = { status: 403, error: "verified_subject_required" };

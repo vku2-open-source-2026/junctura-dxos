@@ -364,7 +364,7 @@ const docsSectionsVi: Record<DocsSectionId, DocSection> = {
     "blocks": [
       {
         "kind": "paragraph",
-        "text": "Sinh viên hoặc bệnh nhân có thể cho phép một ứng dụng dùng dữ liệu của mình cho một mục đích, đến một hạn nhất định, và rút lại bất cứ lúc nào."
+        "text": "Sinh viên hoặc người dùng có thể cho phép một ứng dụng dùng dữ liệu của mình cho một mục đích, đến một hạn nhất định, và rút lại bất cứ lúc nào."
       },
       {
         "kind": "list",
@@ -1852,9 +1852,10 @@ export const vi = {
     "permissionDeniedTitle": "Cần quyền xem tổng quan dữ liệu",
     "permissionDeniedDesc": "Tài khoản cần quyền audit.read để xem số liệu tổng hợp của các ứng dụng.",
     "collectionNames": {
-      "benh-nhan": "Bệnh nhân",
-      "chuyen-tuyen": "Chuyển tuyến",
-      "don-thuoc": "Đơn thuốc"
+      "nguoi-nop": "Người nộp",
+      "ho-so": "Hồ sơ",
+      "yeu-cau": "Yêu cầu",
+      "chung-tu": "Chứng từ"
     }
   },
   "files": {
@@ -2086,39 +2087,39 @@ export const vi = {
       "junctura_checkpoint": "Kiểm tra kỹ thuật",
       "application_onboarding": "Duyệt đăng ký ứng dụng",
       "scholarship_review": "Duyệt học bổng",
-      "junctura_chuyen_tuyen": "Chuyển tuyến bệnh nhân",
-      "junctura_xac_minh_don_thuoc": "Xác minh đơn thuốc",
-      "junctura_xac_minh_chi_phi": "Xác minh chi phí bảo hiểm"
+      "junctura_phe_duyet_yeu_cau": "Phê duyệt yêu cầu",
+      "junctura_xac_minh_ho_so": "Xác minh hồ sơ",
+      "junctura_doi_soat_chung_tu": "Đối soát chứng từ"
     },
     "unknownDefinition": "Quy trình nghiệp vụ",
     "diagrams": {
       "complete": "Hoàn tất",
       "roles": {
         "owner": "Người phụ trách",
-        "healthStation": "Trạm y tế",
-        "hospitalDoctor": "Bác sĩ bệnh viện",
-        "hospital": "Bệnh viện",
-        "pharmacy": "Nhà thuốc",
-        "insurance": "Bảo hiểm"
+        "intakeUnit": "Đơn vị tiếp nhận",
+        "reviewer": "Người xét duyệt",
+        "reviewUnit": "Đơn vị xét duyệt",
+        "requestUnit": "Đơn vị đề nghị",
+        "reconcileUnit": "Đơn vị đối soát"
       },
       "groups": {
-        "tram-y-te": "Trạm y tế",
-        "benh-vien": "Bệnh viện",
-        "nha-thuoc": "Nhà thuốc",
-        "bao-hiem": "Bảo hiểm"
+        "don-vi-tiep-nhan": "Đơn vị tiếp nhận",
+        "don-vi-xet-duyet": "Đơn vị xét duyệt",
+        "don-vi-de-nghi": "Đơn vị đề nghị",
+        "don-vi-doi-soat": "Đơn vị đối soát"
       },
       "labels": {
         "checkpointTask": "Kiểm tra kỹ thuật",
         "scholarshipIntake": "Gửi hồ sơ",
         "scholarshipDecision": "Duyệt",
         "scholarshipReceive": "Tiếp nhận",
-        "chuyenTuyenIntake": "Tiếp nhận ở Trạm y tế",
-        "chuyenTuyenReview": "Bác sĩ bệnh viện duyệt",
-        "chuyenTuyenComplete": "Hoàn tất",
-        "pharmacySubmit": "Nhà thuốc gửi",
-        "insuranceSubmit": "Bảo hiểm gửi",
-        "hospitalConfirm": "Bệnh viện xác nhận",
-        "hospitalComplete": "Hoàn tất"
+        "approvalIntake": "Tiếp nhận yêu cầu",
+        "approvalReview": "Xét duyệt",
+        "approvalComplete": "Hoàn tất",
+        "verifySubmit": "Gửi hồ sơ",
+        "verifyConfirm": "Xác nhận",
+        "verifyComplete": "Hoàn tất",
+        "reconcileSubmit": "Gửi chứng từ"
       }
     }
   },

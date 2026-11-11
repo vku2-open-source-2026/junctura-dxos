@@ -70,11 +70,11 @@ test("SDK sends exact workflow and execution contracts with caller-controlled id
   await client.startWorkflow("junctura_checkpoint:1:uuid", { synthetic: true }, "workflow-key");
   const target = { kind: "composition", compositionId: "synthetic", version: "1.0.0", compositionDigest: "sha256:synthetic" };
   await client.execute(target, { value: 1 }, "execution-key");
-  await client.execute(target, { value: 2 }, "context-key", { purpose: "treatment", dataSubject: "patient-1" });
+  await client.execute(target, { value: 2 }, "context-key", { purpose: "review", dataSubject: "subject-1" });
   assert.deepEqual(bodies, [
     { path: "/v1/workflows/executions", key: "workflow-key", body: { definitionId: "junctura_checkpoint:1:uuid", input: { synthetic: true } } },
     { path: "/v1/capability-executions", key: "execution-key", body: { target, input: { value: 1 } } },
-    { path: "/v1/capability-executions", key: "context-key", body: { target, input: { value: 2 }, context: { purpose: "treatment", dataSubject: "patient-1" } } },
+    { path: "/v1/capability-executions", key: "context-key", body: { target, input: { value: 2 }, context: { purpose: "review", dataSubject: "subject-1" } } },
   ]);
 });
 
@@ -111,14 +111,14 @@ test("SDK redeems provider tickets once and never sends malformed tickets", asyn
   const client = createJuncturaClient({ ...options, fetcher: async (url, init) => {
     if (url.pathname.includes("/token")) return auth();
     sent.push({ path: url.pathname, body: JSON.parse(init.body) });
-    return json({ active: true, context: { tenantId: "tenant-a", executionId: invocationId, purpose: "treatment" } });
+    return json({ active: true, context: { tenantId: "tenant-a", executionId: invocationId, purpose: "review" } });
   } });
   for (const authorization of [undefined, "", `Basic ${ticket}`, "Bearer short", `Bearer ${ticket} extra`]) {
     assert.deepEqual(await client.redeemTicket({ authorization, invocationId, input: {} }), { active: false });
   }
   assert.equal(sent.length, 0);
-  const redeemed = await client.redeemTicket({ authorization: `Bearer ${ticket}`, invocationId, input: { patient: "p1" } });
-  assert.equal(redeemed.context.purpose, "treatment");
+  const redeemed = await client.redeemTicket({ authorization: `Bearer ${ticket}`, invocationId, input: { subject: "p1" } });
+  assert.equal(redeemed.context.purpose, "review");
   assert.deepEqual(sent, [{ path: "/v1/capability-authorizations/introspect",
-    body: { ticket, invocationId, inputDigest: inputDigest({ patient: "p1" }) } }]);
+    body: { ticket, invocationId, inputDigest: inputDigest({ subject: "p1" }) } }]);
 });

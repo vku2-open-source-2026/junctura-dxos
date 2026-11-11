@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Junctura Contributors
 // SPDX-License-Identifier: Apache-2.0
 // Local provider PKI for internal capability providers (development stacks only).
-//   npm run provider:pki -- tramyte benhvien      -> tramyte.provider.internal, ...
+//   npm run provider:pki -- unit-a unit-b      -> unit-a.provider.internal, ...
 // Creates (once) a private provider CA and one TLS server certificate per
 // provider under .junctura/pki/ (Git-ignored). Core trusts internal providers
 // only through this CA; private keys never leave that directory.
@@ -17,7 +17,7 @@ const CA_SUBJECT = { commonName: "Junctura Local Provider CA", organization: "Ju
 export function hostFor(name) {
   const host = name.includes(".") ? name : `${name}${SUFFIX}`;
   if (!DNS_NAME.test(host) || !host.endsWith(".internal")) {
-    throw new Error(`Invalid provider name ${name}: use lowercase letters, digits and '-', e.g. tramyte (-> tramyte${SUFFIX})`);
+    throw new Error(`Invalid provider name ${name}: use lowercase letters, digits and '-', e.g. unit-a (-> unit-a${SUFFIX})`);
   }
   return host;
 }

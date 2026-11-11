@@ -4,11 +4,11 @@ import assert from "node:assert/strict";
 import { readFileSync, readdirSync } from "node:fs";
 import { test } from "node:test";
 
-const WORKFLOW_DEFINITION_KEYS = ["junctura_chuyen_tuyen", "junctura_xac_minh_don_thuoc", "junctura_xac_minh_chi_phi"];
+const WORKFLOW_DEFINITION_KEYS = ["junctura_phe_duyet_yeu_cau", "junctura_xac_minh_ho_so", "junctura_doi_soat_chung_tu"];
 
 const directory = new URL("../src/modules/workflow/definitions/", import.meta.url);
 
-test("business workflow definitions are Vietnamese, named per step and assigned to a unit", () => {
+test("business workflow definitions are domain-neutral Vietnamese, named per step and assigned to a unit", () => {
   const files = readdirSync(directory).filter(name => name.endsWith(".bpmn20.xml"));
   assert.equal(files.length, 3);
   const keyed = new Map();
@@ -25,10 +25,10 @@ test("business workflow definitions are Vietnamese, named per step and assigned 
     assert.ok(tasks.every(([, step, group]) => step && group), `${file} assigns every step to a unit`);
   }
   assert.deepEqual([...keyed.keys()].sort(), [...WORKFLOW_DEFINITION_KEYS].sort());
-  const referral = keyed.get("junctura_chuyen_tuyen");
-  assert.equal(referral.name, "Chuyển tuyến bệnh nhân");
-  assert.match(referral.xml, /Tiếp nhận ở Trạm y tế/);
-  assert.match(referral.xml, /Bác sĩ bệnh viện duyệt/);
-  assert.match(keyed.get("junctura_xac_minh_don_thuoc").name, /Xác minh đơn thuốc/);
-  assert.match(keyed.get("junctura_xac_minh_chi_phi").xml, /Xác minh chi phí bảo hiểm|Bảo hiểm gửi/);
+  const approval = keyed.get("junctura_phe_duyet_yeu_cau");
+  assert.equal(approval.name, "Phê duyệt yêu cầu");
+  assert.match(approval.xml, /Tiếp nhận yêu cầu/);
+  assert.match(approval.xml, /Xét duyệt/);
+  assert.equal(keyed.get("junctura_xac_minh_ho_so").name, "Xác minh hồ sơ");
+  assert.equal(keyed.get("junctura_doi_soat_chung_tu").name, "Đối soát chứng từ");
 });

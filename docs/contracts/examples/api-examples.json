@@ -277,7 +277,7 @@
   "executionContext": {
     "schema": "ExecutionContext",
     "value": {
-      "purpose": "treatment",
+      "purpose": "review",
       "dataSubject": "8f14e45f-ceea-4672-9a2b-1f3c5d7e9a01"
     }
   },
@@ -288,15 +288,15 @@
         {
           "executionId": "0c1d2e3f-4a5b-4c6d-8e7f-8091a2b3c4d5",
           "accessedAt": "2026-11-04T09:32:00.000Z",
-          "purpose": "treatment",
+          "purpose": "review",
           "state": "succeeded",
           "consumer": {
             "appId": "9b1f3c2a-4d5e-4f60-8a71-0c2d3e4f5a6b",
-            "displayName": "Bệnh viện"
+            "displayName": "Đơn vị xét duyệt"
           },
           "provider": {
             "appId": "5e6f7a8b-9c0d-4e1f-8a2b-3c4d5e6f7a8b",
-            "displayName": "Trạm y tế"
+            "displayName": "Đơn vị tiếp nhận"
           },
           "capability": {
             "capabilityId": "urn:junctura:capability:5e6f7a8b-9c0d-4e1f-8a2b-3c4d5e6f7a8b:vaccination-history",
@@ -317,7 +317,7 @@
       "purpose": "emergency_care",
       "dataSubject": "8f14e45f-ceea-4672-9a2b-1f3c5d7e9a01",
       "emergency": true,
-      "justification": "Bệnh nhân bất tỉnh tại phòng cấp cứu"
+      "justification": "Tình huống khẩn cấp cần truy cập ngay"
     }
   },
   "subjectConsentCreate": {
@@ -326,7 +326,7 @@
       "consumerAppId": "9b1f3c2a-4d5e-4f60-8a71-0c2d3e4f5a6b",
       "capabilityId": "urn:junctura:capability:5e6f7a8b-9c0d-4e1f-8a2b-3c4d5e6f7a8b:vaccination-history",
       "purposes": [
-        "treatment",
+        "review",
         "referral"
       ],
       "expiresAt": "2026-12-05T00:00:00.000Z"
@@ -338,13 +338,13 @@
       "consentId": "dcf6b718-7d02-41cc-8a2b-bb4aa9026d71",
       "consumer": {
         "appId": "9b1f3c2a-4d5e-4f60-8a71-0c2d3e4f5a6b",
-        "displayName": "Bệnh viện"
+        "displayName": "Đơn vị xét duyệt"
       },
       "capabilityId": "urn:junctura:capability:5e6f7a8b-9c0d-4e1f-8a2b-3c4d5e6f7a8b:vaccination-history",
       "capabilityTitle": "Lịch sử tiêm chủng",
       "purposes": [
         "referral",
-        "treatment"
+        "review"
       ],
       "createdAt": "2026-11-05T08:00:00.000Z",
       "expiresAt": "2026-12-05T00:00:00.000Z",
@@ -361,15 +361,15 @@
           "state": "pending",
           "accessedAt": "2026-11-05T02:10:00.000Z",
           "purpose": "emergency_care",
-          "justification": "Bệnh nhân bất tỉnh tại phòng cấp cứu",
+          "justification": "Tình huống khẩn cấp cần truy cập ngay",
           "executionState": "succeeded",
           "consumer": {
             "appId": "9b1f3c2a-4d5e-4f60-8a71-0c2d3e4f5a6b",
-            "displayName": "Bệnh viện"
+            "displayName": "Đơn vị xét duyệt"
           },
           "provider": {
             "appId": "5e6f7a8b-9c0d-4e1f-8a2b-3c4d5e6f7a8b",
-            "displayName": "Trạm y tế"
+            "displayName": "Đơn vị tiếp nhận"
           },
           "capability": {
             "capabilityId": "urn:junctura:capability:5e6f7a8b-9c0d-4e1f-8a2b-3c4d5e6f7a8b:vaccination-history",
@@ -421,7 +421,7 @@
         "children": [
           {
             "id": "9b1f3c2a-4d5e-4f60-8a71-0c2d3e4f5a6b",
-            "name": "Trạm y tế",
+            "name": "Đơn vị tiếp nhận",
             "kind": "application",
             "children": []
           }
@@ -431,7 +431,7 @@
         {
           "from": "9b1f3c2a-4d5e-4f60-8a71-0c2d3e4f5a6b",
           "to": "5e6f7a8b-9c0d-4e1f-8a2b-3c4d5e6f7a8b",
-          "label": "Tra cứu bệnh nhân"
+          "label": "Tra cứu hồ sơ"
         }
       ],
       "truncated": false

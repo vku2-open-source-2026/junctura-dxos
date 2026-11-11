@@ -24,39 +24,39 @@ const CHECKPOINT: WorkflowDiagram = {
 const SCHOLARSHIP: WorkflowDiagram = {
   key: "scholarship_review",
   steps: [
-    { id: "submit", labelKey: "scholarshipIntake", roleKey: "healthStation" },
-    { id: "review", labelKey: "scholarshipDecision", roleKey: "hospitalDoctor" },
-    { id: "receive", labelKey: "scholarshipReceive", roleKey: "hospital" },
+    { id: "submit", labelKey: "scholarshipIntake", roleKey: "intakeUnit" },
+    { id: "review", labelKey: "scholarshipDecision", roleKey: "reviewer" },
+    { id: "receive", labelKey: "scholarshipReceive", roleKey: "reviewUnit" },
     { id: "done", labelKey: "complete" },
   ],
 };
 
-const CHUYEN_TUYEN: WorkflowDiagram = {
-  key: "junctura_chuyen_tuyen",
+const PHE_DUYET_YEU_CAU: WorkflowDiagram = {
+  key: "junctura_phe_duyet_yeu_cau",
   steps: [
-    { id: "tiep_nhan", labelKey: "chuyenTuyenIntake", roleKey: "healthStation" },
-    { id: "bac_si_duyet", labelKey: "chuyenTuyenReview", roleKey: "hospitalDoctor" },
-    { id: "hoan_tat", labelKey: "chuyenTuyenComplete", roleKey: "hospital" },
+    { id: "tiep_nhan", labelKey: "approvalIntake", roleKey: "intakeUnit" },
+    { id: "xet_duyet", labelKey: "approvalReview", roleKey: "reviewUnit" },
+    { id: "hoan_tat", labelKey: "approvalComplete", roleKey: "reviewUnit" },
     { id: "done", labelKey: "complete" },
   ],
 };
 
-const XAC_MINH_DON_THUOC: WorkflowDiagram = {
-  key: "junctura_xac_minh_don_thuoc",
+const XAC_MINH_HO_SO: WorkflowDiagram = {
+  key: "junctura_xac_minh_ho_so",
   steps: [
-    { id: "nha_thuoc_gui", labelKey: "pharmacySubmit", roleKey: "pharmacy" },
-    { id: "benh_vien_xac_nhan", labelKey: "hospitalConfirm", roleKey: "hospital" },
-    { id: "hoan_tat", labelKey: "hospitalComplete", roleKey: "hospital" },
+    { id: "gui_ho_so", labelKey: "verifySubmit", roleKey: "requestUnit" },
+    { id: "xac_nhan", labelKey: "verifyConfirm", roleKey: "reviewUnit" },
+    { id: "hoan_tat", labelKey: "verifyComplete", roleKey: "reviewUnit" },
     { id: "done", labelKey: "complete" },
   ],
 };
 
-const XAC_MINH_CHI_PHI: WorkflowDiagram = {
-  key: "junctura_xac_minh_chi_phi",
+const DOI_SOAT_CHUNG_TU: WorkflowDiagram = {
+  key: "junctura_doi_soat_chung_tu",
   steps: [
-    { id: "bao_hiem_gui", labelKey: "insuranceSubmit", roleKey: "insurance" },
-    { id: "benh_vien_xac_nhan", labelKey: "hospitalConfirm", roleKey: "hospital" },
-    { id: "hoan_tat", labelKey: "hospitalComplete", roleKey: "hospital" },
+    { id: "gui_chung_tu", labelKey: "reconcileSubmit", roleKey: "reconcileUnit" },
+    { id: "xac_nhan", labelKey: "verifyConfirm", roleKey: "reviewUnit" },
+    { id: "hoan_tat", labelKey: "verifyComplete", roleKey: "reviewUnit" },
     { id: "done", labelKey: "complete" },
   ],
 };
@@ -64,9 +64,9 @@ const XAC_MINH_CHI_PHI: WorkflowDiagram = {
 const WORKFLOW_DIAGRAMS: Record<string, WorkflowDiagram> = {
   junctura_checkpoint: CHECKPOINT,
   scholarship_review: SCHOLARSHIP,
-  junctura_chuyen_tuyen: CHUYEN_TUYEN,
-  junctura_xac_minh_don_thuoc: XAC_MINH_DON_THUOC,
-  junctura_xac_minh_chi_phi: XAC_MINH_CHI_PHI,
+  junctura_phe_duyet_yeu_cau: PHE_DUYET_YEU_CAU,
+  junctura_xac_minh_ho_so: XAC_MINH_HO_SO,
+  junctura_doi_soat_chung_tu: DOI_SOAT_CHUNG_TU,
 };
 
 const INSTALLED_WORKFLOWS = new Set(Object.keys(WORKFLOW_DIAGRAMS));

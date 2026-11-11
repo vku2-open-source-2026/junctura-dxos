@@ -37,17 +37,17 @@ function storageSummary() {
   return {
     applications: [
       {
-        id: "app-health",
-        name: "Sổ sức khỏe",
+        id: "app-records",
+        name: "Sổ hồ sơ",
         state: "active",
         collections: [
           {
-            name: "benh-nhan",
+            name: "nguoi-nop",
             records: 40,
             updatedAt: "2026-11-10T00:28:20.543Z",
           },
           {
-            name: "don-thuoc",
+            name: "chung-tu",
             records: 50,
             updatedAt: "2026-11-10T00:28:23.476Z",
           },
@@ -75,12 +75,12 @@ function storageSummary() {
     totals: {
       collections: [
         {
-          name: "benh-nhan",
+          name: "nguoi-nop",
           records: 40,
           updatedAt: "2026-11-10T05:16:58.689Z",
         },
         {
-          name: "don-thuoc",
+          name: "chung-tu",
           records: 50,
           updatedAt: "2026-11-10T05:17:01.119Z",
         },
@@ -130,17 +130,17 @@ function workflowExecutions() {
         "exec-running",
         "running",
         "junctura_chuyen_tuyen",
-        "Chuyển tuyến bệnh nhân",
-        "Chuyển tuyến BN-0001",
-        "Tiếp nhận ở Trạm y tế",
-        ["tram-y-te"]
+        "Phê duyệt yêu cầu",
+        "Phê duyệt yêu cầu YC-0001",
+        "Tiếp nhận yêu cầu",
+        ["don-vi-tiep-nhan"]
       ),
       execution(
         "exec-completed",
         "completed",
         "junctura_xac_minh_don_thuoc",
-        "Xác minh đơn thuốc",
-        "Xác minh đơn thuốc DT-0002"
+        "Xác minh hồ sơ",
+        "Xác minh hồ sơ HS-0002"
       ),
       execution(
         "exec-cancelled",
@@ -169,20 +169,20 @@ function workflowSummaryRoute(url: string) {
     definitions: [
       {
         key: "junctura_chuyen_tuyen",
-        name: "Chuyển tuyến bệnh nhân",
-        application: { id: "tram-y-te", name: "Trạm y tế" },
+        name: "Phê duyệt yêu cầu",
+        application: { id: "don-vi-tiep-nhan", name: "Đơn vị tiếp nhận" },
         steps: [
-          { name: "Tiếp nhận ở Trạm y tế", owner: "Trạm y tế" },
-          { name: "Bác sĩ bệnh viện duyệt", owner: "Bệnh viện" },
+          { name: "Tiếp nhận yêu cầu", owner: "Đơn vị tiếp nhận" },
+          { name: "Xét duyệt", owner: "Đơn vị xét duyệt" },
         ],
         counts: { running: 1, completed: 0, cancelled: 0 },
         updatedAt: "2026-11-10T05:16:57.509Z",
       },
       {
         key: "junctura_xac_minh_don_thuoc",
-        name: "Xác minh đơn thuốc",
-        application: { id: "nha-thuoc", name: "Nhà thuốc" },
-        steps: [{ name: "Nhà thuốc gửi", owner: "Nhà thuốc" }],
+        name: "Xác minh hồ sơ",
+        application: { id: "don-vi-de-nghi", name: "Đơn vị đề nghị" },
+        steps: [{ name: "Gửi hồ sơ", owner: "Đơn vị đề nghị" }],
         counts: { running: 0, completed: 1, cancelled: 0 },
         updatedAt: "2026-11-10T05:16:57.509Z",
       },
@@ -215,15 +215,15 @@ describe("Task 40 — data and file summaries", () => {
       name: viStrings.records.title,
     });
 
-    expect(await screen.findByText("Sổ sức khỏe")).toBeInTheDocument();
+    expect(await screen.findByText("Sổ hồ sơ")).toBeInTheDocument();
     expect(screen.getByText(viStrings.records.privacyNote)).toBeInTheDocument();
-    expect(screen.getByText("Bệnh nhân")).toBeInTheDocument();
-    expect(screen.getByText("Đơn thuốc")).toBeInTheDocument();
+    expect(screen.getByText("Người nộp")).toBeInTheDocument();
+    expect(screen.getByText("Chứng từ")).toBeInTheDocument();
     expect(screen.getByText(viStrings.records.colRecords)).toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: /Tạo bản ghi|Create record/ })
     ).toBeNull();
-    expect(screen.queryByText("benh-nhan")).toBeNull();
+    expect(screen.queryByText("nguoi-nop")).toBeNull();
   });
 
   it("shows only aggregate file counts, storage and quarantine", async () => {
@@ -240,7 +240,7 @@ describe("Task 40 — data and file summaries", () => {
     });
 
     expect(
-      await screen.findByRole("button", { name: /Sổ sức khỏe/ })
+      await screen.findByRole("button", { name: /Sổ hồ sơ/ })
     ).toBeInTheDocument();
     // Wait for the browser's duplicate storage label before checking the stat.
     expect(
@@ -276,9 +276,9 @@ describe("Task 40 — read-only workflow dashboard", () => {
       screen.getByText(viStrings.workflows.readOnlyNote)
     ).toBeInTheDocument();
     expect(
-      (await screen.findAllByText("Chuyển tuyến bệnh nhân")).length
+      (await screen.findAllByText("Phê duyệt yêu cầu")).length
     ).toBeGreaterThan(0);
-    expect(screen.getAllByText("Trạm y tế").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Đơn vị tiếp nhận").length).toBeGreaterThan(0);
     expect(
       screen.queryByRole("button", {
         name: /Chạy thử|Hoàn thành bước này|Dừng hồ sơ/,
@@ -290,8 +290,8 @@ describe("Task 40 — read-only workflow dashboard", () => {
     });
     expect(within(casesTable).getByText("exec-running")).toBeInTheDocument();
     expect(within(casesTable).queryByText("exec-completed")).toBeNull();
-    expect(screen.queryByText("Tiếp nhận ở Trạm y tế")).toBeNull();
-    expect(screen.queryByText("Chuyển tuyến BN-0001")).toBeNull();
+    expect(screen.queryByText("Tiếp nhận yêu cầu")).toBeNull();
+    expect(screen.queryByText("Phê duyệt yêu cầu YC-0001")).toBeNull();
 
     const completedTab = screen.getByRole("tab", {
       name: new RegExp(viStrings.workflows.filterCompleted),

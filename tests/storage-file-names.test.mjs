@@ -12,7 +12,7 @@ import {
 
 test("file names keep only a recognisable edge and the extension", () => {
   assert.equal(maskFileName("abcdef.txt"), "abc…ef.txt");
-  assert.equal(maskFileName("giấy chuyển tuyến CT-0001.txt"), "giấ…01.txt");
+  assert.equal(maskFileName("giấy đề nghị PD-0001.txt"), "giấ…01.txt");
   assert.equal(maskFileName("abc.txt"), "a….txt");
   assert.equal(maskFileName("a.txt"), "a….txt");
   assert.equal(maskFileName("no-extension"), "no-…on");
@@ -39,13 +39,13 @@ test("very long names stay bounded and object keys are not echoed", () => {
 test("storage paths are canonical, bounded and traversal-free", () => {
   assert.equal(normalizeStoragePath(""), "");
   assert.equal(normalizeStoragePath("/"), "");
-  assert.equal(normalizeStoragePath("ho-so/chuyen-tuyen/2026"), "ho-so/chuyen-tuyen/2026");
-  assert.equal(normalizeStoragePath("/ho-so//chuyen-tuyen/"), null);
+  assert.equal(normalizeStoragePath("ho-so/chung-tu/2026"), "ho-so/chung-tu/2026");
+  assert.equal(normalizeStoragePath("/ho-so//chung-tu/"), null);
   assert.equal(normalizeStoragePath("../secret"), null);
   assert.equal(normalizeStoragePath("ho-so/../../secret"), null);
-  assert.equal(normalizeStoragePath("ho-so\\chuyen-tuyen"), null);
+  assert.equal(normalizeStoragePath("ho-so\\chung-tu"), null);
   assert.equal(normalizeStoragePath("a".repeat(513)), null);
   assert.equal(normalizeStoragePath("ho-so/\u0000"), null);
   assert.equal(normalizeStoragePath("B\u00e1o c\u00e1o"), "Báo cáo".normalize("NFC"));
-  assert.equal(encodeStoragePath("ho-so/giấy chuyển tuyến"), "ho-so/gi%E1%BA%A5y%20chuy%E1%BB%83n%20tuy%E1%BA%BFn");
+  assert.equal(encodeStoragePath("ho-so/giấy đề nghị"), "ho-so/gi%E1%BA%A5y%20%C4%91%E1%BB%81%20ngh%E1%BB%8B");
 });

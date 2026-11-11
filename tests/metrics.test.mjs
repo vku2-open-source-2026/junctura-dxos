@@ -141,8 +141,8 @@ test("the router records every finished request without affecting the response",
 
 test("requests are assigned to fixed features and grouped per minute", () => {
   const now = Date.now();
-  recordRequest({ method: "GET", path: "/v1/data/patients?limit=1", statusCode: 200, durationMs: 10, at: now });
-  recordRequest({ method: "POST", path: "/v2/data/patients/11111111-1111-4111-8111-111111111111", statusCode: 201, durationMs: 30, at: now });
+  recordRequest({ method: "GET", path: "/v1/data/records?limit=1", statusCode: 200, durationMs: 10, at: now });
+  recordRequest({ method: "POST", path: "/v2/data/records/11111111-1111-4111-8111-111111111111", statusCode: 201, durationMs: 30, at: now });
   recordRequest({ method: "GET", path: "/v1/objects/11111111-1111-4111-8111-111111111111", statusCode: 500, durationMs: 50, at: now });
   recordRequest({ method: "GET", path: "/v1/workflows/executions", statusCode: 401, durationMs: 5, at: now });
   recordRequest({ method: "GET", path: "/v1/trust/graph", statusCode: 200, durationMs: 7, at: now });
@@ -165,8 +165,8 @@ test("requests are assigned to fixed features and grouped per minute", () => {
 });
 
 test("feature path matching is segment aware and unknown routes fall back to other", () => {
-  assert.equal(featureForPath("/v1/data/patients"), "data");
-  assert.equal(featureForPath("/v2/data/patients"), "data");
+  assert.equal(featureForPath("/v1/data/records"), "data");
+  assert.equal(featureForPath("/v2/data/records"), "data");
   assert.equal(featureForPath("/v1/database"), "other");
   assert.equal(featureForPath("/v1/capability-executions/abc"), "capabilities");
   assert.equal(featureForPath("/v1/emergency-accesses"), "consents");

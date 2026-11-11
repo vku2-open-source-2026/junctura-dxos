@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Read-only aggregate of business workflow definitions. Admins may inspect the
 // shape and counts of a process, but this module never starts, completes or
-// cancels anything and never reads workflow variables or patient data.
+// cancels anything and never reads workflow variables or case data.
 import { readFileSync, readdirSync } from "node:fs";
 import { workflowRequest } from "./client.mjs";
 
@@ -21,17 +21,16 @@ const TECHNICAL_DEFINITIONS = new Map([
 // stable key the workflow schema can join on. IDs are stable application keys,
 // not database UUIDs.
 const APPLICATIONS = new Map([
-  ["junctura_chuyen_tuyen", { id: "tram-y-te", name: "Trạm y tế" }],
-  ["junctura_xac_minh_don_thuoc", { id: "nha-thuoc", name: "Nhà thuốc" }],
-  ["junctura_xac_minh_chi_phi", { id: "bao-hiem", name: "Bảo hiểm" }],
+  ["junctura_phe_duyet_yeu_cau", { id: "don-vi-tiep-nhan", name: "Đơn vị tiếp nhận" }],
+  ["junctura_xac_minh_ho_so", { id: "don-vi-de-nghi", name: "Đơn vị đề nghị" }],
+  ["junctura_doi_soat_chung_tu", { id: "don-vi-doi-soat", name: "Đơn vị đối soát" }],
 ]);
 
 const OWNER_LABELS = new Map([
-  ["tram-y-te", "Trạm y tế"],
-  ["benh-vien", "Bệnh viện"],
-  ["nha-thuoc", "Nhà thuốc"],
-  ["bao-hiem", "Bảo hiểm"],
-  ["so-suc-khoe", "Sổ sức khỏe"],
+  ["don-vi-tiep-nhan", "Đơn vị tiếp nhận"],
+  ["don-vi-xet-duyet", "Đơn vị xét duyệt"],
+  ["don-vi-de-nghi", "Đơn vị đề nghị"],
+  ["don-vi-doi-soat", "Đơn vị đối soát"],
 ]);
 
 function safeText(value, max = 200) {

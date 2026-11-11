@@ -27,42 +27,42 @@ const listing = new Map([
     { FullPath: `${root}/README`, Mode: fileMode, FileSize: 12, Mtime: "2026-01-02T00:00:00Z" },
   ], ShouldDisplayLoadMore: false }],
   [`${root}/ho-so/`, { Entries: [
-    { FullPath: `${root}/ho-so/chuyen-tuyen`, Mode: dirMode },
-    { FullPath: `${root}/ho-so/don-thuoc`, Mode: dirMode },
+    { FullPath: `${root}/ho-so/chung-tu`, Mode: dirMode },
+    { FullPath: `${root}/ho-so/de-nghi`, Mode: dirMode },
   ], ShouldDisplayLoadMore: false }],
-  [`${root}/ho-so/chuyen-tuyen/`, { Entries: [
-    { FullPath: `${root}/ho-so/chuyen-tuyen/2026`, Mode: dirMode },
+  [`${root}/ho-so/chung-tu/`, { Entries: [
+    { FullPath: `${root}/ho-so/chung-tu/2026`, Mode: dirMode },
   ], ShouldDisplayLoadMore: false }],
-  [`${root}/ho-so/chuyen-tuyen/2026/`, { Entries: [
-    { FullPath: `${root}/ho-so/chuyen-tuyen/2026/giấy chuyển tuyến CT-0001.txt`, Mode: fileMode, FileSize: 100, Mtime: "2026-01-03T00:00:00Z" },
-    { FullPath: `${root}/ho-so/chuyen-tuyen/2026/Ba\u0301o ca\u0301o.pdf`, Mode: fileMode, FileSize: 50, Mtime: "2026-01-04T00:00:00Z" },
+  [`${root}/ho-so/chung-tu/2026/`, { Entries: [
+    { FullPath: `${root}/ho-so/chung-tu/2026/chứng từ CT-0001.txt`, Mode: fileMode, FileSize: 100, Mtime: "2026-01-03T00:00:00Z" },
+    { FullPath: `${root}/ho-so/chung-tu/2026/Ba\u0301o ca\u0301o.pdf`, Mode: fileMode, FileSize: 50, Mtime: "2026-01-04T00:00:00Z" },
   ], ShouldDisplayLoadMore: false }],
-  [`${root}/ho-so/don-thuoc/`, { Entries: [
-    { FullPath: `${root}/ho-so/don-thuoc/2026`, Mode: dirMode },
+  [`${root}/ho-so/de-nghi/`, { Entries: [
+    { FullPath: `${root}/ho-so/de-nghi/2026`, Mode: dirMode },
   ], ShouldDisplayLoadMore: false }],
-  [`${root}/ho-so/don-thuoc/2026/`, { Entries: [
-    { FullPath: `${root}/ho-so/don-thuoc/2026/đơn thuốc DT-0001.txt`, Mode: fileMode, FileSize: 70, Mtime: "2026-01-05T00:00:00Z" },
+  [`${root}/ho-so/de-nghi/2026/`, { Entries: [
+    { FullPath: `${root}/ho-so/de-nghi/2026/giấy đề nghị PD-0001.txt`, Mode: fileMode, FileSize: 70, Mtime: "2026-01-05T00:00:00Z" },
   ], ShouldDisplayLoadMore: false }],
   [`${root}/giay-to/`, { Entries: [
-    { FullPath: `${root}/giay-to/ket-qua-xet-nghiem`, Mode: dirMode },
+    { FullPath: `${root}/giay-to/bien-ban`, Mode: dirMode },
   ], ShouldDisplayLoadMore: false }],
-  [`${root}/giay-to/ket-qua-xet-nghiem/`, { Entries: [
-    { FullPath: `${root}/giay-to/ket-qua-xet-nghiem/2026`, Mode: dirMode },
+  [`${root}/giay-to/bien-ban/`, { Entries: [
+    { FullPath: `${root}/giay-to/bien-ban/2026`, Mode: dirMode },
   ], ShouldDisplayLoadMore: false }],
-  [`${root}/giay-to/ket-qua-xet-nghiem/2026/`, { Entries: [
-    { FullPath: `${root}/giay-to/ket-qua-xet-nghiem/2026/kết quả xét nghiệm BN-0001.txt`, Mode: fileMode, FileSize: 40, Mtime: "2026-01-06T00:00:00Z" },
+  [`${root}/giay-to/bien-ban/2026/`, { Entries: [
+    { FullPath: `${root}/giay-to/bien-ban/2026/biên bản BB-0001.txt`, Mode: fileMode, FileSize: 40, Mtime: "2026-01-06T00:00:00Z" },
   ], ShouldDisplayLoadMore: false }],
 ]);
 
 const collectionsValue = {
-  application: { id: appOne, name: "Trạm Y tế xã" },
+  application: { id: appOne, name: "Đơn vị tiếp nhận" },
   collections: [
     {
-      name: "benh-nhan",
+      name: "nguoi-nop",
       records: 12,
       updatedAt: "2026-01-02T03:04:05.000Z",
       fields: [
-        { name: "ma_benh_nhan", type: "string", fillRate: 100 },
+        { name: "ma_nguoi_nop", type: "string", fillRate: 100 },
         { name: "tuoi", type: "number", fillRate: 75 },
         { name: "di_ung", type: "mixed", fillRate: 50 },
       ],
@@ -70,7 +70,7 @@ const collectionsValue = {
   ],
 };
 
-let summaryReply = { applications: [{ id: appOne, name: "Trạm Y tế xã" }, { id: appTwo, name: "Bệnh viện" }] };
+let summaryReply = { applications: [{ id: appOne, name: "Đơn vị tiếp nhận" }, { id: appTwo, name: "Đơn vị xét duyệt" }] };
 let collectionsReply = { status: 200, value: collectionsValue };
 let filerUp = true;
 let dataUp = true;
@@ -119,8 +119,8 @@ const get = (path, method = "GET") => fetch(`${base}${path}`, { method });
 const files = (query = "", method = "GET") => get(`/v1/storage/files?application=${appOne}${query}`, method);
 
 function assertNoSecrets(text) {
-  for (const secret of ["0120b996-711d-526b-a836-69fee754b79e", "giấy chuyển tuyến CT-0001.txt",
-    "đơn thuốc DT-0001.txt", "kết quả xét nghiệm BN-0001.txt", "Ba\u0301o ca\u0301o.pdf"]) {
+  for (const secret of ["0120b996-711d-526b-a836-69fee754b79e", "chứng từ CT-0001.txt",
+    "giấy đề nghị PD-0001.txt", "biên bản BB-0001.txt", "Ba\u0301o ca\u0301o.pdf"]) {
     assert.ok(!text.includes(secret), `${secret} must not be returned`);
   }
 }
@@ -130,7 +130,7 @@ test("file listing shows one folder level and masks every file name", async () =
   assert.equal(response.status, 200);
   assert.equal(response.headers.get("cache-control"), "no-store");
   const body = await response.json();
-  assert.deepEqual(body.application, { id: appOne, name: "Trạm Y tế xã" });
+  assert.deepEqual(body.application, { id: appOne, name: "Đơn vị tiếp nhận" });
   assert.equal(body.path, "/");
   assert.deepEqual(body.folders.map((folder) => folder.name), ["giay-to", "ho-so"]);
   assert.deepEqual(body.folders.find((folder) => folder.name === "ho-so"), {
@@ -147,12 +147,12 @@ test("file listing shows one folder level and masks every file name", async () =
 });
 
 test("navigating a folder returns masked names but never object keys or full paths", async () => {
-  const response = await files("&path=/ho-so/chuyen-tuyen/2026/");
+  const response = await files("&path=/ho-so/chung-tu/2026/");
   assert.equal(response.status, 200);
   const body = await response.json();
-  assert.equal(body.path, "/ho-so/chuyen-tuyen/2026");
+  assert.equal(body.path, "/ho-so/chung-tu/2026");
   assert.deepEqual(body.folders, []);
-  assert.deepEqual(body.files.map((file) => file.name).sort(), ["Ba\u0301o\u2026a\u0301o.pdf", "giấ…01.txt"].sort());
+  assert.deepEqual(body.files.map((file) => file.name).sort(), ["Ba\u0301o\u2026a\u0301o.pdf", "chứ…01.txt"].sort());
   assert.deepEqual(body.files.map((file) => file.extension).sort(), ["pdf", "txt"]);
   assert.ok(body.files.every((file) => file.status === "clean"));
   assert.ok(body.files.every((file) => file.bytes > 0 && file.updatedAt));
@@ -161,7 +161,7 @@ test("navigating a folder returns masked names but never object keys or full pat
 
 test("unsafe paths, repeated or unknown parameters and wrong methods are rejected", async () => {
   for (const query of ["&path=../secret", "&path=ho-so/../../secret", `&path=${"a".repeat(513)}`,
-    "&path=%00", "&path=ho-so%5Cchuyen-tuyen", "&tenant=tenant-b", "&application=" + appOne]) {
+    "&path=%00", "&path=ho-so%5Cchung-tu", "&tenant=tenant-b", "&application=" + appOne]) {
     const response = await files(query);
     assert.equal(response.status, 400, query);
   }
@@ -207,14 +207,14 @@ test("collection structure exposes fields and fill rates but never values", asyn
   assert.deepEqual(body, collectionsValue);
   assert.ok(!JSON.stringify(body).includes("Nguyễn"));
   const extra = structuredClone(collectionsValue);
-  extra.collections[0].fields[0].sample = "patient value";
+  extra.collections[0].fields[0].sample = "personal value";
   extra.collections[0].records = 1;
   extra.collections[0].values = ["secret"];
   collectionsReply = { status: 200, value: extra };
   const clean = await (await get(`/v1/storage/collections?application=${appOne}`)).json();
-  assert.ok(!JSON.stringify(clean).includes("patient value"));
+  assert.ok(!JSON.stringify(clean).includes("personal value"));
   assert.ok(!JSON.stringify(clean).includes("secret"));
-  assert.equal(clean.collections[0].fields[0].name, "ma_benh_nhan");
+  assert.equal(clean.collections[0].fields[0].name, "ma_nguoi_nop");
 });
 
 test("collections reject invalid shapes, unknown applications and errors from the database", async () => {

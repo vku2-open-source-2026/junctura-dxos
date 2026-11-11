@@ -115,9 +115,9 @@ function execution(
     currentStep:
       status === "running"
         ? {
-            name: "Tiếp nhận ở Trạm y tế",
-            assignee: "Bác sĩ Nguyễn Văn A",
-            groups: ["tram-y-te"],
+            name: "Tiếp nhận yêu cầu",
+            assignee: "Chuyên viên Nguyễn Văn A",
+            groups: ["don-vi-tiep-nhan"],
           }
         : null,
   };
@@ -128,20 +128,20 @@ function workflowSummaryFixture() {
     definitions: [
       {
         key: "junctura_chuyen_tuyen",
-        name: "Chuyển tuyến bệnh nhân",
-        application: { id: "tram-y-te", name: "Trạm y tế" },
+        name: "Phê duyệt yêu cầu",
+        application: { id: "don-vi-tiep-nhan", name: "Đơn vị tiếp nhận" },
         steps: [
-          { name: "Tiếp nhận ở Trạm y tế", owner: "Trạm y tế" },
-          { name: "Bác sĩ bệnh viện duyệt", owner: "Bệnh viện" },
+          { name: "Tiếp nhận yêu cầu", owner: "Đơn vị tiếp nhận" },
+          { name: "Xét duyệt", owner: "Đơn vị xét duyệt" },
         ],
         counts: { running: 1, completed: 2, cancelled: 1 },
         updatedAt: "2026-11-10T06:16:57.508Z",
       },
       {
         key: "junctura_xac_minh_don_thuoc",
-        name: "Xác minh đơn thuốc",
-        application: { id: "nha-thuoc", name: "Nhà thuốc" },
-        steps: [{ name: "Nhà thuốc gửi", owner: "Nhà thuốc" }],
+        name: "Xác minh hồ sơ",
+        application: { id: "don-vi-de-nghi", name: "Đơn vị đề nghị" },
+        steps: [{ name: "Gửi hồ sơ", owner: "Đơn vị đề nghị" }],
         counts: { running: 0, completed: 1, cancelled: 0 },
         updatedAt: "2026-11-10T06:16:57.508Z",
       },
@@ -157,19 +157,19 @@ function workflowExecutionsFixture() {
         "case-running",
         "running",
         "junctura_chuyen_tuyen",
-        "Chuyển tuyến bệnh nhân"
+        "Phê duyệt yêu cầu"
       ),
       execution(
         "case-completed",
         "completed",
         "junctura_xac_minh_don_thuoc",
-        "Xác minh đơn thuốc"
+        "Xác minh hồ sơ"
       ),
       execution(
         "case-cancelled",
         "cancelled",
         "junctura_chuyen_tuyen",
-        "Chuyển tuyến bệnh nhân"
+        "Phê duyệt yêu cầu"
       ),
     ],
     limit: 100,
@@ -265,7 +265,7 @@ describe("Task 44 — read-only workflow dashboard", () => {
       screen.getByText(viStrings.workflows.readOnlyNote)
     ).toBeInTheDocument();
     expect(
-      (await screen.findAllByText("Chuyển tuyến bệnh nhân")).length
+      (await screen.findAllByText("Phê duyệt yêu cầu")).length
     ).toBeGreaterThan(0);
 
     expect(
@@ -279,8 +279,8 @@ describe("Task 44 — read-only workflow dashboard", () => {
     });
     expect(within(casesTable).getByText("case-running")).toBeInTheDocument();
     expect(within(casesTable).queryByText("case-completed")).toBeNull();
-    expect(screen.queryByText("Tiếp nhận ở Trạm y tế")).toBeNull();
-    expect(screen.queryByText("Bác sĩ Nguyễn Văn A")).toBeNull();
+    expect(screen.queryByText("Tiếp nhận yêu cầu")).toBeNull();
+    expect(screen.queryByText("Chuyên viên Nguyễn Văn A")).toBeNull();
     expect(screen.queryByText("Hồ sơ nội bộ")).toBeNull();
 
     fireEvent.click(
@@ -300,12 +300,12 @@ describe("Task 44 — read-only workflow dashboard", () => {
     });
     fireEvent.click(
       within(summaryTable).getByRole("button", {
-        name: "Chuyển tuyến bệnh nhân",
+        name: "Phê duyệt yêu cầu",
       })
     );
     expect(
-      await screen.findByText("Tiếp nhận ở Trạm y tế")
+      await screen.findByText("Tiếp nhận yêu cầu")
     ).toBeInTheDocument();
-    expect(screen.getByText("Bệnh viện")).toBeInTheDocument();
+    expect(screen.getByText("Đơn vị xét duyệt")).toBeInTheDocument();
   });
 });

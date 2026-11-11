@@ -67,8 +67,8 @@ function grantGraph() {
   return {
     scope: "tenant",
     nodes: [
-      { appId: "app-provider", displayName: "Trạm y tế", state: "active", owned: true },
-      { appId: "app-consumer", displayName: "Bệnh viện", state: "active", owned: false },
+      { appId: "app-provider", displayName: "Đơn vị tiếp nhận", state: "active", owned: true },
+      { appId: "app-consumer", displayName: "Đơn vị xét duyệt", state: "active", owned: false },
     ],
     edges: [
       edge("g-pending", "pending"),
@@ -169,9 +169,9 @@ describe("Task 45 — application detail", () => {
     appId: "app-provider",
     tenantId: "tenant-test",
     ownerSubject: "owner-1",
-    displayName: "Trạm y tế",
-    oauthClientId: "tram-y-te-client",
-    providerOrigin: "https://tram-y-te.example",
+    displayName: "Đơn vị tiếp nhận",
+    oauthClientId: "don-vi-tiep-nhan-client",
+    providerOrigin: "https://don-vi-tiep-nhan.example",
     state: "active",
     revision: 3,
     digest: "sha256:abc",
@@ -199,7 +199,7 @@ describe("Task 45 — application detail", () => {
                     capabilityId: "cap-1",
                     providerAppId: "app-provider",
                     version: "1.0.0",
-                    title: "Tóm tắt chuyển tuyến",
+                    title: "Tóm tắt hồ sơ",
                   },
                   state: "published",
                   revision: 1,
@@ -214,11 +214,11 @@ describe("Task 45 — application detail", () => {
               applications: [
                 {
                   id: "app-provider",
-                  name: "Trạm y tế",
+                  name: "Đơn vị tiếp nhận",
                   state: "active",
                   collections: [
-                    { name: "benh-nhan", records: 10, updatedAt: null },
-                    { name: "don-thuoc", records: 4, updatedAt: null },
+                    { name: "nguoi-nop", records: 10, updatedAt: null },
+                    { name: "chung-tu", records: 4, updatedAt: null },
                   ],
                   files: {
                     count: 7,
@@ -259,7 +259,7 @@ describe("Task 45 — application detail", () => {
                   permissions: [],
                   enabled: true,
                   displayName: "Chị Hoa",
-                  organization: "Trạm y tế xã",
+                  organization: "Đơn vị tiếp nhận",
                   jobTitle: null,
                   kind: "admin",
                 },
@@ -284,7 +284,7 @@ describe("Task 45 — application detail", () => {
   it("opens a full detail view and labels the list action as view details", async () => {
     installApiFetch(routes());
     await openScreen("apps", viStrings.applications.title);
-    const row = (await screen.findByText("Trạm y tế")).closest("tr");
+    const row = (await screen.findByText("Đơn vị tiếp nhận")).closest("tr");
     if (!row) throw new Error("application row is missing");
     fireEvent.click(
       within(row).getByRole("button", {
@@ -292,11 +292,11 @@ describe("Task 45 — application detail", () => {
       })
     );
 
-    await screen.findByRole("heading", { level: 1, name: "Trạm y tế" });
-    expect(await screen.findByText("Trạm y tế xã")).toBeInTheDocument();
+    await screen.findByRole("heading", { level: 1, name: "Đơn vị tiếp nhận" });
+    expect(await screen.findByText("Đơn vị tiếp nhận")).toBeInTheDocument();
     expect(screen.getByText("Chị Hoa")).toBeInTheDocument();
     expect(screen.getByText("Anh Minh")).toBeInTheDocument();
-    expect(screen.getByText("Tóm tắt chuyển tuyến")).toBeInTheDocument();
+    expect(screen.getByText("Tóm tắt hồ sơ")).toBeInTheDocument();
     expect(screen.getByText(viStrings.applications.technicalDetails)).toBeInTheDocument();
     expect(
       screen.queryByRole("button", {

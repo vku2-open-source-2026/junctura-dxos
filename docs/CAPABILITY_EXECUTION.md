@@ -53,12 +53,12 @@ A C4A request may carry an optional context:
 
 ```json
 { "target": { "kind": "capability", "capability": { "...": "..." } },
-  "input": { "patientId": "..." },
-  "context": { "purpose": "treatment", "dataSubject": "<identity-provider subject of the person>" } }
+  "input": { "subjectRef": "..." },
+  "context": { "purpose": "review", "dataSubject": "<identity-provider subject of the person>" } }
 ```
 
-- `purpose` (required in a context): `^[a-z][a-z0-9_]{1,62}$`, for example `treatment`,
-  `referral`, `insurance_claim`. `dataSubject` (optional): 1–255 characters, no
+- `purpose` (required in a context): `^[a-z][a-z0-9_]{1,62}$`, for example `review`,
+  `referral`, `verification`. `dataSubject` (optional): 1–255 characters, no
   control characters; the person's identity-provider subject, so the person can find
   the call later.
 - The context is bound into the idempotent request digest (requests without a context
@@ -127,16 +127,16 @@ are a separate, explicit opt-in that keeps the other controls unchanged:
 Local setup:
 
 ```sh
-npm run provider:pki -- tramyte benhvien      # .junctura/pki: CA + one certificate per provider
+npm run provider:pki -- unit-a unit-b      # .junctura/pki: CA + one certificate per provider
 # .env: C4A_ENABLED=true and
-#       C4A_INTERNAL_PROVIDER_ORIGINS=["https://tramyte.provider.internal:8443","https://benhvien.provider.internal:8443"]
+#       C4A_INTERNAL_PROVIDER_ORIGINS=["https://unit-a.provider.internal:8443","https://unit-b.provider.internal:8443"]
 docker compose -f compose.yaml -f compose.providers.yaml up -d
 ```
 
 `provider:pki` is pure Node (no OpenSSL needed): an ECDSA P-256 CA valid for 10 years
 and 825-day server certificates, private keys mode 0600 in the Git-ignored
 `.junctura/pki`. Only `ca.crt` is mounted into Core. Provider containers join the
-isolated `providers` network with an alias such as `tramyte.provider.internal` and serve
+isolated `providers` network with an alias such as `unit-a.provider.internal` and serve
 HTTPS with their own certificate and key. This is a local/single-host deployment aid;
 across hosts use public HTTPS origins with publicly trusted certificates.
 

@@ -36,27 +36,27 @@ function orgFixture() {
       children: [
         {
           id: "app-1",
-          name: "Trạm y tế xã",
+          name: "Đơn vị tiếp nhận",
           kind: "application",
           children: [],
         },
         {
           id: "app-2",
-          name: "Bệnh viện",
+          name: "Đơn vị xét duyệt",
           kind: "organization",
           children: [],
         },
         {
           id: "app-3",
-          name: "Nhà thuốc",
+          name: "Đơn vị đề nghị",
           kind: "application",
           children: [],
         },
       ],
     },
     relations: [
-      { from: "app-1", to: "app-2", label: "Tóm tắt chuyển tuyến" },
-      { from: "app-2", to: "app-3", label: "Đơn thuốc" },
+      { from: "app-1", to: "app-2", label: "Tóm tắt hồ sơ" },
+      { from: "app-2", to: "app-3", label: "Chứng từ" },
     ],
     truncated: false,
   };
@@ -105,9 +105,9 @@ describe("Task 37 — organisation tree", () => {
       screen.getByText(viStrings.orgs.totalCapabilities)
     ).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Trạm y tế xã" }));
+    fireEvent.click(screen.getByRole("button", { name: "Đơn vị tiếp nhận" }));
     expect(
-      screen.getAllByText("Tóm tắt chuyển tuyến").length
+      screen.getAllByText("Tóm tắt hồ sơ").length
     ).toBeGreaterThan(0);
     expect(screen.getByText(viStrings.orgs.noIncoming)).toBeInTheDocument();
 
@@ -127,9 +127,9 @@ describe("Task 37 — organisation tree", () => {
     await openScreen("orgs");
     await screen.findByText(viStrings.orgs.relationsTitle);
     expect(
-      await screen.findByText("Trạm y tế xã → Bệnh viện")
+      await screen.findByText("Đơn vị tiếp nhận → Đơn vị xét duyệt")
     ).toBeInTheDocument();
-    expect(screen.getByText("Bệnh viện → Nhà thuốc")).toBeInTheDocument();
+    expect(screen.getByText("Đơn vị xét duyệt → Đơn vị đề nghị")).toBeInTheDocument();
   });
 });
 
@@ -145,7 +145,7 @@ describe("Task 37 — users table", () => {
                 principal({
                   subject: "admin-1",
                   displayName: "Nguyễn Văn A",
-                  organization: "Bệnh viện",
+                  organization: "Đơn vị xét duyệt",
                   jobTitle: "Quản trị nền tảng",
                   permissions: ["identity.admin"],
                   kind: "admin",
@@ -153,7 +153,7 @@ describe("Task 37 — users table", () => {
                 principal({
                   subject: "app-1",
                   displayName: null,
-                  organization: "Nhà thuốc",
+                  organization: "Đơn vị đề nghị",
                   permissions: ["trust.approve"],
                   kind: "application",
                 }),
@@ -178,7 +178,7 @@ describe("Task 37 — users table", () => {
     ).toBeGreaterThan(0);
 
     fireEvent.change(screen.getByLabelText(viStrings.users.filterUnit), {
-      target: { value: "Nhà thuốc" },
+      target: { value: "Đơn vị đề nghị" },
     });
     expect(screen.queryByText("Nguyễn Văn A")).toBeNull();
     expect(screen.getByText(viStrings.users.unnamed)).toBeInTheDocument();

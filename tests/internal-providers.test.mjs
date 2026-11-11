@@ -15,7 +15,7 @@ import { ensurePki, hostFor, parseArgs } from "../scripts/provider-pki.mjs";
 
 const TICKET = "a".repeat(43);
 const OPERATION = "11111111-1111-4111-8111-111111111111";
-const ORIGIN = "https://tramyte.provider.internal:8443";
+const ORIGIN = "https://unit-a.provider.internal:8443";
 const ca = issueCertificate({ subject: { commonName: "Test provider CA" }, days: 30 });
 const internal = (resolve, overrides = {}) => createProviderNetwork({ origins: [], internalOrigins: [ORIGIN], internalCa: ca.cert, resolve, ...overrides });
 const code = expected => error => error instanceof ProviderNetworkError && error.code === expected;
@@ -32,8 +32,8 @@ test("private address policy admits only RFC 1918 and unique-local addresses", (
 });
 
 test("internal origins must be exact https .internal origins with the provider CA, listed once", () => {
-  for (const origin of ["http://tramyte.provider.internal", "https://tramyte.example.org", "https://10.0.0.5", "https://internal",
-    "https://tramyte.provider.internal/path", "https://user@tramyte.provider.internal", "https://TRAMYTE.provider.internal"]) {
+  for (const origin of ["http://unit-a.provider.internal", "https://unit-a.example.org", "https://10.0.0.5", "https://internal",
+    "https://unit-a.provider.internal/path", "https://user@unit-a.provider.internal", "https://UNIT-A.provider.internal"]) {
     assert.throws(() => createProviderNetwork({ origins: [], internalOrigins: [origin], internalCa: ca.cert }), /invalid internal origin/, origin);
   }
   assert.throws(() => createProviderNetwork({ origins: [], internalOrigins: [ORIGIN] }), /provider CA/);
@@ -80,11 +80,11 @@ test("configuration requires PROVIDER_CA_FILE for internal origins and reads it 
 });
 
 test("issued certificates chain to the provider CA and fail for other names", async () => {
-  const leaf = issueCertificate({ subject: { commonName: "tramyte.provider.internal" }, dnsNames: ["tramyte.provider.internal"], issuer: ca, days: 30 });
+  const leaf = issueCertificate({ subject: { commonName: "unit-a.provider.internal" }, dnsNames: ["unit-a.provider.internal"], issuer: ca, days: 30 });
   const root = new X509Certificate(ca.cert), server = new X509Certificate(leaf.cert);
   assert.equal(root.ca, true); assert.equal(server.ca, false);
   assert.ok(server.checkIssued(root) && server.verify(root.publicKey));
-  assert.equal(server.subjectAltName, "DNS:tramyte.provider.internal");
+  assert.equal(server.subjectAltName, "DNS:unit-a.provider.internal");
   assert.throws(() => issueCertificate({ subject: { commonName: "x" }, dnsNames: ["Bad_Name"], issuer: ca, days: 30 }), /DNS names/);
   const listener = tls.createServer({ key: leaf.key, cert: leaf.cert }, socket => socket.end("ok"));
   await new Promise(done => listener.listen(0, "127.0.0.1", done));
@@ -93,35 +93,35 @@ test("issued certificates chain to the provider CA and fail for other names", as
     socket.on("error", fail);
   });
   try {
-    assert.equal(await connect("tramyte.provider.internal"), true);
-    await assert.rejects(connect("benhvien.provider.internal"), /altnames|ALTNAME/i);
+    assert.equal(await connect("unit-a.provider.internal"), true);
+    await assert.rejects(connect("unit-b.provider.internal"), /altnames|ALTNAME/i);
     const stranger = issueCertificate({ subject: { commonName: "Other CA" }, days: 30 });
     await assert.rejects(new Promise((done, fail) => {
-      const socket = tls.connect({ host: "127.0.0.1", port: listener.address().port, servername: "tramyte.provider.internal", ca: stranger.cert }, done);
+      const socket = tls.connect({ host: "127.0.0.1", port: listener.address().port, servername: "unit-a.provider.internal", ca: stranger.cert }, done);
       socket.on("error", fail);
     }));
   } finally { listener.close(); }
 });
 
 test("provider:pki derives .internal hosts and reuses the CA and existing certificates", () => {
-  assert.equal(hostFor("tramyte"), "tramyte.provider.internal");
+  assert.equal(hostFor("unit-a"), "unit-a.provider.internal");
   assert.equal(hostFor("lab.provider.internal"), "lab.provider.internal");
   for (const bad of ["Bad", "a_b", "x.example.org", ""]) assert.throws(() => hostFor(bad), undefined, bad);
-  assert.deepEqual(parseArgs(["tramyte", "benhvien", "--port", "9443"]).hosts, ["tramyte.provider.internal", "benhvien.provider.internal"]);
+  assert.deepEqual(parseArgs(["unit-a", "unit-b", "--port", "9443"]).hosts, ["unit-a.provider.internal", "unit-b.provider.internal"]);
   assert.throws(() => parseArgs([]), /Usage/);
   assert.throws(() => parseArgs(["x", "--port", "0"]), /port/);
   const directory = mkdtempSync(join(tmpdir(), "junctura-pki-"));
   try {
-    const first = ensurePki({ hosts: ["tramyte.provider.internal"], directory });
-    assert.deepEqual(first.issued, ["tramyte.provider.internal"]);
+    const first = ensurePki({ hosts: ["unit-a.provider.internal"], directory });
+    assert.deepEqual(first.issued, ["unit-a.provider.internal"]);
     const caBefore = readFileSync(join(directory, "ca.crt"), "utf8");
-    const second = ensurePki({ hosts: ["tramyte.provider.internal", "benhvien.provider.internal"], directory });
-    assert.deepEqual(second.issued, ["benhvien.provider.internal"], "existing certificates are kept");
+    const second = ensurePki({ hosts: ["unit-a.provider.internal", "unit-b.provider.internal"], directory });
+    assert.deepEqual(second.issued, ["unit-b.provider.internal"], "existing certificates are kept");
     assert.equal(readFileSync(join(directory, "ca.crt"), "utf8"), caBefore, "the CA is created once");
-    const leaf = new X509Certificate(readFileSync(join(directory, "benhvien.provider.internal.crt")));
+    const leaf = new X509Certificate(readFileSync(join(directory, "unit-b.provider.internal.crt")));
     assert.ok(leaf.checkIssued(new X509Certificate(caBefore)));
     if (process.platform !== "win32") {
-      for (const key of ["ca.key", "tramyte.provider.internal.key"]) assert.equal(statSync(join(directory, key)).mode & 0o077, 0, `${key} is private`);
+      for (const key of ["ca.key", "unit-a.provider.internal.key"]) assert.equal(statSync(join(directory, key)).mode & 0o077, 0, `${key} is private`);
     }
   } finally { rmSync(directory, { recursive: true, force: true }); }
 });

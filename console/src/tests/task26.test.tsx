@@ -66,9 +66,9 @@ describe("WorkflowSim step row", () => {
   it("shows each step with the person responsible", () => {
     renderSim();
     const row = screen.getByRole("list", { name: /Gửi hồ sơ/ });
-    expect(within(row).getByText("Trạm y tế")).toBeInTheDocument();
-    expect(within(row).getByText("Bác sĩ bệnh viện")).toBeInTheDocument();
-    expect(within(row).getByText("Bệnh viện")).toBeInTheDocument();
+    expect(within(row).getByText("Đơn vị tiếp nhận")).toBeInTheDocument();
+    expect(within(row).getByText("Người xét duyệt")).toBeInTheDocument();
+    expect(within(row).getByText("Đơn vị xét duyệt")).toBeInTheDocument();
     expect(within(row).getByText("Hoàn tất")).toBeInTheDocument();
   });
 
@@ -78,12 +78,12 @@ describe("WorkflowSim step row", () => {
 
     let step = activeStep();
     expect(within(step).getByText("Duyệt")).toBeInTheDocument();
-    expect(within(step).getByText("Bác sĩ bệnh viện")).toBeInTheDocument();
+    expect(within(step).getByText("Người xét duyệt")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Duyệt" }));
     step = activeStep();
     expect(within(step).getByText("Tiếp nhận")).toBeInTheDocument();
-    expect(within(step).getByText("Bệnh viện")).toBeInTheDocument();
+    expect(within(step).getByText("Đơn vị xét duyệt")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Duyệt" }));
     expect(

@@ -4,14 +4,14 @@
 <definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
              xmlns:flowable="http://flowable.org/bpmn"
              targetNamespace="https://junctura.invalid/core/workflows">
-  <process id="junctura_chuyen_tuyen" name="Chuyển tuyến bệnh nhân" isExecutable="true">
+  <process id="junctura_phe_duyet_yeu_cau" name="Phê duyệt yêu cầu" isExecutable="true">
     <startEvent id="start" />
     <sequenceFlow id="to_tiep_nhan" sourceRef="start" targetRef="tiep_nhan" />
-    <userTask id="tiep_nhan" name="Tiếp nhận ở Trạm y tế" flowable:candidateGroups="tram-y-te" />
-    <sequenceFlow id="to_bac_si" sourceRef="tiep_nhan" targetRef="bac_si_duyet" />
-    <userTask id="bac_si_duyet" name="Bác sĩ bệnh viện duyệt" flowable:candidateGroups="benh-vien" />
-    <sequenceFlow id="to_hoan_tat" sourceRef="bac_si_duyet" targetRef="hoan_tat" />
-    <userTask id="hoan_tat" name="Hoàn tất" flowable:candidateGroups="benh-vien" />
+    <userTask id="tiep_nhan" name="Tiếp nhận yêu cầu" flowable:candidateGroups="don-vi-tiep-nhan" />
+    <sequenceFlow id="to_xet_duyet" sourceRef="tiep_nhan" targetRef="xet_duyet" />
+    <userTask id="xet_duyet" name="Xét duyệt" flowable:candidateGroups="don-vi-xet-duyet" />
+    <sequenceFlow id="to_hoan_tat" sourceRef="xet_duyet" targetRef="hoan_tat" />
+    <userTask id="hoan_tat" name="Hoàn tất" flowable:candidateGroups="don-vi-xet-duyet" />
     <sequenceFlow id="to_end" sourceRef="hoan_tat" targetRef="end" />
     <endEvent id="end" />
   </process>

@@ -306,7 +306,7 @@ The workflow list accepts only `limit` (1–100, default 20) and
 `400`. It reads Flowable history scoped to the caller tenant, excludes the
 internal `junctura_c4a_single` definition, and returns the active task name and
 candidate groups for running executions. `title` is a safe business label built
-only from the record code and workflow kind; patient names, identifiers, record
+only from the record code and workflow kind; personal names, identifiers, record
 contents and workflow variables are not included in the list response.
 
 The workflow summary is a strictly read-only dashboard. It reads the three
@@ -314,11 +314,11 @@ business BPMN definitions shipped in `src/modules/workflow/definitions/`, their
 named user tasks and candidate groups, then aggregates tenant-scoped Flowable
 history into running, completed and cancelled counts. `steps` de-duplicates
 names, so a repeated “Hoàn tất” task appears once, and the end event is not a
-step. The owning product is a reviewed code-level declaration: Chuyển tuyến
-bệnh nhân → Trạm y tế, Xác minh đơn thuốc → Nhà thuốc, Xác minh chi phí bảo hiểm
-→ Bảo hiểm. Other installed non-technical definitions, and definitions that only
+step. The owning product is a reviewed code-level declaration: Phê duyệt
+yêu cầu → Đơn vị tiếp nhận, Xác minh hồ sơ → Đơn vị đề nghị, Đối soát chứng từ
+→ Đơn vị đối soát. Other installed non-technical definitions, and definitions that only
 exist in history, are returned with `application: null` rather than guessed.
-`cancelled` is the only unsuccessful outcome; the summary never returns patient
+`cancelled` is the only unsuccessful outcome; the summary never returns personal
 data, variables, record codes or task IDs and cannot start, complete, approve or
 stop a workflow. The technical `junctura_checkpoint` fixture is marked
 `technical: true` in code (display name “Kiểm tra kỹ thuật”) and, together with

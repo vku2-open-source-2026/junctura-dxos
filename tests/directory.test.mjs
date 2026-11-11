@@ -32,11 +32,11 @@ const organizations = {
     name: "tenant-a",
     kind: "platform",
     children: [
-      { id: appId, name: "Trạm y tế", kind: "application", children: [] },
+      { id: appId, name: "Đơn vị tiếp nhận", kind: "application", children: [] },
     ],
   },
   relations: [
-    { from: appId, to: "22222222-2222-4222-8222-222222222222", label: "Tra cứu bệnh nhân" },
+    { from: appId, to: "22222222-2222-4222-8222-222222222222", label: "Tra cứu hồ sơ" },
   ],
   truncated: false,
 };

@@ -8,6 +8,15 @@ All notable changes to Junctura are recorded here. Versions follow
 
 ## Unreleased
 
+- **Domain-neutral workflow samples (issue #28):** the three medical BPMN
+  workflows in `src/modules/workflow/definitions/` are replaced by "Phê duyệt
+  yêu cầu", "Xác minh hồ sơ" and "Đối soát chứng từ" (each has three named steps
+  assigned to a unit). `workflow.mjs`, `summary.mjs`, the Console diagrams and
+  i18n (vi/en), the API docs and the tests use the new process keys
+  (`junctura_phe_duyet_yeu_cau`, `junctura_xac_minh_ho_so`,
+  `junctura_doi_soat_chung_tu`). Workflow behavior is unchanged; Layer 1 no longer
+  carries medical terms or data.
+
 - **Layer 1 no longer seeds health data (removed):** `npm run seed:health`, its
   `scripts/lib/seed-health-*` helpers and tests, and `npm run demo:seed` are gone.
   Layer 1 stays domain-neutral; the health scenario (applications, capabilities,

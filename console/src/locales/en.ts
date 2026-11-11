@@ -359,7 +359,7 @@ const enDocsSections: typeof vi.docs.sections = {
     "blocks": [
       {
         "kind": "paragraph",
-        "text": "A student or patient can allow an application to use their data for one purpose, until a deadline, and withdraw at any time."
+        "text": "A student or user can allow an application to use their data for one purpose, until a deadline, and withdraw at any time."
       },
       {
         "kind": "list",
@@ -1847,9 +1847,10 @@ export const en: typeof vi = {
     "permissionDeniedTitle": "Data overview permission required",
     "permissionDeniedDesc": "This account needs audit.read to view aggregate application data.",
     "collectionNames": {
-      "benh-nhan": "Patients",
-      "chuyen-tuyen": "Referrals",
-      "don-thuoc": "Prescriptions"
+      "nguoi-nop": "Submitters",
+      "ho-so": "Records",
+      "yeu-cau": "Requests",
+      "chung-tu": "Documents"
     }
   },
   "files": {
@@ -2081,39 +2082,39 @@ export const en: typeof vi = {
       "junctura_checkpoint": "Technical check",
       "application_onboarding": "Application registration approval",
       "scholarship_review": "Scholarship review",
-      "junctura_chuyen_tuyen": "Patient referral",
-      "junctura_xac_minh_don_thuoc": "Prescription verification",
-      "junctura_xac_minh_chi_phi": "Insurance cost verification"
+      "junctura_phe_duyet_yeu_cau": "Request approval",
+      "junctura_xac_minh_ho_so": "Record verification",
+      "junctura_doi_soat_chung_tu": "Document reconciliation"
     },
     "unknownDefinition": "Business workflow",
     "diagrams": {
       "complete": "Complete",
       "roles": {
         "owner": "Owner",
-        "healthStation": "Health station",
-        "hospitalDoctor": "Hospital doctor",
-        "hospital": "Hospital",
-        "pharmacy": "Pharmacy",
-        "insurance": "Insurance"
+        "intakeUnit": "Intake unit",
+        "reviewer": "Reviewer",
+        "reviewUnit": "Review unit",
+        "requestUnit": "Requesting unit",
+        "reconcileUnit": "Reconciliation unit"
       },
       "groups": {
-        "tram-y-te": "Health station",
-        "benh-vien": "Hospital",
-        "nha-thuoc": "Pharmacy",
-        "bao-hiem": "Insurance"
+        "don-vi-tiep-nhan": "Intake unit",
+        "don-vi-xet-duyet": "Review unit",
+        "don-vi-de-nghi": "Requesting unit",
+        "don-vi-doi-soat": "Reconciliation unit"
       },
       "labels": {
         "checkpointTask": "Technical check",
         "scholarshipIntake": "Submit application",
         "scholarshipDecision": "Approve",
         "scholarshipReceive": "Receive",
-        "chuyenTuyenIntake": "Receive at health station",
-        "chuyenTuyenReview": "Hospital doctor approves",
-        "chuyenTuyenComplete": "Complete",
-        "pharmacySubmit": "Pharmacy submits",
-        "insuranceSubmit": "Insurance submits",
-        "hospitalConfirm": "Hospital confirms",
-        "hospitalComplete": "Complete"
+        "approvalIntake": "Receive request",
+        "approvalReview": "Review",
+        "approvalComplete": "Complete",
+        "verifySubmit": "Submit record",
+        "verifyConfirm": "Confirm",
+        "verifyComplete": "Complete",
+        "reconcileSubmit": "Submit document"
       }
     }
   },

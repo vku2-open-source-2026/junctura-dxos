@@ -10,7 +10,7 @@ import { HttpError, json } from "../src/platform/http/http.mjs";
 
 const CONSENT = "dcf6b718-7d02-41cc-8a2b-bb4aa9026d71";
 const EXECUTION = "aaaaaaaa-0000-4000-8000-000000000005";
-let identity = { tenantId: "tenant-a", subject: "patient-1", issuer: "https://id.example", clientId: "portal", roles: ["core-reader"] };
+let identity = { tenantId: "tenant-a", subject: "subject-1", issuer: "https://id.example", clientId: "portal", roles: ["core-reader"] };
 let reply = () => ({ status: 200, value: { consents: [] } });
 let seen = [];
 let data, core, base;
@@ -45,7 +45,7 @@ test("consent routes are recognised exactly and the API module loads them", () =
 test("people list, create and revoke only their own consents through the subject role", async () => {
   seen = [];
   assert.equal((await call("/v1/me/consents")).status, 200);
-  const proposal = { consumerAppId: "11111111-1111-4111-8111-111111111111", capabilityId: "urn:junctura:capability:22222222-2222-4222-8222-222222222222:vaccination", purposes: ["treatment"], expiresAt: "2026-12-01T00:00:00.000Z" };
+  const proposal = { consumerAppId: "11111111-1111-4111-8111-111111111111", capabilityId: "urn:junctura:capability:22222222-2222-4222-8222-222222222222:vaccination", purposes: ["review"], expiresAt: "2026-12-01T00:00:00.000Z" };
   reply = () => ({ status: 201, value: { consentId: CONSENT, state: "active" } });
   const created = await call("/v1/me/consents", "POST", proposal);
   assert.equal(created.status, 201);
@@ -54,9 +54,9 @@ test("people list, create and revoke only their own consents through the subject
   reply = () => ({ status: 200, value: { consentId: CONSENT, state: "revoked" } });
   assert.equal((await call(`/v1/me/consents/${CONSENT}/revoke`, "POST", {})).status, 200);
   assert.deepEqual(seen.map(item => [item.url, item.role, item.sub, item.body.operation]), [
-    ["/rpc/subject_consent", "junctura_subject_api", "patient-1", "list"],
-    ["/rpc/subject_consent", "junctura_subject_api", "patient-1", "create"],
-    ["/rpc/subject_consent", "junctura_subject_api", "patient-1", "revoke"],
+    ["/rpc/subject_consent", "junctura_subject_api", "subject-1", "list"],
+    ["/rpc/subject_consent", "junctura_subject_api", "subject-1", "create"],
+    ["/rpc/subject_consent", "junctura_subject_api", "subject-1", "revoke"],
   ]);
   assert.deepEqual(seen[1].body.payload, proposal);
   assert.deepEqual(seen[2].body.payload, { consentId: CONSENT });
@@ -91,10 +91,10 @@ test("emergency reviews use the trust role and need a writer to decide", async (
 });
 
 test("emergency context needs a subject and a justification", () => {
-  assert.ok(validateExecutionContext({ purpose: "emergency_care", dataSubject: "p", emergency: true, justification: "Bệnh nhân bất tỉnh" }));
-  for (const context of [{ purpose: "emergency_care", emergency: true, justification: "Bệnh nhân bất tỉnh" },
-    { purpose: "emergency_care", dataSubject: "p", emergency: true }, { purpose: "emergency_care", dataSubject: "p", justification: "Bệnh nhân bất tỉnh" },
-    { purpose: "emergency_care", dataSubject: "p", emergency: false, justification: "Bệnh nhân bất tỉnh" },
+  assert.ok(validateExecutionContext({ purpose: "emergency_care", dataSubject: "p", emergency: true, justification: "Tình huống khẩn cấp" }));
+  for (const context of [{ purpose: "emergency_care", emergency: true, justification: "Tình huống khẩn cấp" },
+    { purpose: "emergency_care", dataSubject: "p", emergency: true }, { purpose: "emergency_care", dataSubject: "p", justification: "Tình huống khẩn cấp" },
+    { purpose: "emergency_care", dataSubject: "p", emergency: false, justification: "Tình huống khẩn cấp" },
     { purpose: "emergency_care", dataSubject: "p", emergency: true, justification: "short" }]) {
     assert.throws(() => validateExecutionContext(context), error => error.status === 422, JSON.stringify(context));
   }

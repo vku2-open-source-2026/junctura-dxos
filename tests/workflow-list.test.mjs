@@ -19,26 +19,26 @@ const executions = [
     id: "run-1",
     tenantId: "tenant-a",
     processDefinitionId: "33333333-3333-4333-8333-333333333333",
-    processDefinitionName: "Chuyển tuyến bệnh nhân",
+    processDefinitionName: "Phê duyệt yêu cầu",
     startTime: "2026-02-01T08:00:00.000Z",
     endTime: null,
     deleteReason: null,
     variables: [{ name: "input", value: JSON.stringify({
-      loai: "chuyen-tuyen", ma_ho_so: "CT-0001", ho_ten_benh_nhan: "Nguyễn Văn Bí Mật",
-      ma_benh_nhan: "BN-0001",
+      loai: "phe-duyet-yeu-cau", ma_ho_so: "PD-0001", ho_ten_nguoi_nop: "Nguyễn Văn Bí Mật",
+      ma_nguoi_nop: "NN-0001",
     }) }],
   },
   {
     id: "done-1",
     tenantId: "tenant-a",
-    processDefinitionId: "junctura_xac_minh_don_thuoc:1:1",
-    processDefinitionKey: "junctura_xac_minh_don_thuoc",
-    processDefinitionName: "Xác minh đơn thuốc",
+    processDefinitionId: "junctura_xac_minh_ho_so:1:1",
+    processDefinitionKey: "junctura_xac_minh_ho_so",
+    processDefinitionName: "Xác minh hồ sơ",
     processDefinitionVersion: 1,
     startTime: "2026-02-02T08:00:00.000Z",
     endTime: "2026-02-02T09:00:00.000Z",
     deleteReason: null,
-    variables: [{ name: "input", value: JSON.stringify({ loai: "xac-minh-don-thuoc", ma_ho_so: "DT-0002" }) }],
+    variables: [{ name: "input", value: JSON.stringify({ loai: "xac-minh-ho-so", ma_ho_so: "HS-0002" }) }],
   },
   {
     id: "cancel-1",
@@ -89,8 +89,8 @@ before(async () => {
     if (url.pathname === "/repository/process-definitions") {
       response.writeHead(200, { "Content-Type": "application/json" });
       return response.end(JSON.stringify({ data: [
-        { id: "33333333-3333-4333-8333-333333333333", key: "junctura_chuyen_tuyen", name: "Chuyển tuyến bệnh nhân", version: 1 },
-        { id: "junctura_xac_minh_don_thuoc:1:1", key: "junctura_xac_minh_don_thuoc", name: "Xác minh đơn thuốc", version: 1 },
+        { id: "33333333-3333-4333-8333-333333333333", key: "junctura_phe_duyet_yeu_cau", name: "Phê duyệt yêu cầu", version: 1 },
+        { id: "junctura_xac_minh_ho_so:1:1", key: "junctura_xac_minh_ho_so", name: "Xác minh hồ sơ", version: 1 },
         { id: "junctura_c4a_single:1:1", key: "junctura_c4a_single", name: "Internal", version: 1 },
       ] }));
     }
@@ -101,13 +101,13 @@ before(async () => {
     if (url.pathname === "/runtime/tasks") {
       response.writeHead(200, { "Content-Type": "application/json" });
       return response.end(JSON.stringify({ data: [{
-        id: "task-1", name: "Bác sĩ bệnh viện duyệt", assignee: null,
+        id: "task-1", name: "Xét duyệt", assignee: null,
         createTime: "2026-02-01T08:05:00.000Z",
       }] }));
     }
     if (url.pathname === "/runtime/tasks/task-1/identitylinks") {
       response.writeHead(200, { "Content-Type": "application/json" });
-      return response.end(JSON.stringify([{ type: "candidate", groupId: "benh-vien" }]));
+      return response.end(JSON.stringify([{ type: "candidate", groupId: "don-vi-xet-duyet" }]));
     }
     response.writeHead(404);
     response.end();
@@ -143,19 +143,19 @@ test("list executions requires audit.read and returns safe business summaries", 
   const [running, completed] = body.items;
   assert.equal(running.id, "run-1");
   assert.equal(running.status, "running");
-  assert.equal(running.definition.name, "Chuyển tuyến bệnh nhân");
-  assert.equal(running.definition.key, "junctura_chuyen_tuyen");
+  assert.equal(running.definition.name, "Phê duyệt yêu cầu");
+  assert.equal(running.definition.key, "junctura_phe_duyet_yeu_cau");
   assert.equal(running.definition.version, 1);
-  assert.equal(running.title, "Chuyển tuyến CT-0001");
+  assert.equal(running.title, "Phê duyệt yêu cầu PD-0001");
   assert.deepEqual(running.currentStep, {
-    name: "Bác sĩ bệnh viện duyệt", assignee: null, groups: ["benh-vien"],
+    name: "Xét duyệt", assignee: null, groups: ["don-vi-xet-duyet"],
   });
   assert.equal(running.updatedAt, "2026-02-01T08:05:00.000Z");
   assert.equal(completed.status, "completed");
-  assert.equal(completed.title, "Xác minh đơn thuốc DT-0002");
+  assert.equal(completed.title, "Xác minh hồ sơ HS-0002");
   assert.equal(completed.currentStep, null);
   const text = JSON.stringify(body);
-  for (const secret of ["Nguyễn Văn Bí Mật", "BN-0001", "internal-1"]) {
+  for (const secret of ["Nguyễn Văn Bí Mật", "NN-0001", "internal-1"]) {
     assert.ok(!text.includes(secret), `${secret} must not be returned`);
   }
 });
@@ -191,7 +191,7 @@ test("permission, database and engine failures fail closed", async () => {
   engineDown = false;
 });
 
-test("workflow summary aggregates real definitions and counts without patient data", async () => {
+test("workflow summary aggregates real definitions and counts without case data", async () => {
   access = { status: 200, value: { allowed: true } };
   engineDown = false;
   const response = await get("/v1/workflows/summary");
@@ -202,21 +202,21 @@ test("workflow summary aggregates real definitions and counts without patient da
   const byKey = new Map(body.definitions.map((item) => [item.key, item]));
   assert.equal(byKey.has("junctura_checkpoint"), false);
   assert.equal(byKey.has("junctura_c4a_single"), false);
-  const referral = byKey.get("junctura_chuyen_tuyen");
-  assert.deepEqual(referral.application, { id: "tram-y-te", name: "Trạm y tế" });
-  assert.deepEqual(referral.steps.map((step) => [step.name, step.owner]), [
-    ["Tiếp nhận ở Trạm y tế", "Trạm y tế"],
-    ["Bác sĩ bệnh viện duyệt", "Bệnh viện"],
-    ["Hoàn tất", "Bệnh viện"],
+  const approval = byKey.get("junctura_phe_duyet_yeu_cau");
+  assert.deepEqual(approval.application, { id: "don-vi-tiep-nhan", name: "Đơn vị tiếp nhận" });
+  assert.deepEqual(approval.steps.map((step) => [step.name, step.owner]), [
+    ["Tiếp nhận yêu cầu", "Đơn vị tiếp nhận"],
+    ["Xét duyệt", "Đơn vị xét duyệt"],
+    ["Hoàn tất", "Đơn vị xét duyệt"],
   ]);
-  assert.deepEqual(referral.counts, { running: 1, completed: 0, cancelled: 0 });
-  assert.equal(referral.updatedAt, "2026-02-01T08:00:00.000Z");
-  assert.deepEqual(byKey.get("junctura_xac_minh_don_thuoc").counts, { running: 0, completed: 1, cancelled: 0 });
-  assert.deepEqual(byKey.get("junctura_xac_minh_chi_phi").counts, { running: 0, completed: 0, cancelled: 0 });
+  assert.deepEqual(approval.counts, { running: 1, completed: 0, cancelled: 0 });
+  assert.equal(approval.updatedAt, "2026-02-01T08:00:00.000Z");
+  assert.deepEqual(byKey.get("junctura_xac_minh_ho_so").counts, { running: 0, completed: 1, cancelled: 0 });
+  assert.deepEqual(byKey.get("junctura_doi_soat_chung_tu").counts, { running: 0, completed: 0, cancelled: 0 });
   assert.deepEqual(byKey.get("junctura_missing").counts, { running: 0, completed: 0, cancelled: 1 });
   assert.equal(byKey.get("junctura_missing").application, null);
   const text = JSON.stringify(body);
-  for (const secret of ["Nguyễn Văn Bí Mật", "BN-0001", "internal-1"]) {
+  for (const secret of ["Nguyễn Văn Bí Mật", "NN-0001", "internal-1"]) {
     assert.ok(!text.includes(secret), `${secret} must not be returned`);
   }
 });

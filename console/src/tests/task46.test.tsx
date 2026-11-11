@@ -38,12 +38,12 @@ function summaryFixture() {
   return {
     applications: [
       {
-        id: "app-health",
-        name: "Sổ sức khỏe",
+        id: "app-records",
+        name: "Sổ hồ sơ",
         state: "active",
         collections: [
-          { name: "benh-nhan", records: 40, updatedAt: "2026-11-10T00:28:20.543Z" },
-          { name: "don-thuoc", records: 50, updatedAt: "2026-11-10T00:28:23.476Z" },
+          { name: "nguoi-nop", records: 40, updatedAt: "2026-11-10T00:28:20.543Z" },
+          { name: "chung-tu", records: 50, updatedAt: "2026-11-10T00:28:23.476Z" },
         ],
         files: {
           count: 8,
@@ -62,8 +62,8 @@ function summaryFixture() {
     ],
     totals: {
       collections: [
-        { name: "benh-nhan", records: 40, updatedAt: "2026-11-10T05:16:58.689Z" },
-        { name: "don-thuoc", records: 50, updatedAt: "2026-11-10T05:17:01.119Z" },
+        { name: "nguoi-nop", records: 40, updatedAt: "2026-11-10T05:16:58.689Z" },
+        { name: "chung-tu", records: 50, updatedAt: "2026-11-10T05:17:01.119Z" },
       ],
       files: {
         count: 8,
@@ -77,10 +77,10 @@ function summaryFixture() {
 
 function collectionsFixture() {
   return {
-    application: { id: "app-health", name: "Sổ sức khỏe" },
+    application: { id: "app-records", name: "Sổ hồ sơ" },
     collections: [
       {
-        name: "benh-nhan",
+        name: "nguoi-nop",
         records: 40,
         updatedAt: "2026-11-10T00:28:20.543Z",
         fields: [
@@ -97,7 +97,7 @@ function collectionsFixture() {
 
 function filesFixture() {
   const root = {
-    application: { id: "app-health", name: "Sổ sức khỏe" },
+    application: { id: "app-records", name: "Sổ hồ sơ" },
     path: "/",
     folders: [
       {
@@ -119,7 +119,7 @@ function filesFixture() {
     truncated: false,
   };
   const folder = {
-    application: { id: "app-health", name: "Sổ sức khỏe" },
+    application: { id: "app-records", name: "Sổ hồ sơ" },
     path: "/ho-so",
     folders: [],
     files: [
@@ -150,14 +150,14 @@ function orgFixture() {
       name: "tenant-test",
       kind: "platform",
       children: [
-        { id: "unit-a", name: "Trạm y tế xã", kind: "application", children: [] },
-        { id: "unit-b", name: "Bệnh viện", kind: "organization", children: [] },
-        { id: "unit-c", name: "Nhà thuốc", kind: "application", children: [] },
+        { id: "unit-a", name: "Đơn vị tiếp nhận", kind: "application", children: [] },
+        { id: "unit-b", name: "Đơn vị xét duyệt", kind: "organization", children: [] },
+        { id: "unit-c", name: "Đơn vị đề nghị", kind: "application", children: [] },
       ],
     },
     relations: [
-      { from: "unit-a", to: "unit-b", label: "Tóm tắt chuyển tuyến" },
-      { from: "unit-b", to: "unit-c", label: "Đơn thuốc" },
+      { from: "unit-a", to: "unit-b", label: "Tóm tắt hồ sơ" },
+      { from: "unit-b", to: "unit-c", label: "Chứng từ" },
     ],
     truncated: false,
   };
@@ -179,7 +179,7 @@ describe("Task 46 — collection structure", () => {
 
     fireEvent.click(
       await screen.findByRole("button", {
-        name: viStrings.records.viewStructure.replace("{name}", "Bệnh nhân"),
+        name: viStrings.records.viewStructure.replace("{name}", "Người nộp"),
       })
     );
 
@@ -204,7 +204,7 @@ describe("Task 46 — collection structure", () => {
     ).toBeInTheDocument();
     expect(
       screen.getByText(
-        viStrings.records.structureBelongs.replace("{app}", "Sổ sức khỏe")
+        viStrings.records.structureBelongs.replace("{app}", "Sổ hồ sơ")
       )
     ).toBeInTheDocument();
     expect(
@@ -231,7 +231,7 @@ describe("Task 46 — collection structure", () => {
     await openScreen("records", viStrings.records.title);
     fireEvent.click(
       await screen.findByRole("button", {
-        name: viStrings.records.viewStructure.replace("{name}", "Bệnh nhân"),
+        name: viStrings.records.viewStructure.replace("{name}", "Người nộp"),
       })
     );
     expect(
@@ -264,7 +264,7 @@ describe("Task 46 — folder file manager", () => {
     ]);
     await openScreen("files", viStrings.files.title);
 
-    expect((await screen.findAllByText("Sổ sức khỏe")).length).toBeGreaterThan(
+    expect((await screen.findAllByText("Sổ hồ sơ")).length).toBeGreaterThan(
       0
     );
     expect(await screen.findByText("ba…01.txt")).toBeInTheDocument();
@@ -354,10 +354,10 @@ describe("Task 46 — organisation layout and recovery", () => {
         screen.getByText(viStrings.orgs.relationsTitle)
       ).toBeInTheDocument();
       expect(
-        screen.getByRole("button", { name: "Trạm y tế xã" })
+        screen.getByRole("button", { name: "Đơn vị tiếp nhận" })
       ).toBeInTheDocument();
       expect(
-        screen.getByText("Trạm y tế xã → Bệnh viện")
+        screen.getByText("Đơn vị tiếp nhận → Đơn vị xét duyệt")
       ).toBeInTheDocument();
     }
   );
@@ -371,7 +371,7 @@ describe("Task 46 — organisation layout and recovery", () => {
     ]);
     await openScreen("orgs", viStrings.orgs.title);
 
-    const unit = screen.getByRole("button", { name: "Trạm y tế xã" });
+    const unit = screen.getByRole("button", { name: "Đơn vị tiếp nhận" });
     fireEvent.click(unit);
 
     const note = await screen.findByRole("dialog", {
@@ -379,7 +379,7 @@ describe("Task 46 — organisation layout and recovery", () => {
     });
     expect(within(note).getByText(viStrings.orgs.kindApplication)).toBeInTheDocument();
     expect(
-      within(note).getByText("Trạm y tế xã → Bệnh viện")
+      within(note).getByText("Đơn vị tiếp nhận → Đơn vị xét duyệt")
     ).toBeInTheDocument();
 
     fireEvent.keyDown(document, { key: "Escape" });
