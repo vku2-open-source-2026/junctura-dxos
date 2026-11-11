@@ -3,7 +3,7 @@
 
 export const BRAND = {
   name: "Junctura Console",
-  version: "0.1.0",
+  version: "0.2.0",
   subtitle: "The Control Center for Junctura DX-OS",
   layer: "Layer-1 Operational Control Plane",
   githubUrl: "https://github.com/vku2-open-source-2026/junctura-dxos",

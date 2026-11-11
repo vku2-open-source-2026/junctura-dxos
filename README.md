@@ -10,7 +10,7 @@
 **Nền tảng lõi nguồn mở để các ứng dụng chia sẻ dữ liệu và năng lực với nhau — có cấp quyền, thu hồi và kiểm chứng.**
 
 [![Foundation checks](https://github.com/vku2-open-source-2026/junctura-dxos/actions/workflows/ci.yml/badge.svg)](https://github.com/vku2-open-source-2026/junctura-dxos/actions/workflows/ci.yml)
-[![Release](https://img.shields.io/badge/release-v0.1.0-176B80.svg)](https://github.com/vku2-open-source-2026/junctura-dxos/releases)
+[![Release](https://img.shields.io/badge/release-v0.2.0-176B80.svg)](https://github.com/vku2-open-source-2026/junctura-dxos/releases)
 [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 [![REUSE compliant](https://img.shields.io/badge/REUSE-compliant-18877A.svg)](REUSE.toml)
 
@@ -143,7 +143,7 @@ npm run local:up     # build và khởi động toàn bộ hệ thống
 npm run healthcheck  # kiểm tra các dịch vụ đã sẵn sàng
 ```
 
-Hoặc dùng bản phát hành: tải `junctura-0.1.0.tar.gz` từ [Releases](https://github.com/vku2-open-source-2026/junctura-dxos/releases), kiểm tra bằng `sha256sum -c junctura-0.1.0.tar.gz.sha256`, giải nén (`tar -xzf junctura-0.1.0.tar.gz`), vào thư mục `junctura-0.1.0` rồi chạy ba lệnh trên từ `npm run setup`.
+Hoặc dùng bản phát hành: tải `junctura-0.2.0.tar.gz` từ [Releases](https://github.com/vku2-open-source-2026/junctura-dxos/releases), kiểm tra bằng `sha256sum -c junctura-0.2.0.tar.gz.sha256`, giải nén (`tar -xzf junctura-0.2.0.tar.gz`), vào thư mục `junctura-0.2.0` rồi chạy ba lệnh trên từ `npm run setup`.
 
 | Địa chỉ | Dịch vụ |
 | --- | --- |
@@ -280,7 +280,8 @@ npm run test:integration           # kiểm thử tích hợp
 - [x] **v0.1.0 — Tầng 1:** Foundation, chia sẻ năng lực (Registry, Trust, Invocation, Composition), kiểm toán, sao lưu/khôi phục, CI.
 - [x] Nhật ký kiểm toán niêm phong bằng chuỗi băm SHA-256, kiểm tra toàn vẹn ngay trên Console.
 - [x] Sơ đồ tin cậy (Trust Graph) giữa các ứng dụng trên Console, thu hồi quyền ngay trên sơ đồ.
-- [ ] **v0.2.0 — Tầng 2:** các ứng dụng minh họa thuộc không gian H-P-D-I, chia sẻ dữ liệu và năng lực qua Junctura.
+- [x] **v0.2.0 — Console quản trị:** Console đọc hoàn toàn từ API thật (nhật ký kiểm toán, lưu lượng, người dùng, tổ chức, dữ liệu, tệp, quy trình), đăng nhập qua Keycloak.
+- [ ] **v0.3.0 — Tầng 2:** các ứng dụng minh họa thuộc không gian H-P-D-I, chia sẻ dữ liệu và năng lực qua Junctura.
 - [ ] Giám sát hệ thống (Prometheus, Grafana) và triển khai thử nghiệm trên Internet.
 
 ## Đóng góp
