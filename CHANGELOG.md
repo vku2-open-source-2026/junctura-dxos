@@ -8,6 +8,13 @@ All notable changes to Junctura are recorded here. Versions follow
 
 ## Unreleased
 
+- **Plainer Console text (issue #29):** the Vietnamese and English Console text drops
+  unexplained jargon ("tenant", "token", "idempotency key", "digest", ...) in
+  favour of one shared set of terms, documented in
+  [docs/CONSOLE_GLOSSARY.md](docs/CONSOLE_GLOSSARY.md). Developer areas (API
+  reference, security details) keep technical names. No behavior or i18n key
+  changes.
+
 - **Domain-neutral workflow samples (issue #28):** the three medical BPMN
   workflows in `src/modules/workflow/definitions/` are replaced by "Phê duyệt
   yêu cầu", "Xác minh hồ sơ" and "Đối soát chứng từ" (each has three named steps

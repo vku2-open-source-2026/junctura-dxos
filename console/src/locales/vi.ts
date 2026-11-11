@@ -74,7 +74,7 @@ const docsSectionsVi: Record<DocsSectionId, DocSection> = {
       },
       {
         "kind": "paragraph",
-        "text": "Dùng một backend đã đăng ký và một ứng dụng thứ hai làm bên nhận quyền. Giữ cả hai bí mật ngoài ảnh chụp, commit và mã trình duyệt."
+        "text": "Dùng một ứng dụng đã đăng ký (phần máy chủ) và một ứng dụng thứ hai làm bên nhận quyền. Giữ cả hai bí mật ngoài ảnh chụp, commit và mã trình duyệt."
       },
       {
         "kind": "code",
@@ -83,7 +83,7 @@ const docsSectionsVi: Record<DocsSectionId, DocSection> = {
       },
       {
         "kind": "paragraph",
-        "text": "Ví dụ chỉ gọi Gateway công khai. Nó chứng minh định danh, tạo và đọc bản ghi riêng, tải lên và tải xuống tệp riêng, một workflow kỹ thuật, chia sẻ đọc có hạn và một yêu cầu bị từ chối từ ứng dụng khác trước khi chia sẻ."
+        "text": "Ví dụ chỉ gọi cổng API công khai. Ví dụ lần lượt: xác nhận danh tính, tạo và đọc bản ghi riêng, tải tệp lên và tải xuống, chạy một quy trình thử, chia sẻ quyền đọc có thời hạn, và cho thấy ứng dụng khác bị từ chối khi chưa được chia sẻ."
       },
       {
         "kind": "heading",
@@ -92,10 +92,10 @@ const docsSectionsVi: Record<DocsSectionId, DocSection> = {
       {
         "kind": "list",
         "items": [
-          "Xác thực client-credentials với OIDC provider local.",
-          "Tenant và vai trò đã xác minh từ GET /v1/identity.",
+          "Đăng nhập bằng tài khoản ứng dụng với hệ thống đăng nhập chạy trên máy bạn.",
+          "Tổ chức và vai trò đã được xác minh (GET /v1/identity).",
           "Quyền sở hữu bản ghi và tệp riêng của ứng dụng dưới /v2.",
-          "Bắt đầu và hoàn tất workflow idempotent.",
+          "Bắt đầu và hoàn tất quy trình, gửi lại không bị chạy trùng.",
           "Chia sẻ đọc tường minh và yêu cầu bị từ chối từ ứng dụng khác."
         ]
       },
@@ -107,11 +107,11 @@ const docsSectionsVi: Record<DocsSectionId, DocSection> = {
         "kind": "list",
         "items": [
           "Không khởi động được: chạy npm run doctor và npm run local:status; giữ nguyên .env và volume dữ liệu.",
-          "401/403: thiếu token, client bị tắt hoặc ứng dụng đang tạm ngưng.",
-          "403 verified_client_required: OIDC client chưa được đăng ký làm backend.",
-          "404 trên tài nguyên đã chia sẻ: chia sẻ hết hạn, bị thu hồi hoặc khác tenant.",
-          "409 khi bắt đầu workflow: idempotency key bị dùng lại với dữ liệu khác.",
-          "503: một provider chưa sẵn sàng; kiểm tra /ready trước khi thử lại thao tác ghi."
+          "401/403: thiếu mã truy cập, ứng dụng bị tắt hoặc đang tạm ngưng.",
+          "403 verified_client_required: ứng dụng đăng nhập này chưa được đăng ký làm phần máy chủ.",
+          "404 với mục được chia sẻ: lượt chia sẻ đã hết hạn, bị thu hồi hoặc thuộc tổ chức khác.",
+          "409 khi bắt đầu quy trình: mã chống gửi trùng đã được dùng lại với dữ liệu khác.",
+          "503: một dịch vụ chưa sẵn sàng; kiểm tra /ready trước khi thử lại thao tác ghi."
         ]
       },
       {
@@ -150,7 +150,7 @@ const docsSectionsVi: Record<DocsSectionId, DocSection> = {
             "path": "/blob/main/docs/RESOURCE_AUTHORIZATION.md"
           },
           {
-            "label": "Hợp đồng Foundation API",
+            "label": "Hợp đồng API nền tảng",
             "path": "/blob/main/docs/CORE_API.md"
           }
         ]
@@ -417,7 +417,7 @@ const docsSectionsVi: Record<DocsSectionId, DocSection> = {
   },
   "api": {
     "title": "Tham chiếu API",
-    "intro": "Tra cứu endpoint theo nhóm chức năng, xem tham số, quyền cần, ví dụ cURL và phản hồi ví dụ. Dữ liệu lấy trực tiếp từ hợp đồng OpenAPI đã công bố.",
+    "intro": "Tra cứu chức năng API theo nhóm, xem tham số, quyền cần, ví dụ cURL và phản hồi ví dụ. Dữ liệu lấy trực tiếp từ hợp đồng OpenAPI đã công bố.",
     "blocks": []
   },
   "tryIt": {
@@ -427,7 +427,7 @@ const docsSectionsVi: Record<DocsSectionId, DocSection> = {
       {
         "kind": "callout",
         "title": "Chế độ Trực tiếp",
-        "text": "Khi đang ở chế độ Trực tiếp, dải màu vàng dưới thanh trên nhắc rằng bạn đang xem dữ liệu trực tiếp. Bật Trực tiếp trên thanh trên khi đã kết nối Gateway thật."
+        "text": "Khi đang ở chế độ Trực tiếp, dải màu vàng dưới thanh trên nhắc rằng bạn đang xem dữ liệu trực tiếp. Bật Trực tiếp trên thanh trên khi đã kết nối cổng API thật."
       },
       {
         "kind": "heading",
@@ -435,7 +435,7 @@ const docsSectionsVi: Record<DocsSectionId, DocSection> = {
       },
       {
         "kind": "paragraph",
-        "text": "Mở trang Tệp, chọn Tải tệp lên và đặt tên tệp có chữ “eicar”, ví dụ eicar-test-signature.txt. bộ quét mã độc sẽ từ chối tệp và ghi nhận vào trang Tệp bị chặn trong cùng phiên."
+        "text": "Mở trang Tệp, chọn Tải tệp lên và đặt tên tệp có chữ “eicar”, ví dụ eicar-test-signature.txt. Bộ quét mã độc sẽ từ chối tệp và ghi nhận vào trang Tệp bị chặn trong cùng phiên."
       },
       {
         "kind": "heading",
@@ -454,7 +454,7 @@ const docsSectionsVi: Record<DocsSectionId, DocSection> = {
         "items": [
           "Thao tác trên dữ liệu trực tiếp chỉ đổi trong bộ nhớ phiên và mất khi tải lại trang.",
           "Không có dữ liệu trực tiếp nào được ghi vào localStorage.",
-          "Chức năng đã có API thật vẫn gọi qua Gateway ở cả hai chế độ."
+          "Chức năng đã có API thật vẫn gọi qua cổng API ở cả hai chế độ."
         ]
       }
     ]
@@ -496,7 +496,7 @@ const docsSectionsVi: Record<DocsSectionId, DocSection> = {
           },
           {
             "question": "Tài liệu API có thử gọi trực tiếp được không?",
-            "answer": "Trang Tham chiếu API hiển thị hợp đồng thật và ví dụ cURL có thể sao chép. Để gọi thật, hãy dùng token hợp lệ từ môi trường của bạn và chạy lệnh trong terminal."
+            "answer": "Trang Tham chiếu API hiển thị hợp đồng thật và ví dụ cURL có thể sao chép. Để gọi thật, hãy dùng mã truy cập hợp lệ từ môi trường của bạn và chạy lệnh trong cửa sổ dòng lệnh."
           }
         ]
       }
@@ -511,7 +511,7 @@ export const vi = {
     "tagline": "Một nền tảng. Nhiều ứng dụng. Năng lực kết nối.",
     "layer1Notice": "Control Plane Vận hành Layer-1 (Headless PaaS)",
     "liveMode": "KẾT NỐI TRỰC TIẾP",
-    "liveModeTooltip": "Đang truy vấn cổng Junctura Gateway đã cấu hình. Dữ liệu trực tiếp không được sử dụng.",
+    "liveModeTooltip": "Đang truy vấn cổng API Junctura đã cấu hình. Dữ liệu mẫu không được dùng.",
     "switchMode": "Chuyển chế độ",
     "refresh": "Làm mới",
     "save": "Lưu",
@@ -531,7 +531,7 @@ export const vi = {
     "error": "Lỗi",
     "retry": "Thử lại",
     "viewDocs": "Xem tài liệu",
-    "tenant": "Đơn vị/Không gian",
+    "tenant": "Tổ chức",
     "user": "Người dùng",
     "roles": "Vai trò",
     "logout": "Đăng xuất",
@@ -541,7 +541,7 @@ export const vi = {
     "unknown": "Chưa xác định",
     "unavailable": "Không khả dụng",
     "planned": "Đang phát triển (Lộ trình)",
-    "plannedNotice": "Tính năng nằm trong lộ trình kiến trúc, hiện chưa triển khai endpoint runtime.",
+    "plannedNotice": "Tính năng nằm trong lộ trình kiến trúc, hiện chưa có chức năng API chạy thật.",
     "operational": "Vận hành bình thường",
     "systemHealthy": "Tất cả thành phần phụ thuộc sẵn sàng",
     "systemDegraded": "Phát hiện thành phần suy giảm hoặc chưa phản hồi",
@@ -583,7 +583,7 @@ export const vi = {
       "description": "Mỗi sự kiện được nối với sự kiện trước, nên nếu ai đó sửa hoặc xóa thì hệ thống phát hiện được."
     },
     "tenant": {
-      "label": "Đơn vị/Không gian",
+      "label": "Tổ chức",
       "description": "Phạm vi dữ liệu riêng của một tổ chức hoặc đơn vị; các đơn vị không thấy dữ liệu của nhau."
     },
     "p95": {
@@ -669,15 +669,15 @@ export const vi = {
   "modules": {
     "dashboard": {
       "label": "Tổng quan",
-      "desc": "Số liệu vận hành, biểu đồ lưu lượng và nhật ký request."
+      "desc": "Số liệu vận hành, biểu đồ lưu lượng và nhật ký lệnh gọi."
     },
     "traffic": {
       "label": "Lưu lượng",
-      "desc": "Số request, lỗi và độ trễ theo từng phút."
+      "desc": "Số lệnh gọi, lỗi và độ trễ theo từng phút."
     },
     "requests": {
       "label": "Nhật ký request",
-      "desc": "Các request gần nhất đi qua lõi và mã trả về."
+      "desc": "Các lệnh gọi gần nhất đi qua lõi và mã kết quả trả về."
     },
     "queue": {
       "label": "Việc cần duyệt",
@@ -733,7 +733,7 @@ export const vi = {
     },
     "orgs": {
       "label": "Tổ chức",
-      "desc": "Không gian (tenant) và các đơn vị trực thuộc."
+      "desc": "Các tổ chức và đơn vị trực thuộc."
     },
     "audit": {
       "label": "Nhật ký kiểm toán",
@@ -788,11 +788,11 @@ export const vi = {
     "sections": docsSectionsVi,
     "api": {
       "title": "Tham chiếu API",
-      "subtitle": "Duyệt các thao tác Foundation và Capability đã công bố, kèm tham số, quyền cần, ví dụ cURL và phản hồi ví dụ.",
+      "subtitle": "Duyệt các thao tác nền tảng và năng lực đã công bố, kèm tham số, quyền cần, ví dụ cURL và phản hồi ví dụ.",
       "badge": "Hợp đồng thật",
       "operations": "thao tác",
-      "contractNotice": "Danh sách dưới đây được dựng từ hợp đồng Foundation API và Capability API đã công bố. Ví dụ cURL dùng Gateway local hiện tại; hãy thay token và giá trị ví dụ bằng dữ liệu của bạn.",
-      "searchPlaceholder": "Tìm theo đường dẫn, operation ID hoặc mô tả...",
+      "contractNotice": "Danh sách dưới đây được dựng từ hợp đồng API nền tảng và API năng lực đã công bố. Ví dụ cURL dùng cổng API trên máy bạn; hãy thay mã truy cập và giá trị ví dụ bằng dữ liệu của bạn.",
+      "searchPlaceholder": "Tìm theo đường dẫn, mã thao tác hoặc mô tả...",
       "tagFilter": "Lọc theo nhóm chức năng",
       "allTags": "Tất cả nhóm",
       "parameters": "Tham số",
@@ -809,18 +809,18 @@ export const vi = {
       "responseExample": "Ví dụ phản hồi",
       "noResponseBody": "Thao tác này không trả nội dung phản hồi.",
       "descriptionLabel": "Mô tả",
-      "expand": "Mở chi tiết endpoint",
-      "collapse": "Thu gọn chi tiết endpoint",
-      "noResultsTitle": "Không tìm thấy endpoint",
+      "expand": "Mở chi tiết",
+      "collapse": "Thu gọn chi tiết",
+      "noResultsTitle": "Không tìm thấy chức năng nào",
       "noResultsDesc": "Thử từ khóa khác hoặc bỏ bộ lọc nhóm chức năng.",
-      "sourceFoundation": "Foundation",
+      "sourceFoundation": "Nền tảng",
       "sourceCapability": "Capability",
       "tags": {
         "process": "Tiến trình Core",
-        "tenant": "Định danh và tenant",
+        "tenant": "Danh tính và tổ chức",
         "app-resource": "Tài nguyên cấp ứng dụng (v2)",
         "application-admin": "Quản trị ứng dụng",
-        "legacy-tenant": "Tài nguyên cũ (v1)",
+        "legacy-tenant": "Dữ liệu phiên bản cũ (v1)",
         "oidc-upstream": "hệ thống đăng nhập OIDC",
         "applications": "Đăng ký ứng dụng",
         "approvals": "Phê duyệt",
@@ -911,8 +911,8 @@ export const vi = {
   "identity": {
     "loading": "Đang kiểm tra định danh...",
     "authenticated": "Đã xác thực",
-    "missing": "Chưa cấu hình bearer token",
-    "rejected": "Bearer token bị từ chối",
+    "missing": "Chưa nhập mã truy cập",
+    "rejected": "Mã truy cập bị từ chối",
     "forbidden": "Bị từ chối truy cập",
     "unavailable": "Dịch vụ định danh không khả dụng",
     "timeout": "Yêu cầu định danh quá thời gian",
@@ -942,7 +942,7 @@ export const vi = {
     "unit": "Đơn vị",
     "purpose": "Mục đích",
     "expiresAt": "Hạn dùng",
-    "digest": "Mã băm (digest)",
+    "digest": "Mã kiểm tra (mã băm)",
     "before": "Trước khi duyệt",
     "after": "Sau khi duyệt",
     "requestedAt": "Gửi lúc",
@@ -1150,7 +1150,7 @@ export const vi = {
     "prevPage": "Trước",
     "nextPage": "Sau",
     "noLogsTitle": "Không có lệnh gọi nào",
-    "noLogsDesc": "Nhật ký request là danh sách lệnh gọi API gần nhất đi qua lõi. Hiện chưa có lệnh gọi nào; khi hệ thống nhận request, nhật ký sẽ xuất hiện ở đây.",
+    "noLogsDesc": "Nhật ký lệnh gọi là danh sách lệnh gọi API gần nhất đi qua lõi. Hiện chưa có lệnh gọi nào; khi hệ thống nhận lệnh gọi, nhật ký sẽ xuất hiện ở đây.",
     "detailTitle": "Chi tiết lệnh gọi",
     "detailRequestId": "Mã yêu cầu",
     "detailTenant": "Tổ chức",
@@ -1281,7 +1281,7 @@ export const vi = {
     "featureSparklineAria": "Lượt gọi mỗi phút của {name}",
     "featureBarAria": "Tỷ lệ lượt gọi của {name} so với tính năng cao nhất",
     "logsTitle": "Nhật ký request",
-    "logsSubtitle": "Tối đa 100 request gần nhất, lọc theo mã trạng thái và phương thức.",
+    "logsSubtitle": "Tối đa 100 lệnh gọi gần nhất, lọc theo mã trạng thái và phương thức.",
     "logsFilterStatus": "Mã trạng thái",
     "logsFilterMethod": "Phương thức",
     "logsAllStatuses": "Mọi mã trạng thái",
@@ -1511,7 +1511,7 @@ export const vi = {
     "statusDegraded": "Có sự cố",
     "statusUnknown": "Chưa rõ",
     "liveNote": "Trạng thái tổng hợp từ GET /health và GET /ready. Dịch vụ chưa có đầu dò riêng sẽ hiện “Chưa rõ”.",
-    "securityBoundaryInfo": "Sáu dịch vụ lõi chạy trong mạng nội bộ riêng. Chỉ API Gateway công bố cổng loopback 127.0.0.1:8080.",
+    "securityBoundaryInfo": "Sáu dịch vụ lõi chạy trong mạng nội bộ riêng. Chỉ cổng API mở cổng nội bộ 127.0.0.1:8080.",
     "providerLabel": "Công nghệ",
     "portLabel": "Cổng",
     "routeLabel": "API kiểm tra",
@@ -1523,10 +1523,10 @@ export const vi = {
       "identity": {
         "name": "Đăng nhập một lần",
         "provider": "hệ thống đăng nhập 26.8.1 OSS",
-        "description": "Mọi người và ứng dụng đăng nhập ở một chỗ, nhận token và quyền theo tenant.",
+        "description": "Mọi người và ứng dụng đăng nhập ở một chỗ, nhận mã truy cập và quyền theo từng tổ chức.",
         "port": "Nội bộ (8080)",
         "route": "/identity/realms/junctura/.well-known/openid-configuration",
-        "limitation": "Thành viên tenant do quản trị viên gán. Không có đăng nhập chỉ bằng email hay cơ sở dữ liệu mật khẩu riêng."
+        "limitation": "Thành viên của tổ chức do quản trị viên gán. Không có đăng nhập chỉ bằng email hay cơ sở dữ liệu mật khẩu riêng."
       },
       "gateway": {
         "name": "Cổng API",
@@ -1542,12 +1542,12 @@ export const vi = {
         "description": "Mỗi ứng dụng chỉ thấy dữ liệu của mình nhờ hàng rào bảo mật cấp dòng bắt buộc.",
         "port": "Nội bộ (3000 / 5432)",
         "route": "/v2/data/{collection}",
-        "limitation": "Thân yêu cầu JSON tối đa 64 KiB; mọi truy vấn đều bị ràng buộc theo tenant và ứng dụng."
+        "limitation": "Thân yêu cầu JSON tối đa 64 KiB; mọi truy vấn chỉ thấy dữ liệu của đúng tổ chức và ứng dụng."
       },
       "objects": {
         "name": "Kho tệp",
         "provider": "kho tệp 4.48 · bộ quét mã độc",
-        "description": "Nhận tệp nhị phân bất biến, quét mã độc trước khi lưu và tách đường dẫn theo tenant.",
+        "description": "Nhận tệp không thể sửa sau khi lưu, quét mã độc trước khi lưu và tách riêng theo từng tổ chức.",
         "port": "Nội bộ (8888 / 9333)",
         "route": "/v2/objects",
         "limitation": "Mỗi tệp từ 1 byte đến 5 MiB; chỉ nhận luồng nhị phân không thực thi và trả về dạng tệp đính kèm."
@@ -1558,7 +1558,7 @@ export const vi = {
         "description": "Chạy các bước nhiều người theo đúng thứ tự, có sổ cái chống chạy lặp.",
         "port": "Nội bộ (8080)",
         "route": "/v1/workflows/definitions",
-        "limitation": "Định nghĩa tách theo tenant; hợp đồng nền tảng hiện chỉ hỗ trợ hoàn thành một tác vụ đang hoạt động."
+        "limitation": "Định nghĩa được tách riêng theo từng tổ chức; hợp đồng nền tảng hiện chỉ hỗ trợ hoàn thành một tác vụ đang hoạt động."
       },
       "secrets": {
         "name": "Két bí mật",
@@ -1643,8 +1643,8 @@ export const vi = {
     "registerTitle": "Đăng ký ứng dụng mới",
     "registerDesc": "Gửi đề xuất để quản trị viên duyệt ứng dụng mới cho đơn vị của bạn.",
     "formDisplayName": "Tên hiển thị ứng dụng",
-    "formOAuthClientId": "OAuth Client ID (hệ thống đăng nhập)",
-    "formProviderOrigin": "Provider Origin (URL HTTPS chuẩn)",
+    "formOAuthClientId": "Mã ứng dụng đăng nhập (OAuth Client ID)",
+    "formProviderOrigin": "Địa chỉ máy chủ ứng dụng (URL HTTPS)",
     "formDisplayNamePlaceholder": "VD: Junctura Logistics Hub",
     "formOAuthClientIdPlaceholder": "VD: tenant-a-logistics-client",
     "formProviderOriginPlaceholder": "https://provider.example.com",
@@ -1654,15 +1654,15 @@ export const vi = {
     "registerSuccess": "Đã gửi đề xuất đăng ký ứng dụng.",
     "registerFailed": "Không thể gửi đề xuất đăng ký ứng dụng.",
     "validationDisplayName": "Vui lòng nhập tên hiển thị ứng dụng.",
-    "validationOAuthClientId": "Vui lòng nhập OAuth Client ID.",
-    "validationOrigin": "Vui lòng nhập Provider Origin.",
-    "validationOriginHttps": "Provider Origin phải bắt đầu bằng https://.",
-    "validationOriginIp": "Provider Origin không được dùng địa chỉ IP.",
-    "validationOriginPath": "Provider Origin không được chứa đường dẫn.",
+    "validationOAuthClientId": "Vui lòng nhập mã ứng dụng đăng nhập.",
+    "validationOrigin": "Vui lòng nhập địa chỉ máy chủ ứng dụng.",
+    "validationOriginHttps": "Địa chỉ máy chủ ứng dụng phải bắt đầu bằng https://.",
+    "validationOriginIp": "Địa chỉ máy chủ ứng dụng không được là địa chỉ IP.",
+    "validationOriginPath": "Địa chỉ máy chủ ứng dụng không được kèm đường dẫn.",
     "lookupApp": "Tra cứu theo App ID",
     "enterAppId": "Nhập UUID của ứng dụng...",
     "lookupBtn": "Tra cứu",
-    "lookupNotFound": "Không tìm thấy ứng dụng với ID đã cung cấp trong tenant này.",
+    "lookupNotFound": "Không tìm thấy ứng dụng với ID đã nhập trong tổ chức này.",
     "lookupFailed": "Lỗi kết nối khi tra cứu ứng dụng.",
     "listSearchPlaceholder": "Tìm theo tên ứng dụng…",
     "filterStateLabel": "Lọc theo trạng thái",
@@ -1686,7 +1686,7 @@ export const vi = {
     "stateRevoked": "Đã thu hồi",
     "backToList": "Danh sách ứng dụng",
     "detailNotFoundTitle": "Không tìm thấy ứng dụng",
-    "detailNotFoundDesc": "Ứng dụng không tồn tại trong tenant này hoặc đã bị xóa.",
+    "detailNotFoundDesc": "Ứng dụng không tồn tại trong tổ chức này hoặc đã bị xóa.",
     "detailLoadFailed": "Không tải được thông tin ứng dụng.",
     "tabOverview": "Tổng quan",
     "tabCapabilities": "Năng lực đã công bố",
@@ -1694,9 +1694,9 @@ export const vi = {
     "tabActivity": "Hoạt động",
     "tabSettings": "Cài đặt",
     "overviewIdentityTitle": "Thông tin định danh",
-    "overviewDigestTitle": "Proposal Digest (JCS SHA-256)",
-    "overviewDigestDesc": "Mã băm SHA-256 xác thực bất biến được quản trị viên độc lập kiểm tra trước khi ký quyết định phê duyệt.",
-    "tenantLabel": "Đơn vị/Không gian",
+    "overviewDigestTitle": "Mã kiểm tra đề xuất (SHA-256)",
+    "overviewDigestDesc": "Mã kiểm tra này cho biết nội dung đề xuất không bị sửa. Một quản trị viên khác đối chiếu mã trước khi duyệt.",
+    "tenantLabel": "Tổ chức",
     "ownerLabel": "Chủ sở hữu",
     "revisionLabel": "Phiên bản (revision)",
     "createdLabel": "Đăng ký lúc",
@@ -1775,25 +1775,25 @@ export const vi = {
   },
   "resources": {
     "title": "Tài nguyên & Chia sẻ v2 (Resource Authorization)",
-    "subtitle": "Khám phá bản ghi JSON và đối tượng nhị phân cấp ứng dụng (v2). Quản lý chia sẻ chỉ đọc có thời hạn (POST /v2/resource-shares).",
-    "structuredDataTab": "Dữ liệu có cấu trúc (v2 Records)",
-    "objectsTab": "Đối tượng nhị phân (v2 Objects)",
-    "sharesTab": "Chia sẻ tài nguyên (Resource Shares)",
+    "subtitle": "Xem bản ghi và tệp của từng ứng dụng (v2). Quản lý các lượt chia sẻ chỉ đọc có thời hạn (POST /v2/resource-shares).",
+    "structuredDataTab": "Bản ghi có cấu trúc (v2)",
+    "objectsTab": "Tệp (v2)",
+    "sharesTab": "Chia sẻ dữ liệu",
     "createRecord": "Tạo bản ghi mới",
     "uploadObject": "Tải lên đối tượng (Bytes)",
     "createShare": "Tạo liên kết chia sẻ",
     "collectionName": "Tên bộ dữ liệu",
     "recordDataJson": "Nội dung JSON (data)",
-    "shareResourceType": "Loại tài nguyên",
-    "shareResourceId": "UUID Tài nguyên",
-    "shareGranteeAppId": "UUID Ứng dụng thụ hưởng (Grantee)",
-    "shareExpiresAt": "Thời hạn hết hạn (UTC ISO)",
-    "legacyNotice": "Ranh giới v1 / v2: API v2 gắn quyền sở hữu bất biến với backend ứng dụng đã ghi danh. API v1 chỉ dành cho client cũ thuộc danh sách LEGACY_RESOURCE_CLIENTS được cấu hình bởi nhà vận hành.",
+    "shareResourceType": "Loại mục cần chia sẻ",
+    "shareResourceId": "Mã mục cần chia sẻ (UUID)",
+    "shareGranteeAppId": "Mã ứng dụng nhận (UUID)",
+    "shareExpiresAt": "Hết hạn lúc (giờ UTC)",
+    "legacyNotice": "Khác biệt v1 / v2: API v2 gắn quyền sở hữu cố định với phần máy chủ của ứng dụng đã đăng ký. API v1 chỉ dành cho ứng dụng cũ nằm trong danh sách LEGACY_RESOURCE_CLIENTS do người vận hành cấu hình.",
     "activeSharesTitle": "Các quyền chia sẻ đang hiệu lực",
     "revokeShareBtn": "Thu hồi quyền chia sẻ",
-    "liveUnsupportedNotice": "Chế độ LIVE: Console không có thông tin xác thực backend ứng dụng cho các API v2. Dữ liệu và thao tác tài nguyên chỉ khả dụng ở chế độ trực tiếp; không có thao tác cục bộ nào được hiển thị như đã ghi thành công.",
+    "liveUnsupportedNotice": "Chế độ Trực tiếp: Console chưa có thông tin đăng nhập của phần máy chủ ứng dụng để gọi API v2, nên chưa xem hay thao tác được dữ liệu này. Không thao tác nào được hiển thị như đã thành công khi chưa thật sự ghi.",
     "liveActionsDisabled": "Chỉ khả dụng ở chế độ trực tiếp",
-    "liveEmptyList": "Không có dữ liệu v2 thực tế để hiển thị. API v2 yêu cầu thông tin xác thực backend ứng dụng."
+    "liveEmptyList": "Chưa có dữ liệu v2 để hiển thị. API v2 cần thông tin đăng nhập của phần máy chủ ứng dụng."
   },
   "records": {
     "title": "Dữ liệu",
@@ -2006,12 +2006,12 @@ export const vi = {
     "revokeDesc": "Bạn có chắc muốn thu hồi quyền chia sẻ này? Ứng dụng nhận sẽ mất quyền truy cập ngay.",
     "revokedToast": "Đã thu hồi quyền chia sẻ.",
     "createdToast": "Đã tạo quyền chia sẻ chỉ đọc.",
-    "liveUnsupported": "Chế độ LIVE: Console chưa có thông tin xác thực backend ứng dụng cho API chia sẻ v2. Danh sách và thao tác chia sẻ chỉ khả dụng ở chế độ trực tiếp.",
-    "liveEmpty": "Không có dữ liệu chia sẻ v2 thực tế để hiển thị. API v2 yêu cầu thông tin xác thực backend ứng dụng.",
+    "liveUnsupported": "Chế độ Trực tiếp: Console chưa có thông tin đăng nhập của phần máy chủ ứng dụng để gọi API chia sẻ v2, nên chưa xem hay thao tác được các lượt chia sẻ.",
+    "liveEmpty": "Chưa có lượt chia sẻ v2 để hiển thị. API v2 cần thông tin đăng nhập của phần máy chủ ứng dụng.",
     "emptyTitle": "Chưa có chia sẻ",
     "emptyDesc": "Chia sẻ là quyền đọc có thời hạn cho một ứng dụng khác. Chưa có chia sẻ nào; tạo chia sẻ mới để cấp quyền đọc.",
     "tableResource": "Đối tượng",
-    "tableType": "Loại tài nguyên",
+    "tableType": "Loại mục cần chia sẻ",
     "tableGrantee": "Chia sẻ cho",
     "tableExpires": "Hết hạn",
     "tableRemaining": "Còn lại",
@@ -2128,17 +2128,17 @@ export const vi = {
     "subtitle": "Tài liệu tương tác, lược đồ yêu cầu/phản hồi, định danh lỗi và ví dụ mã lệnh cURL/TypeScript cho 44 thao tác đã triển khai.",
     "tagFilter": "Lọc theo nhóm chức năng",
     "allTags": "Tất cả nhóm",
-    "searchEndpoint": "Tìm kiếm endpoint hoặc operation ID...",
+    "searchEndpoint": "Tìm theo đường dẫn hoặc mã thao tác...",
     "method": "Phương thức",
     "path": "Đường dẫn",
     "authRequirement": "Yêu cầu xác thực",
     "headersAndParams": "Tham số & Tiêu đề",
-    "requestBody": "Lược đồ yêu cầu (Request Schema)",
+    "requestBody": "Cấu trúc dữ liệu gửi đi",
     "responses": "Mã phản hồi HTTP",
     "codeExample": "Ví dụ mã lệnh",
     "copyCurl": "Sao chép cURL",
     "copyFetch": "Sao chép Fetch (TS)",
-    "capabilityNotice": "Phân định kiến trúc: Trình khám phá này chỉ tải các endpoint Foundation API đã triển khai thực tế. Bản nháp Capability API v1 được lưu trữ riêng biệt tại mục Năng lực mở rộng."
+    "capabilityNotice": "Lưu ý: Trình khám phá này chỉ liệt kê các chức năng của API nền tảng đã chạy thật. Bản nháp API năng lực v1 nằm riêng ở mục Năng lực mở rộng."
   },
   "audit": {
     "title": "Nhật ký kiểm toán",
@@ -2219,7 +2219,7 @@ export const vi = {
     "revokeConfirm": "Thu hồi ngay",
     "revokedToast": "Đã thu hồi đồng ý của {person}.",
     "emptyTitle": "Chưa có đồng ý nào",
-    "emptyDesc": "Đồng ý của người dân là nơi người dân cho phép một ứng dụng dùng dữ liệu của mình trong phạm vi và thời hạn nhất định. Hiện chưa có đồng ý nào; khi người dân chấp thuận, đồng ý sẽ xuất hiện ở đây.",
+    "emptyDesc": "Đồng ý là nơi người dùng cho phép một ứng dụng dùng dữ liệu của mình trong phạm vi và thời hạn nhất định. Hiện chưa có đồng ý nào; khi người dùng chấp thuận, đồng ý sẽ xuất hiện ở đây.",
     "noMatches": "Không có đồng ý nào khớp bộ lọc.",
     "noMatchesDesc": "Thử từ khóa khác hoặc xóa bộ lọc để xem lại toàn bộ đồng ý.",
     "privacyNote": "Danh tính người dân chỉ lưu dạng băm. Người dân xem “ai đã xem dữ liệu của tôi” qua ứng dụng của họ.",
@@ -2269,20 +2269,20 @@ export const vi = {
   },
   "security": {
     "title": "Bảo mật & Giám sát hoạt động",
-    "subtitle": "Ranh giới kiểm soát an ninh, mô hình cô lập tenant, lược đồ xác thực Token Introspection và nhật ký phiên.",
+    "subtitle": "Các lớp bảo vệ, cách tách dữ liệu giữa các tổ chức, cách kiểm tra mã truy cập và nhật ký phiên.",
     "architectureTitle": "Kiến trúc kiểm soát an ninh đa tầng",
-    "layerBoundary1": "1. Ranh giới API Gateway (cổng kết nối): auth-request subrequest đến Core, giới hạn dung lượng 64 KiB/5 MiB, rate-limiting chống lạm dụng.",
-    "layerBoundary2": "2. Ranh giới Xác thực Core: Introspect trực tiếp qua hệ thống đăng nhập bằng tài khoản junctura-core bí mật. Bắt buộc vai trò core-reader và khớp tenant_id.",
-    "layerBoundary3": "3. Ranh giới Cơ sở dữ liệu: kho dữ liệu nhận JWT nội bộ 30 giây ký bởi Core. RLS SQL cưỡng chế bắt buộc mọi câu truy vấn.",
-    "layerBoundary4": "4. Ranh giới Đối tượng: kho tệp đặt trong mạng riêng objects. Đường dẫn file sinh tự động từ tenant_id và UUID, không nhận đường dẫn tùy tiện từ client.",
-    "layerBoundary5": "5. Ranh giới Quy trình: quy trình nghiệp vụ bảo vệ bởi bảng lưu trữ idempotency unique (tenant_id, key) dưới RLS.",
+    "layerBoundary1": "1. Cổng API: mọi yêu cầu được hỏi lại Core trước khi cho qua, giới hạn dung lượng 64 KiB/5 MiB và giới hạn tốc độ để chống lạm dụng.",
+    "layerBoundary2": "2. Xác thực tại Core: Core hỏi thẳng hệ thống đăng nhập xem mã truy cập còn hiệu lực không. Cần vai trò core-reader và đúng tổ chức (tenant_id).",
+    "layerBoundary3": "3. Cơ sở dữ liệu: nhận một mã nội bộ do Core ký, chỉ dùng được 30 giây. Mọi truy vấn đều bị giới hạn theo tổ chức ở tầng cơ sở dữ liệu (RLS).",
+    "layerBoundary4": "4. Kho tệp: đặt trong mạng riêng. Đường dẫn tệp do hệ thống tự tạo từ tổ chức và UUID, không nhận đường dẫn tùy ý từ ứng dụng gọi.",
+    "layerBoundary5": "5. Quy trình: mỗi yêu cầu được ghi lại theo (tenant_id, mã chống gửi trùng) để gửi lại không chạy trùng, và cũng bị giới hạn theo tổ chức (RLS).",
     "auditTitle": "Nhật ký kiểm toán & Giám sát (Audit Events)",
     "auditExplanation": "Mọi thao tác quan trọng (đăng ký, phê duyệt, cấp và thu hồi quyền, thực thi năng lực) được ghi vào bảng `app_private.audit` trong cùng giao dịch với thao tác đó. Ứng dụng không có quyền đọc, sửa hay xóa bảng này; chỉ người quản lý có quyền audit.read mới tra cứu và kiểm tra được.",
     "sessionActivityTitle": "Nhật ký hoạt động trong phiên thao tác",
     "sessionDiagnosticsNotice": "Đây là nhật ký chẩn đoán do trình duyệt tạo trong phiên hiện tại, không phải nhật ký kiểm toán máy chủ có thẩm quyền.",
     "sessionEventsSuffix": "sự kiện trong phiên",
     "chainTitle": "Kiểm tra toàn vẹn nhật ký (chuỗi băm SHA-256)",
-    "chainExplanation": "Mỗi sự kiện được niêm phong vào một chuỗi băm theo tenant: mã băm của sự kiện bao gồm nội dung của nó và mã băm của sự kiện trước. Chỉ cần sửa, xóa hay đổi thứ tự một sự kiện đã niêm phong là chuỗi bị đứt và bị phát hiện ngay. Lần kiểm tra cũng niêm phong các sự kiện mới.",
+    "chainExplanation": "Mỗi sự kiện được niêm phong vào một chuỗi mã kiểm tra riêng cho từng tổ chức: mã băm của sự kiện bao gồm nội dung của nó và mã băm của sự kiện trước. Chỉ cần sửa, xóa hay đổi thứ tự một sự kiện đã niêm phong là chuỗi bị đứt và bị phát hiện ngay. Lần kiểm tra cũng niêm phong các sự kiện mới.",
     "chainButton": "Kiểm tra toàn vẹn",
     "chainChecking": "Đang kiểm tra…",
     "chainIntact": "Toàn vẹn",
@@ -2300,17 +2300,17 @@ export const vi = {
   },
   "settings": {
     "title": "Cài đặt & Tùy chọn hệ thống",
-    "subtitle": "Cấu hình kết nối Gateway, tổ chức, phiên đăng nhập, chính sách mật khẩu, ngôn ngữ và giao diện.",
+    "subtitle": "Cấu hình kết nối cổng API, tổ chức, phiên đăng nhập, chính sách mật khẩu, ngôn ngữ và giao diện.",
     "gatewaySectionTitle": "Cổng Gateway & Kết nối",
     "gatewaySectionDesc": "Console chỉ kết nối tới cùng nguồn gốc hoặc địa chỉ loopback đã được duyệt.",
     "gatewayUrlLabel": "Địa chỉ Junctura Gateway URL",
     "oidcIssuerLabel": "OIDC Issuer (hệ thống đăng nhập Realm)",
     "connectionTest": "Kiểm tra kết nối",
-    "probeSuccess": "Kết nối thành công! HTTP 200 ({latency}ms) — Dịch vụ: {service}, Trạng thái: {status}",
-    "probeErrorStatus": "Gateway phản hồi mã lỗi: HTTP {status}",
+    "probeSuccess": "Kết nối thành công (HTTP 200, {latency} ms) — Dịch vụ: {service}, Trạng thái: {status}",
+    "probeErrorStatus": "Cổng API trả về lỗi: HTTP {status}",
     "probeErrorNetwork": "Không thể kết nối đến Gateway: {message}",
     "modeLabel": "Chế độ hoạt động mặc định",
-    "liveOption": "Kết nối trực tiếp (Live Mode)",
+    "liveOption": "Kết nối trực tiếp",
     "orgSectionTitle": "Tổ chức & Phiên đăng nhập",
     "orgSectionDesc": "Thông tin chung và quy tắc an toàn áp dụng cho mọi người trong tổ chức.",
     "orgNameLabel": "Tên tổ chức",
@@ -2347,14 +2347,14 @@ export const vi = {
     "textSizeSmall": "Nhỏ",
     "textSizeMedium": "Vừa",
     "textSizeLarge": "Lớn",
-    "tokenSectionTitle": "Bearer Token xác thực vận hành (Tùy chọn)",
-    "tokenSectionDesc": "Nhập Bearer Token nếu bạn muốn thực hiện các lệnh có ghi (core-writer) hoặc quyền quản trị viên đến cổng Gateway cục bộ.",
-    "tokenPlaceholder": "Nhập token JWT...",
+    "tokenSectionTitle": "Mã truy cập vận hành (không bắt buộc)",
+    "tokenSectionDesc": "Nhập mã truy cập nếu bạn muốn thực hiện lệnh ghi dữ liệu (core-writer) hoặc quyền quản trị trên cổng API chạy trên máy bạn.",
+    "tokenPlaceholder": "Dán mã truy cập (JWT) vào đây...",
     "saveSettings": "Lưu cấu hình",
     "saveSuccess": "Đã lưu cài đặt.",
-    "tokenMemoryNotice": "Token chỉ được giữ trong bộ nhớ của tab này và bị xóa khi tải lại trang. Console không ghi token vào localStorage.",
-    "tokenClear": "Xóa token khỏi bộ nhớ",
-    "invalidGateway": "Địa chỉ Gateway phải là đường dẫn cùng nguồn gốc hoặc loopback 127.0.0.1/localhost/[::1]."
+    "tokenMemoryNotice": "Mã truy cập chỉ được giữ trong bộ nhớ của tab này và mất khi tải lại trang. Console không lưu mã truy cập vào trình duyệt.",
+    "tokenClear": "Xóa mã truy cập khỏi bộ nhớ",
+    "invalidGateway": "Địa chỉ cổng API phải là đường dẫn cùng trang hoặc địa chỉ nội bộ 127.0.0.1, localhost hay [::1]."
   },
   "profile": {
     "title": "Hồ sơ của tôi",
@@ -2535,8 +2535,8 @@ export const vi = {
     "noHolders": "Chưa ai giữ vai trò này.",
     "noHoldersDesc": "Gán vai trò cho người dùng ở trang Người dùng.",
     "updatedToast": "Đã cập nhật quyền cho vai trò.",
-    "selfAdminError": "Không thể tự gỡ quyền identity.admin của chính mình.",
-    "lastAdminError": "Phải còn ít nhất một vai trò có quyền identity.admin do người dùng đang hoạt động nắm giữ.",
+    "selfAdminError": "Bạn không thể tự gỡ quyền quản trị danh tính (identity.admin) của chính mình.",
+    "lastAdminError": "Phải còn ít nhất một người dùng đang hoạt động giữ quyền quản trị danh tính (identity.admin).",
     "systemError": "Vai trò hệ thống không sửa được.",
     "createTitle": "Tạo vai trò mới",
     "createDesc": "Đặt tên, mô tả và chọn quyền. Vai trò mới có thể sửa được sau khi tạo.",
@@ -2669,11 +2669,11 @@ export const vi = {
     "title": "Chia sẻ năng lực giữa các ứng dụng",
     "subtitle": "Ứng dụng công bố chức năng, được cấp quyền có thời hạn, Junctura kiểm tra từng lần gọi và chủ sở hữu thu hồi bất cứ lúc nào.",
     "statusBadge": "Đã triển khai",
-    "notice": "Registry, Trust, kiểm toán và sơ đồ tin cậy luôn bật. Gọi chức năng (C4A) và ghép quy trình (C4B) đã triển khai nhưng tắt mặc định, bật bằng cấu hình khi cần. Ủy quyền thay người dùng (delegation) chưa hỗ trợ.",
+    "notice": "Danh mục năng lực, quan hệ tin cậy, kiểm toán và sơ đồ tin cậy luôn bật. Gọi chức năng (C4A) và ghép quy trình (C4B) đã triển khai nhưng tắt mặc định, bật bằng cấu hình khi cần. Ủy quyền thay người dùng chưa được hỗ trợ.",
     "modulesTitle": "Các mô-đun năng lực",
     "statusImplemented": "Đã triển khai",
     "statusOptIn": "Bật khi cần",
-    "registryTitle": "Capability Registry",
+    "registryTitle": "Danh mục năng lực",
     "registryDesc": "Danh mục chức năng do ứng dụng công bố: hợp đồng đầu vào/đầu ra có phiên bản, mã băm manifest, kiểm tra và phê duyệt trước khi phát hành.",
     "resolverTitle": "Compatibility Resolver",
     "resolverDesc": "Kiểm tra tương thích giữa đầu ra của bước trước và đầu vào của bước sau khi xác thực một quy trình ghép.",
@@ -2690,7 +2690,7 @@ export const vi = {
     "graphRefresh": "Làm mới",
     "graphLoading": "Đang tải sơ đồ…",
     "graphEmpty": "Chưa có quyền nào giữa các ứng dụng trong phạm vi bạn được xem.",
-    "graphScopeTenant": "Toàn tenant",
+    "graphScopeTenant": "Toàn tổ chức",
     "graphScopeOwned": "Ứng dụng bạn sở hữu",
     "graphTruncated": "Chỉ hiển thị 500 quyền mới nhất.",
     "graphErrorPermission": "Tài khoản cần quyền trust.write hoặc trust.approve để xem sơ đồ tin cậy.",

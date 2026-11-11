@@ -69,7 +69,7 @@ const enDocsSections: typeof vi.docs.sections = {
       },
       {
         "kind": "paragraph",
-        "text": "Use an enrolled backend and a second enrolled application as the grantee. Keep both secrets out of screenshots, commits and browser code."
+        "text": "Use a registered application (its server side) and a second registered application as the one that receives access. Keep both secrets out of screenshots, commits and browser code."
       },
       {
         "kind": "code",
@@ -78,7 +78,7 @@ const enDocsSections: typeof vi.docs.sections = {
       },
       {
         "kind": "paragraph",
-        "text": "The example calls only the public gateway. It proves identity, private record create/read, private object upload/download, a technical workflow, an expiring read share and a denied request from another application before the share."
+        "text": "The example calls only the public API gateway. In order, it confirms identity, creates and reads a private record, uploads and downloads a private file, runs a test workflow, shares read access for a limited time, and shows another application being refused before the share."
       },
       {
         "kind": "heading",
@@ -87,10 +87,10 @@ const enDocsSections: typeof vi.docs.sections = {
       {
         "kind": "list",
         "items": [
-          "Client-credentials authentication against the local OIDC provider.",
-          "Verified tenant and roles from GET /v1/identity.",
+          "Sign in as the application with the sign-in system running on your machine.",
+          "Verified organization and roles (GET /v1/identity).",
           "Application-private record and object ownership under /v2.",
-          "Idempotent workflow start and completion.",
+          "Start and complete workflows; retries never run twice.",
           "Explicit read sharing and a denied request from another application."
         ]
       },
@@ -102,10 +102,10 @@ const enDocsSections: typeof vi.docs.sections = {
         "kind": "list",
         "items": [
           "Startup failed: run npm run doctor and npm run local:status; keep the existing .env and database volumes.",
-          "401/403: token missing, client disabled, or the application is pending/suspended.",
-          "403 verified_client_required: the OIDC client is not an enrolled backend.",
-          "404 on a shared resource: the share expired, was revoked, or targets another tenant.",
-          "409 on workflow start: the idempotency key was reused with different input.",
+          "401/403: access token missing, application disabled, or the application is pending or suspended.",
+          "403 verified_client_required: this sign-in application is not registered as an application server.",
+          "404 on a shared item: the share expired, was withdrawn, or belongs to another organization.",
+          "409 on workflow start: the same retry key was reused with different data.",
           "503: a configured provider is not ready; check /ready before retrying writes."
         ]
       },
@@ -421,8 +421,8 @@ const enDocsSections: typeof vi.docs.sections = {
     "blocks": [
       {
         "kind": "callout",
-        "title": "Simulated mode",
-        "text": "While in Simulated mode, the amber strip below the top bar reminds you that the data is live. Turn on Live in the top bar once a real Gateway is connected."
+        "title": "Live mode",
+        "text": "In Live mode, the amber strip below the top bar reminds you that you are looking at live data. Turn on Live in the top bar once a real API gateway is connected."
       },
       {
         "kind": "heading",
@@ -449,7 +449,7 @@ const enDocsSections: typeof vi.docs.sections = {
         "items": [
           "Actions on live data only change session memory and are lost when the page reloads.",
           "No live data is written to localStorage.",
-          "Features backed by a real API still call the Gateway in both modes."
+          "Features backed by a real API still call the API gateway in both modes."
         ]
       }
     ]
@@ -506,7 +506,7 @@ export const en: typeof vi = {
     "tagline": "One platform. Many applications. Connected capabilities.",
     "layer1Notice": "Layer-1 Operational Control Plane (Headless PaaS)",
     "liveMode": "LIVE CONNECTED",
-    "liveModeTooltip": "Querying the configured Junctura Gateway. Live data is not used.",
+    "liveModeTooltip": "Querying the configured Junctura API gateway. Sample data is not used.",
     "switchMode": "Switch Mode",
     "refresh": "Refresh",
     "save": "Save",
@@ -526,7 +526,7 @@ export const en: typeof vi = {
     "error": "Error",
     "retry": "Retry",
     "viewDocs": "View Docs",
-    "tenant": "Unit/Workspace",
+    "tenant": "Organization",
     "user": "User",
     "roles": "Roles",
     "logout": "Log Out",
@@ -536,7 +536,7 @@ export const en: typeof vi = {
     "unknown": "Unknown",
     "unavailable": "Unavailable",
     "planned": "Planned (Roadmap)",
-    "plannedNotice": "This feature is part of the architecture roadmap; runtime endpoints are not yet implemented.",
+    "plannedNotice": "This feature is on the roadmap; its API is not available yet.",
     "operational": "Operational",
     "systemHealthy": "All required dependencies are ready",
     "systemDegraded": "Degraded or unresponsive dependency detected",
@@ -578,7 +578,7 @@ export const en: typeof vi = {
       "description": "Each audit event links to the previous one by a hash, so edits or deletions are detected."
     },
     "tenant": {
-      "label": "Unit/Workspace",
+      "label": "Organization",
       "description": "The private data scope of one organisation or unit; units cannot see each other's data."
     },
     "p95": {
@@ -728,7 +728,7 @@ export const en: typeof vi = {
     },
     "orgs": {
       "label": "Organisations",
-      "desc": "Tenant workspaces and their sub-units."
+      "desc": "Organizations and their sub-units."
     },
     "audit": {
       "label": "Audit log",
@@ -786,8 +786,8 @@ export const en: typeof vi = {
       "subtitle": "Browse published Foundation and Capability operations with parameters, required permissions, cURL examples and example responses.",
       "badge": "Live contract",
       "operations": "operations",
-      "contractNotice": "This list is built from the published Foundation API and Capability API contracts. cURL examples use the local gateway; replace the token and example values with your own data.",
-      "searchPlaceholder": "Search by path, operation ID or description...",
+      "contractNotice": "This list is built from the published platform API and capability API contracts. The cURL examples use the API gateway on your machine; replace the access token and example values with your own.",
+      "searchPlaceholder": "Search by path, operation code or description...",
       "tagFilter": "Filter by functional group",
       "allTags": "All groups",
       "parameters": "Parameters",
@@ -804,19 +804,19 @@ export const en: typeof vi = {
       "responseExample": "Example response",
       "noResponseBody": "This operation returns no response body.",
       "descriptionLabel": "Description",
-      "expand": "Expand endpoint details",
-      "collapse": "Collapse endpoint details",
-      "noResultsTitle": "No matching endpoint",
+      "expand": "Expand details",
+      "collapse": "Collapse details",
+      "noResultsTitle": "No matching function",
       "noResultsDesc": "Try another keyword or clear the functional group filter.",
       "sourceFoundation": "Foundation",
       "sourceCapability": "Capability",
       "tags": {
         "process": "Core process",
-        "tenant": "Identity and tenant",
+        "tenant": "Identity and organization",
         "app-resource": "Application resources (v2)",
         "application-admin": "Application administration",
         "legacy-tenant": "Legacy resources (v1)",
-        "oidc-upstream": "sign-in system OIDC",
+        "oidc-upstream": "Sign-in system (OIDC)",
         "applications": "Application registration",
         "approvals": "Approvals",
         "capabilities": "Capabilities",
@@ -832,7 +832,7 @@ export const en: typeof vi = {
     "apiDocs": {
       "eyebrow": "API reference",
       "title": "API Docs",
-      "subtitle": "Every Tier 1 API goes through the API Gateway. Select an API to see how to use it.",
+      "subtitle": "Every Tier 1 API goes through the API gateway. Select an API to see how to use it.",
       "navGuide": "Guides",
       "navApi": "API Docs",
       "navGroup": "Documentation",
@@ -906,8 +906,8 @@ export const en: typeof vi = {
   "identity": {
     "loading": "Checking identity...",
     "authenticated": "Authenticated",
-    "missing": "No bearer token configured",
-    "rejected": "Bearer token rejected",
+    "missing": "No access token entered",
+    "rejected": "Access token rejected",
     "forbidden": "Access forbidden",
     "unavailable": "Identity API unavailable",
     "timeout": "Identity request timed out",
@@ -969,7 +969,7 @@ export const en: typeof vi = {
     "cores": "Foundation Services (5 Cores)",
     "applications": "Applications & Approvals",
     "applicationsSection": "APPLICATIONS",
-    "platform": "BACKEND SERVICES",
+    "platform": "CORE SERVICES",
     "resources": "Data & Resource Sharing",
     "workflows": "Business workflows",
     "developers": "DEVELOPERS",
@@ -1476,7 +1476,7 @@ export const en: typeof vi = {
       "security-audit": {
         "name": "Safety & audit",
         "short": "Records every important action permanently; keeps secrets safe.",
-        "what": "Records every important action as a chain of linked ledger pages that nobody can quietly edit. This function also keeps application secrets safe.",
+        "what": "Records every important action in a linked chain that nobody can quietly edit. This function also keeps application secrets safe.",
         "care": "If you suspect the log was changed, open the Audit log page and select Verify integrity. A stored secret will never be shown again.",
         "stats": [
           {
@@ -1518,14 +1518,14 @@ export const en: typeof vi = {
       "identity": {
         "name": "Single sign-on",
         "provider": "sign-in system 26.8.1 OSS",
-        "description": "People and applications sign in once, then receive tenant-scoped tokens and roles.",
+        "description": "People and applications sign in once, then receive access tokens and roles for their own organization.",
         "port": "Internal (8080)",
         "route": "/identity/realms/junctura/.well-known/openid-configuration",
-        "limitation": "Tenant memberships are assigned by an administrator. There is no email-only or standalone password database login."
+        "limitation": "Organization membership is assigned by an administrator. There is no email-only or standalone password database login."
       },
       "gateway": {
         "name": "API gateway",
-        "provider": "connection gateway stable-bookworm OSS",
+        "provider": "Open-source web gateway",
         "description": "Checks every request's identity before it reaches the system and limits call rates.",
         "port": "127.0.0.1:8080 (published)",
         "route": "/health",
@@ -1537,12 +1537,12 @@ export const en: typeof vi = {
         "description": "Each application only sees its own data thanks to mandatory row-level security.",
         "port": "Internal (3000 / 5432)",
         "route": "/v2/data/{collection}",
-        "limitation": "JSON request bodies are capped at 64 KiB; every query is constrained by tenant and application."
+        "limitation": "JSON request bodies are capped at 64 KiB; every query is limited to the right organization and application."
       },
       "objects": {
         "name": "File store",
         "provider": "file store 4.48 · malware scanner",
-        "description": "Accepts immutable binary files, scans them for malware and isolates tenant paths.",
+        "description": "Accepts files that cannot be changed after saving, scans them for malware and keeps each organization's files separate.",
         "port": "Internal (8888 / 9333)",
         "route": "/v2/objects",
         "limitation": "Each file is 1 byte to 5 MiB; only non-executable binary streams are accepted and served as attachments."
@@ -1550,10 +1550,10 @@ export const en: typeof vi = {
       "workflow": {
         "name": "Workflow engine",
         "provider": "business workflow engine REST 8.0.0 OSS",
-        "description": "Runs multi-person steps in order with an idempotency ledger that prevents duplicate runs.",
+        "description": "Runs multi-person steps in order and records each request so a retry never runs a step twice.",
         "port": "Internal (8080)",
         "route": "/v1/workflows/definitions",
-        "limitation": "Definitions are tenant-scoped; the Foundation contract currently completes one active user task at a time."
+        "limitation": "Definitions are kept separate for each organization; the Foundation contract currently completes one active user task at a time."
       },
       "secrets": {
         "name": "Secrets vault",
@@ -1604,7 +1604,7 @@ export const en: typeof vi = {
     "restoring": "Restoring…"
   },
   "applications": {
-    "providerOriginLabel": "Provider origin",
+    "providerOriginLabel": "Application server address",
     "oauthClientLabel": "OAuth client ID",
     "title": "Applications",
     "subtitle": "Software from each unit connected to Junctura. Every application has its own identity and data.",
@@ -1639,9 +1639,9 @@ export const en: typeof vi = {
     "registerDesc": "Send a request for an administrator to approve a new application for your unit.",
     "formDisplayName": "Application Display Name",
     "formOAuthClientId": "OAuth Client ID (sign-in system)",
-    "formProviderOrigin": "Provider Origin (Canonical HTTPS URL)",
+    "formProviderOrigin": "Application server address (HTTPS URL)",
     "formDisplayNamePlaceholder": "e.g. Junctura Logistics Hub",
-    "formOAuthClientIdPlaceholder": "e.g. tenant-a-logistics-client",
+    "formOAuthClientIdPlaceholder": "e.g. org-a-logistics-client",
     "formProviderOriginPlaceholder": "https://provider.example.com",
     "formProviderOriginHint": "HTTPS is required. IP addresses and paths are not allowed.",
     "registerAutoNote": "The system creates the technical connection details automatically. You only need a friendly name for the application.",
@@ -1650,14 +1650,14 @@ export const en: typeof vi = {
     "registerFailed": "Could not submit the application proposal.",
     "validationDisplayName": "Enter the application display name.",
     "validationOAuthClientId": "Enter the OAuth Client ID.",
-    "validationOrigin": "Enter the Provider Origin.",
-    "validationOriginHttps": "Provider Origin must start with https://.",
-    "validationOriginIp": "Provider Origin must not use an IP address.",
-    "validationOriginPath": "Provider Origin must not contain a path.",
+    "validationOrigin": "Enter the application server address.",
+    "validationOriginHttps": "The application server address must start with https://.",
+    "validationOriginIp": "The application server address must not be an IP address.",
+    "validationOriginPath": "The application server address must not include a path.",
     "lookupApp": "Lookup by Application ID",
     "enterAppId": "Enter Application UUID...",
     "lookupBtn": "Lookup",
-    "lookupNotFound": "No application with that ID was found in this tenant.",
+    "lookupNotFound": "No application with that ID was found in this organization.",
     "lookupFailed": "Connection error while looking up the application.",
     "listSearchPlaceholder": "Search by application name…",
     "filterStateLabel": "Filter by state",
@@ -1681,7 +1681,7 @@ export const en: typeof vi = {
     "stateRevoked": "Revoked",
     "backToList": "Application list",
     "detailNotFoundTitle": "Application not found",
-    "detailNotFoundDesc": "The application does not exist in this tenant or was removed.",
+    "detailNotFoundDesc": "The application does not exist in this organization or was removed.",
     "detailLoadFailed": "Could not load application details.",
     "tabOverview": "Overview",
     "tabCapabilities": "Published capabilities",
@@ -1689,9 +1689,9 @@ export const en: typeof vi = {
     "tabActivity": "Activity",
     "tabSettings": "Settings",
     "overviewIdentityTitle": "Identity details",
-    "overviewDigestTitle": "Proposal Digest (JCS SHA-256)",
+    "overviewDigestTitle": "Proposal check code (SHA-256)",
     "overviewDigestDesc": "Immutable SHA-256 hash that an independent administrator verifies before signing an approval decision.",
-    "tenantLabel": "Unit/Workspace",
+    "tenantLabel": "Organization",
     "ownerLabel": "Owner",
     "revisionLabel": "Revision",
     "createdLabel": "Registered at",
@@ -1764,8 +1764,8 @@ export const en: typeof vi = {
     "expiresInMinutes": "Validity Window (Max 10 minutes)",
     "submitApprovalBtn": "Sign Approval Decision",
     "activateAppBtn": "Activate Application (POST /v1/applications/{appId}/approve)",
-    "globalListNotice": "Contract Notice: The Foundation OpenAPI v1.0 specification provides single-application lookup via GET /v1/applications/{appId}. A global directory endpoint is intentionally omitted to maintain strict tenant data isolation. The list below shows items registered during the current console session or simulated data.",
-    "liveListNotice": "LIVE mode: the Foundation API has no application directory endpoint. This list contains only applications registered during this Console session.",
+    "globalListNotice": "Note: the platform API only lets you look up one application at a time (GET /v1/applications/{appId}). There is deliberately no list of all applications, so organizations stay strictly separate. The list below shows items registered during the current console session or simulated data.",
+    "liveListNotice": "Live mode: the platform API has no list of all applications. This list contains only applications registered during this Console session.",
     "liveEmptyList": "No applications were registered in this session. Use lookup by App ID or register a new application."
   },
   "resources": {
@@ -1781,14 +1781,14 @@ export const en: typeof vi = {
     "recordDataJson": "JSON Record Data",
     "shareResourceType": "Resource Type",
     "shareResourceId": "Resource UUID",
-    "shareGranteeAppId": "Grantee App UUID",
+    "shareGranteeAppId": "Receiving application ID (UUID)",
     "shareExpiresAt": "Expiration Timestamp (UTC ISO)",
-    "legacyNotice": "V1 / V2 Boundary: V2 binds immutable ownership to registered application backends with forced SQL RLS. V1 routes are deprecated and restricted to operator-configured LEGACY_RESOURCE_CLIENTS.",
+    "legacyNotice": "V1 vs V2: V2 ties ownership permanently to the server side of a registered application, enforced in the database. V1 routes are deprecated and limited to the older applications the operator lists in LEGACY_RESOURCE_CLIENTS.",
     "activeSharesTitle": "Active Read Shares",
     "revokeShareBtn": "Revoke Resource Share",
-    "liveUnsupportedNotice": "LIVE mode: the Console does not hold application backend credentials for v2 APIs. Resource data and mutations are available only in live; no local mutation is presented as a server write.",
+    "liveUnsupportedNotice": "Live mode: the Console does not hold the sign-in details of an application's server side, so it cannot view or change v2 data yet. Nothing is shown as saved unless it was really saved.",
     "liveActionsDisabled": "Live only",
-    "liveEmptyList": "No live v2 data to display. v2 APIs require application backend credentials."
+    "liveEmptyList": "No v2 data to show. v2 APIs need the sign-in details of an application's server side."
   },
   "records": {
     "title": "Data",
@@ -2001,8 +2001,8 @@ export const en: typeof vi = {
     "revokeDesc": "Are you sure you want to revoke this share? The receiving application loses access immediately.",
     "revokedToast": "Resource share revoked.",
     "createdToast": "Read-only share created.",
-    "liveUnsupported": "LIVE mode: the Console does not hold application backend credentials for v2 share APIs. Shares and mutations are available only in live.",
-    "liveEmpty": "No live v2 shares to display. v2 APIs require application backend credentials.",
+    "liveUnsupported": "Live mode: the Console does not hold the sign-in details of an application's server side, so it cannot view or change v2 shares yet.",
+    "liveEmpty": "No v2 shares to show. v2 APIs need the sign-in details of an application's server side.",
     "emptyTitle": "No shares yet",
     "emptyDesc": "A share grants another application read access for a limited time. There are no shares yet; create one to grant read access.",
     "tableResource": "Resource",
@@ -2123,7 +2123,7 @@ export const en: typeof vi = {
     "subtitle": "Interactive documentation, request & response schemas, error codes, and copyable cURL / TypeScript examples for 44 implemented operations.",
     "tagFilter": "Filter by Tag",
     "allTags": "All Tags",
-    "searchEndpoint": "Search by path or operation ID...",
+    "searchEndpoint": "Search by path or operation code...",
     "method": "Method",
     "path": "Path",
     "authRequirement": "Authentication",
@@ -2264,20 +2264,20 @@ export const en: typeof vi = {
   },
   "security": {
     "title": "Security & Observability",
-    "subtitle": "Defense-in-depth architecture, tenant isolation model, token introspection flow, and session event tracking.",
+    "subtitle": "The layers of protection, how organizations are kept apart, how access tokens are checked, and the session log.",
     "architectureTitle": "Multi-Tier Defense-in-Depth Architecture",
-    "layerBoundary1": "1. connection gateway Gateway: auth-request subrequest to Core, 64 KiB/5 MiB size limits, per-source rate limiting.",
-    "layerBoundary2": "2. Core Authentication: Direct introspection with sign-in system via confidential client. Requires active core-reader role and matching tenant_id.",
-    "layerBoundary3": "3. Database Boundary: data store issues 30-second tenant-scoped assertions. Forced data store RLS governs all reads and writes.",
-    "layerBoundary4": "4. Storage Boundary: file store isolated in private network. Object paths derived from verified tenant and UUID.",
-    "layerBoundary5": "5. Workflow Boundary: business workflow engine guarded by RLS-protected unique (tenant_id, key) reservation ledger.",
+    "layerBoundary1": "1. API gateway: every request is checked with Core before it is let through; size limits of 64 KiB/5 MiB and a per-source rate limit prevent abuse.",
+    "layerBoundary2": "2. Core authentication: Core asks the sign-in system directly whether the access token is still valid. Needs the core-reader role and the right organization (tenant_id).",
+    "layerBoundary3": "3. Database: it receives an internal code signed by Core that works for only 30 seconds. Every read and write is limited to one organization at the database level (RLS).",
+    "layerBoundary4": "4. File store: kept in a private network. File paths are generated from the verified organization and a UUID.",
+    "layerBoundary5": "5. Workflows: each request is recorded by (tenant_id, retry key), so a retry never runs twice, and is limited to one organization (RLS).",
     "auditTitle": "Audit Logs & Governance",
     "auditExplanation": "Every sensitive operation (registration, approval, grant and revocation, capability execution) is written to `app_private.audit` in the same transaction as the operation. Applications cannot read, modify or delete this table; only managers holding audit.read can query and verify it.",
     "sessionActivityTitle": "Current Session Administrative Activity",
     "sessionDiagnosticsNotice": "This is browser-generated diagnostics for the current session, not an authoritative server audit log.",
     "sessionEventsSuffix": "session events",
     "chainTitle": "Audit Integrity (SHA-256 Hash Chain)",
-    "chainExplanation": "Each tenant's events are sealed into a hash chain: an event's hash covers its content and the previous event's hash. Modifying, deleting or reordering any sealed event breaks the chain and is detected immediately. Each check also seals new events.",
+    "chainExplanation": "Each organization's events are sealed into a hash chain: an event's hash covers its content and the previous event's hash. Modifying, deleting or reordering any sealed event breaks the chain and is detected immediately. Each check also seals new events.",
     "chainButton": "Verify integrity",
     "chainChecking": "Verifying…",
     "chainIntact": "Intact",
@@ -2295,15 +2295,15 @@ export const en: typeof vi = {
   },
   "settings": {
     "title": "Platform Settings & Preferences",
-    "subtitle": "Configure Gateway connectivity, organisation, sign-in sessions, password policy, language, and visual theme.",
-    "gatewaySectionTitle": "Gateway & Connectivity",
-    "gatewaySectionDesc": "The Console only connects to the same origin or an approved loopback address.",
-    "gatewayUrlLabel": "Junctura Gateway Base URL",
-    "oidcIssuerLabel": "OIDC Issuer URL",
+    "subtitle": "Set up the API gateway connection, organisation, sign-in sessions, password policy, language, and visual theme.",
+    "gatewaySectionTitle": "API gateway connection",
+    "gatewaySectionDesc": "The Console only connects to this same site or to an approved local address.",
+    "gatewayUrlLabel": "Junctura API gateway address",
+    "oidcIssuerLabel": "Sign-in system address (OIDC issuer URL)",
     "connectionTest": "Test connection",
     "probeSuccess": "Connected successfully! HTTP 200 ({latency}ms) — Service: {service}, Status: {status}",
-    "probeErrorStatus": "Gateway returned an error code: HTTP {status}",
-    "probeErrorNetwork": "Could not reach the Gateway: {message}",
+    "probeErrorStatus": "The API gateway returned an error: HTTP {status}",
+    "probeErrorNetwork": "Could not reach the API gateway: {message}",
     "modeLabel": "Default operating mode",
     "liveOption": "Direct connection (Live Mode)",
     "orgSectionTitle": "Organisation & Sign-in Sessions",
@@ -2342,14 +2342,14 @@ export const en: typeof vi = {
     "textSizeSmall": "Small",
     "textSizeMedium": "Medium",
     "textSizeLarge": "Large",
-    "tokenSectionTitle": "Operator Bearer Token (Optional)",
-    "tokenSectionDesc": "Provide an existing Bearer token if you wish to run writer (core-writer) or admin operations against the local Gateway.",
-    "tokenPlaceholder": "Paste JWT Bearer token here...",
+    "tokenSectionTitle": "Operator access token (optional)",
+    "tokenSectionDesc": "Paste an existing access token if you want to run write (core-writer) or admin actions on the API gateway on your machine.",
+    "tokenPlaceholder": "Paste the access token (JWT) here...",
     "saveSettings": "Save Settings",
     "saveSuccess": "Settings saved.",
     "tokenMemoryNotice": "The token is kept in this tab's memory only and is cleared on reload. The Console never writes it to localStorage.",
     "tokenClear": "Clear token from memory",
-    "invalidGateway": "Gateway URL must be a same-origin path or loopback 127.0.0.1/localhost/[::1]."
+    "invalidGateway": "The API gateway address must be a path on this same site or a local address: 127.0.0.1, localhost or [::1]."
   },
   "profile": {
     "title": "My profile",
@@ -2664,7 +2664,7 @@ export const en: typeof vi = {
     "title": "Capability sharing between applications",
     "subtitle": "Applications publish functions, receive time-bounded grants, Junctura checks every call and owners can revoke at any time.",
     "statusBadge": "Implemented",
-    "notice": "Registry, Trust, audit and the trust graph are always on. Invocation (C4A) and composition (C4B) are implemented but disabled by default and enabled by configuration. Human delegation is not supported.",
+    "notice": "The capability registry, trust links, audit and the trust graph are always on. Invocation (C4A) and composition (C4B) are implemented but disabled by default and enabled by configuration. Acting on behalf of a person is not supported.",
     "modulesTitle": "Capability modules",
     "statusImplemented": "Implemented",
     "statusOptIn": "Opt-in",
@@ -2673,7 +2673,7 @@ export const en: typeof vi = {
     "resolverTitle": "Compatibility Resolver",
     "resolverDesc": "Checks that each step's output fits the next step's input when a composition is validated.",
     "trustTitle": "Cross-App Trust",
-    "trustDesc": "Direct grants for one exact capability version to one consumer, with expiry; the approver must be independent of the proposer.",
+    "trustDesc": "Gives one application access to one exact version of a capability, with an expiry date. The approver must be someone other than the proposer.",
     "invocationTitle": "Invocation (C4A)",
     "invocationDesc": "Calls another application's function through Junctura with a single-use authorization ticket, re-checking authority right before dispatch.",
     "compositionTitle": "Composition (C4B)",
@@ -2685,7 +2685,7 @@ export const en: typeof vi = {
     "graphRefresh": "Refresh",
     "graphLoading": "Loading graph…",
     "graphEmpty": "No grants between applications in the scope you can see.",
-    "graphScopeTenant": "Whole tenant",
+    "graphScopeTenant": "Whole organization",
     "graphScopeOwned": "Applications you own",
     "graphTruncated": "Showing the newest 500 grants only.",
     "graphErrorPermission": "The account needs trust.write or trust.approve to view the trust graph.",
@@ -2710,7 +2710,7 @@ export const en: typeof vi = {
     "revokeReasonPlaceholder": "e.g. partnership ended, suspected data leak…",
     "revokeButton": "Revoke grant",
     "revoking": "Revoking…",
-    "revokeDone": "Revoked. The consumer's next call will be denied.",
+    "revokeDone": "Revoked. The application's next call will be denied.",
     "revokeError": "Could not revoke",
     "op_discover": "discover",
     "op_invoke": "invoke",
@@ -2774,7 +2774,7 @@ export const en: typeof vi = {
     "stateRejected": "Rejected",
     "stateRevoked": "Revoked",
     "stateExpired": "Expired",
-    "colPair": "Provider → consumer",
+    "colPair": "Providing → calling application",
     "colShared": "Shared capability/data",
     "colProposer": "Proposed by",
     "colDecision": "Administrator decision",
@@ -2787,7 +2787,7 @@ export const en: typeof vi = {
     "actionReject": "Reject",
     "actionRevoke": "Revoke",
     "approveTitle": "Approve sharing grant",
-    "approveDesc": "After approval, the consumer application can call this capability immediately.",
+    "approveDesc": "After approval, the calling application can use this capability immediately.",
     "rejectTitle": "Reject sharing grant",
     "rejectDesc": "The proposal will be rejected and will not take effect. Please state a clear reason.",
     "revokeTitle": "Revoke sharing grant",
@@ -2831,7 +2831,7 @@ export const en: typeof vi = {
     "menuRevoke": "Revoke…",
     "extendUnsupported": "There is no extend API yet. Propose a new grant with a new purpose and expiry.",
     "detailTitle": "Grant details",
-    "detailConsumer": "Consumer application",
+    "detailConsumer": "Calling application",
     "detailProvider": "Provider application",
     "detailCapability": "Capability",
     "detailState": "State",
@@ -2856,12 +2856,12 @@ export const en: typeof vi = {
   },
   "connect": {
     "title": "Connection map",
-    "subtitle": "Provider applications on the left, consumer applications on the right. Each line is a shared capability with its status and expiry.",
+    "subtitle": "Providing applications on the left, calling applications on the right. Each line is a shared capability with its status and expiry.",
     "mapTitle": "Who is using whose capabilities",
     "mapHint": "Hover or tab to a line to see details. Click an application to highlight its connections.",
     "ariaLabel": "Capability sharing map between applications",
     "providerLabel": "Provider application",
-    "consumerLabel": "Consumer application",
+    "consumerLabel": "Calling application",
     "usesCapability": "{consumer} uses “{capability}” from {provider}",
     "tooltip": "{consumer} uses “{capability}” from {provider} · purpose {purpose} · {remaining}",
     "remainingDays": "{count} days left",
@@ -2940,9 +2940,9 @@ export const en: typeof vi = {
     "navHow": "How it works",
     "navCapabilities": "Capability areas",
     "layersTitle": "What Junctura includes",
-    "layersLead": "Eight shared functions sit below. Your applications connect to them through the API Gateway.",
+    "layersLead": "Eight shared functions sit below. Your applications connect to them through the API gateway.",
     "layerTier2": "Your applications (Layer 2)",
-    "layerTier2Desc": "Your organisation's software uses the shared functions through the API Gateway.",
+    "layerTier2Desc": "Your organisation's software uses the shared functions through the API gateway.",
     "layersGateway": "API Gateway",
     "layersHint": "Hover or use the Tab key to see what each block does.",
     "layersCardLabel": "Now viewing",
