@@ -1,173 +1,297 @@
 <!-- SPDX-FileCopyrightText: 2026 Junctura Contributors -->
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 
-# Local deployment and recovery
+# Operator guide
 
-This Compose stack is a single-host Layer 1 development/test environment. Only
-the Nginx gateway binds a host port by default, on `127.0.0.1:8080`; the optional
-Console profile also publishes loopback port 3000. No production deployment,
-container registry publication or automatic release is configured.
+Operate this single-host Layer-1 Compose stack from the repository root; Layer-2/3 apps own business decisions.
 
 ## Start, check and stop
 
-Use Node.js 24 and Docker with Linux containers. From the repository root:
+Use Node.js 24 and Docker with Compose and Linux containers:
 
 ```sh
 npm run setup
 npm run check
 npm test
 docker compose config --quiet
-docker compose up --build --detach --wait --wait-timeout 240
+npm run local:up
 npm run healthcheck
 docker compose exec -T core node scripts/check-health.mjs
+npm run local:status
+npm run local:down
+```
+
+`local:up` builds Core and Console and runs initialization/migrations. Without Console,
+use `docker compose up --build --detach --wait --wait-timeout 900`; inspect with
+`docker compose ps`, stop with `docker compose down`. Gateway binds `127.0.0.1:${PORT:-8080}`;
+the `console` profile publishes `127.0.0.1:${CONSOLE_PORT:-3000}`. Provider ports are unpublished.
+
+Setup generates private `.env` credentials and refuses to overwrite an existing file; add missing
+settings manually. Editing passwords does not rotate existing accounts. Restrict Docker and
+`.env` access to trusted operators. Resolved Compose configuration contains secrets: use
+`config --quiet`, and keep credentials out of logs, issues and CI artifacts.
+
+`/health` checks process liveness; `/ready` checks configured dependencies and can return `503`
+while the process is alive. `healthcheck` requires both. Readiness is a bounded probe, not a
+transaction guarantee. Gateway resolves recreated Core/Identity containers through Docker DNS.
+
+Long-running services use `restart: unless-stopped`; `data-migrate`, `secrets-init` and `workflow-init`
+do not automatically restart. After reboot OpenBao may be sealed; `npm run local:up` reruns initialization.
+
+Run these suites sequentially on a disposable stack without application traffic:
+
+```sh
 npm run test:integration
 npm run test:applications
 npm run test:capabilities
+npm run test:compositions
+npm run test:malware-scan
+npm run test:secrets
 npm run test:recovery
 npm run test:audit
-docker compose ps
-docker compose down
 ```
 
-Setup creates `.env` with random fixture credentials and refuses to overwrite
-an existing file. Keep that file private. Do not print `docker compose config`
-without `--quiet`: resolved configuration contains secrets. Do not copy working
-credentials into examples, issues, logs or CI artifacts. Restrict local Docker
-and `.env` access to trusted operators.
-
-`/health` is process liveness; `/ready` checks configured dependencies. A healthy
-process can return readiness `503` during an outage. Nginx resolves recreated
-Core/Identity containers using Docker DNS without a manual proxy reload.
-Readiness is a bounded dependency check, not a guarantee of transaction success.
-
-Long-running services use `restart: unless-stopped`, so they return after a host
-reboot or Docker restart; the init and migration jobs (`data-migrate`,
-`secrets-init`, `workflow-init`) do not restart. OpenBao may come back sealed, and
-`npm run local:up` re-runs the init jobs.
-
-The integration suite intentionally stops dependencies and restarts PostgreSQL,
-recreates data/object/workflow/Core containers, and stops/starts Identity. It
-checks denied access during outages and recovery with persistent state. Use a
-local test stack without application traffic. Run integration, application,
-restore and audit tests sequentially because they share the source database. The
-audit suite restarts PostgreSQL to prove durable events and the read boundary;
-run it after suites that rely on uninterrupted provider sessions.
+They share the source database; integration tests stop dependencies and recreate
+containers. Audit tests restart PostgreSQL, so run them after session-dependent suites.
 
 ## Persistent state and upgrades
 
-`postgres-data` contains separate identity, data and workflow databases;
-`object-data` contains SeaweedFS volume chunks, master state and LevelDB filer
-metadata. Retain both named volumes. `docker compose down` stops/removes project
-containers and networks while retaining volumes. Never use `down -v`, volume
-pruning, or a destructive reset to apply a configuration change.
+| Volume | Retain |
+| --- | --- |
+| `postgres-data` | Identity, structured-data and workflow databases |
+| `object-data` | SeaweedFS chunks, master state and LevelDB filer metadata |
+| `clamav-signatures` | Malware signatures |
+| `openbao-data` | OpenBao Raft state |
+| `openbao-operator` | Unseal key and root token in `init.json` |
+| `openbao-init` | Core runtime token in `core-token` |
 
-The data migrator applies only pending numbered SQL files transactionally, with an
-error stopping startup. Run one migrator at a time. It does not replay historical
-permission constraints/functions over newer authority. A repeated run does not
-drop stored records. Add a new
-migration for later schema changes. Migration 005 preserves `app_private.audit`,
-adds the protected audit metadata/read role and has no down migration; retain the
-table, roles and events on rollback. Keycloak realm import initializes an empty
-realm only; changes to its JSON do not migrate an existing realm. Flowable owns
-its database schema initialization. Review each upstream migration before an
-image upgrade, retain the old pins and take a consistent backup first. Reverting
-an image is not proof its previous version can read a migrated database.
+`local:down` and ordinary `docker compose down` retain volumes. Never use `down -v`, volume
+pruning or destructive resets on a stack you want to keep. Migrations are forward-only;
+preserve applied files and authority history. See [Developing](DEVELOPING.md) for numbering,
+checksums, drift checks and runner recovery. Keycloak realm import initializes an empty realm
+only; JSON edits do not migrate existing realms. Flowable initializes its own database schema.
+
+Before changing pins in [compose.yaml](../compose.yaml), review upstream migrations/license/security notices,
+take a coordinated backup and retain old pins. Older images may not read migrated databases.
+
+## Secrets (OpenBao)
+
+| Class | Examples | Storage / handling |
+| --- | --- | --- |
+| Bootstrap | Database, Keycloak and Flowable credentials; OpenBao root/unseal material | Generated by `setup` / `secrets-init`; private `.env` and `openbao-operator` |
+| Runtime | Application integration credentials | OpenBao KV v2, under server-composed tenant/application paths |
+
+`secrets` persists Raft state at `/openbao/file`, with no host port. `secrets-init` initializes
+once with one share/threshold one, unseals, enables KV v2 at `secret/`, applies `junctura-core`
+policy and reuses a valid Core token or creates one. Core mounts `openbao-init` read-only and
+reads `/run/junctura/core-token` through `SECRETS_TOKEN_FILE`; root/unseal material stays separate.
+
+`/v2/secrets/{name}` requires an active enrolled application identity:
+
+- `PUT` requires a writer and only `{ "value": "..." }` (nonempty, up to 8 KiB UTF-8);
+  returns metadata (`201`). Repeat to rotate versions.
+- `GET` returns `{ name, version, present }` (`200`), never plaintext; missing names return `404`.
+- `DELETE` requires a writer and permanently removes metadata/all versions (`204`).
+
+Names match `[a-z][a-z0-9_-]{0,62}`. Paths are composed as `secret/data/tenants/{tenant}/apps/{app}/{name}`;
+callers cannot select arbitrary paths. Unverified authorization and unavailable OpenBao fail closed.
+Internal adapters may use `readSecretValue` in-process; never expose it to browsers or HTTP clients.
+Keep runtime values out of logs, Console payloads and audit bodies; see [Security](SECURITY.md).
+
+For Core token rotation, revoke the old token using operator credentials, remove `core-token`
+from `openbao-init`, run `docker compose run --rm secrets-init`, then
+`docker compose up -d --force-recreate core`. Removing the file alone does not revoke the token.
+Keep encrypted offline recovery copies of OpenBao state and `openbao-operator/init.json`;
+init material alone cannot reconstruct lost data. Never mount it into Core. Host/Docker admins remain trusted.
+
+## Object malware scanning (ClamAV)
+
+Authenticated writers send `application/octet-stream` (maximum 5 MiB) to `/v1/objects` or
+`/v2/objects`. Core stores bytes under `junctura-quarantine/`, scans the same in-memory bytes
+through ClamAV INSTREAM, then publishes clean bytes to SeaweedFS. For v2, `object_commit`
+follows publication; `version = NULL` objects cannot be read/shared. Rejected replacements retain prior clean versions.
+
+| Condition | Core HTTP result; publication |
+| --- | --- |
+| Clean verdict | `201` new / `200` replacement, object id and size; publish |
+| Malware / EICAR FOUND | `422 malware_detected`; no new version |
+| Scanner unavailable or invalid verdict | `503 malware_scanner_unavailable`; no new version |
+| Scan timeout | `503 malware_scan_timeout`; no new version |
+| Body over 5 MiB | `413 body_too_large` from Core; no publish |
+| Empty body | `400 empty_object`; no publish |
+| Wrong content type | `415 binary_required`; no publish |
+| Object store unavailable | `503 objects_unavailable`; request fails |
+
+`clamav/clamav-debian:1.5.4` is digest-pinned in Compose, on internal `scanner` only; port 3310 is
+unpublished. Signatures persist in `clamav-signatures`; FreshClam runs inside the image. Verify
+signature freshness and an approved update path: the network is internal. The memory limit is `2G`.
+Inspect `docker compose logs clamav` and `npm run local:status` during slow initialization.
+Core readiness requires scanner `PING` when object storage is configured; Compose checks
+`clamdscan --ping`. `CLAMAV_TIMEOUT_MS` defaults to `30000`. Quarantine deletion is attempted after
+success/failure; review orphaned `junctura-quarantine/` paths after incidents before purging them.
+Gateway's 15-second upstream read timeout can return `504` before the default 30-second scan timeout.
 
 ## Sign-in page theme
 
-Applications sign in on a Keycloak page that carries the Junctura look (mark, card, colours,
-Vietnamese by default), defined in `infra/keycloak/themes/junctura/login/`. It only adds a
-stylesheet and messages on top of Keycloak's own `keycloak.v2` templates, so Keycloak
-upgrades keep working. `compose.yaml` mounts the directory into the `identity` service.
-
-A new stack picks the theme up from `realm.json`. The realm import never changes an existing
-realm, so on a stack that already runs, apply it once without touching any volume:
+Compose mounts `infra/keycloak/themes/junctura/` into `identity`; its `login/` theme inherits `keycloak.v2` templates with CSS,
+messages and a language script (default `vi`, also `en`). New realms import it; for existing realms:
 
 ```sh
 docker compose up -d identity
 npm run login-theme:apply
 ```
 
-Or set it by hand: Keycloak admin console, realm `junctura`, Realm settings, Themes, Login
-theme `junctura`; Localization, enable internationalization with `vi` default and `en`.
+The script uses `PUBLIC_URL` for administration. If public admin routes are blocked, use
+`PUBLIC_URL=http://127.0.0.1:8080 npm run login-theme:apply` (adjust the port).
 
 ## Backup and restore
 
 ```sh
-npm run backup                                   # -> backups/<YYYYMMDD-HHMMSS>/
+npm run backup                          # backups/<YYYYMMDD-HHMMSS>/
 npm run restore -- backups/20261103-220000 --yes
+npm run healthcheck
 ```
 
-`npm run backup` writes pg_dump custom archives of `junctura_identity`,
-`junctura_data` and `junctura_workflow`, a tar.gz of the SeaweedFS object volume
-(the `objects` service is paused for a consistent copy) and `manifest.json` with
-SHA-256 checksums and the source commit. The `backups/` folder is Git-ignored;
-it holds identities and private data, so store it like `.env`.
+[backup.mjs](../scripts/backup.mjs) writes custom dumps of `junctura_identity`, `junctura_data`,
+`junctura_workflow`, `objects.tar.gz` and a SHA-256/source-commit manifest. It stops `objects` to
+archive the volume, then restarts it. Quiesce writes: the separate database dumps are not a coordinated
+snapshot. Git-ignored `backups/` contains identities/private data; protect it like `.env`.
 
-`npm run restore` verifies every checksum before touching anything, refuses to run
-without `--yes`, and first takes a safety backup under `backups/pre-restore-*`
-(skip with `--no-safety-backup`). It stops the application services, drops and
-recreates each database from its archive with original owners, ACLs and RLS
-policies, replaces the object volume, then starts the stack with `--wait`. Keep the
-same `.env`: database role passwords and OpenBao state are not part of the archive.
+Restore verifies checksums before changes, requires `--yes` and takes a safety backup at
+`backups/pre-restore-*` unless `--no-safety-backup` is specified. It stops application services,
+drops/recreates the three databases with original owners/ACLs/RLS, replaces the object volume,
+then starts the stack with `--wait`. Keep the same `.env` and initialized PostgreSQL roles;
+role passwords, `.env` and OpenBao data/operator/token volumes are outside the archive.
 
 ## Gateway access log
 
-The gateway writes one JSON line per API request (`time`, `request_id`, `client`,
-`method`, `path`, `status`, `bytes`, `duration_s`, `upstream_s`). Only the path is
-recorded, never query strings, headers or bodies, so tokens are not logged.
-Health probes are excluded. The `request_id` matches the `X-Request-ID` response
-header, so a failing client call can be traced:
+Gateway emits JSON lines: `time`, `request_id`, `client`, `method`, `path`, `status`, `bytes`,
+`duration_s`, `upstream_s`. Query strings, headers, bodies and `/health`/`/ready` probes are excluded.
+Match `request_id` to response `X-Request-ID`: `docker compose logs gateway --since 10m`.
+
+## Restore boundary and verification
+
+Keep records, application/enrollment authority, Registry versions, approvals, grants, execution/composition
+state and Audit together. Keep v2 object metadata with bytes; logical deletion retains tombstones/bytes.
+Review reclamation with [Security](SECURITY.md) and [Capabilities](CAPABILITIES.md).
+
+`npm run test:recovery` seeds fixtures and streams a `junctura_data` dump into isolated, pinned PostgreSQL
+(no network/host ports, temporary-memory storage). It checks ownership, ACLs, tenant/application RLS and
+audit queries, then removes its fixtures/container without restoring over the project database.
+Capability/composition suites also invoke it with live authority fixtures. It does not verify Keycloak
+sessions/keys, Flowable history, objects, OpenBao or cross-store consistency. A deployment needs encrypted,
+access-controlled backup storage, retention and a rehearsed coordinated restore of every store/role.
+
+## Public demo server
+
+Use a dedicated host with synthetic data, Node 24, Docker Compose, a domain and an HTTPS proxy:
+
+| Recreated artifact | Recreated by |
+| --- | --- |
+| Keycloak `admin1`, `admin2`, `admin3`, read-only `viewer` | `npm run demo:provision` |
+| Console permissions in `app_private.principals` | `npm run demo:provision` |
+| `console/public/login-hints.json` (Git-ignored, mode `0644`, viewer only) | `npm run demo:provision` |
+| `.junctura/demo-accounts.json` (Git-ignored, mode `0600`, all demo passwords) | `npm run demo:provision` |
+| Applications, capabilities, grants and records of a scenario | the Layer-2 repository's own setup script |
 
 ```sh
-docker compose logs gateway --since 10m
+git clone https://github.com/vku2-open-source-2026/junctura-dxos.git
+cd junctura-dxos
+npm run setup
 ```
 
-## Verified restore boundary
+Before first startup, edit `.env` (ports must match the proxy below):
 
-Migration 004 adds app records, resource ownership/shares and enrolled backend
-subject bindings. See [resource authorization](RESOURCE_AUTHORIZATION.md) before
-upgrading, configuring the legacy allowlist or rolling back. Keep v2 object bytes
-and metadata together. Logical object deletion retains tombstones and bytes;
-reclamation is an operator task, not an automatic cleanup of application data.
-The isolated restore test also checks the resource role, same-tenant app RLS and
-the audit role/ACL/tenant query. See [protected audit](AUDIT.md).
+```dotenv
+PUBLIC_URL=https://demo.example
+PORT=8080
+CONSOLE_PORT=3000
+```
 
-Migrations 006–009 add Registry and bounded direct Trust/discovery. Retain
-`trust_private`, `app_private`, Registry versions, approvals, enrolled identities
-and Audit together. Restore requires `junctura_app_owner`, `junctura_capability_api`
-and `junctura_trust_api` in addition to the existing roles. The capability suite
-invokes the isolated restore harness while its real OIDC fixtures exist, checking
-active, revoked and expired grant decisions, tenant RLS, private ownership/ACLs
-and revocation audit. Run `npm run test:capabilities` followed by the ordinary
-`npm run test:recovery` sequentially. Roll back code without dropping history or
-replaying old authority migrations. See [direct Trust](CAPABILITY_DIRECT_TRUST.md).
+`PUBLIC_URL` is the public HTTPS origin, without a trailing slash or `/identity`;
+changing it does not migrate existing issuer-bound authority.
 
-`npm run test:recovery` seeds its own UUID record, creates a temporary PostgreSQL
-using the pinned image, and streams `pg_dump --format=custom` into `pg_restore`.
-The target has no network or published ports and keeps its database in temporary
-memory. The test preserves table ownership, ACLs and policies, then checks the
-record is visible to tenant A and invisible to tenant B under `junctura_api`.
-It also checks that the audit role cannot write the audit table but can run the
-tenant-scoped query after restore, and that tenant B cannot read tenant A's event.
-It stops only its own temporary container and removes only its own source fixture.
-It does not restore over the project database or remove project volumes.
+```sh
+npm run local:up
+npm run demo:provision
+npm run demo:console
+curl -fsS https://demo.example/healthz
+curl -fsS -H 'Accept: application/json' https://demo.example/login-hints.json
+```
 
-This tests structured-data recovery, not a full platform backup. It does not
-verify restoration of Keycloak sessions/keys, Flowable history, SeaweedFS
-metadata/chunks, or consistency across all stores. An approved deployment needs
-an access-controlled, encrypted backup destination, retention policy and tested
-coordinated restore of all databases, roles, secrets and both object-store data
-types. Quiesce writes or use an explicitly verified consistent snapshot strategy;
-copying a live volume directory is not a demonstrated backup procedure.
+Open `https://demo.example/`. Public hints prefill `viewer` (`core-reader`, `audit.read`);
+Core denies its registrations, approvals and revocations. Type passwords from the private
+host file for `admin1`–`admin3`. Console tokens stay in tab memory; reload signs out.
+
+Console proxies `/api` to Gateway, not `/identity/`. Add your TLS certificate/key to this public nginx proxy:
+
+```nginx
+server {
+    listen 443 ssl;
+    server_name demo.example;
+    location ^~ /identity/admin/         { return 404; }
+    location ^~ /identity/realms/master/ { return 404; }
+    location /identity/ {
+        proxy_pass http://127.0.0.1:8080;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    }
+    location / {
+        proxy_pass http://127.0.0.1:3000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    }
+}
+```
+
+Provisioning defaults to `--admin-base http://127.0.0.1:${PORT:-8080}`, independently of `PUBLIC_URL`.
+For another location: `npm run demo:provision -- --admin-base http://<reachable-gateway>:<port>`.
+The password form needs no PKCE redirect change; loopback-only SSO redirect URIs need public configuration.
+
+For updates, back up, update the checkout, run `local:up`, `demo:provision` and `demo:console`.
+Provisioning is idempotent and normally preserves passwords. To rotate all passwords/rebuild hints:
+
+```sh
+npm run demo:provision -- --reset-passwords
+npm run demo:console
+```
+
+Only for a disposable demo reset: keep `.env`, run `docker compose --profile console down -v`,
+then `npm run local:up`, `npm run demo:provision`, `npm run demo:console` and the Layer-2 setup.
+This destroys all named volumes, including every database, objects and OpenBao state.
+
+Demo security checklist:
+
+- Publish only `viewer`. Keep administrator passwords private and share out of band.
+- Rotate disclosed administrator passwords with `--reset-passwords` and rebuild; provisioning may reuse the private file.
+- Never use `--public-admins` on a public server; it republishes administrator hints.
+- Keep HTTPS and both proxy admin blocks. Password login sends credentials on each login.
+- Do not commit hints or `.junctura/`. After the event, rotate the actual Keycloak administrator
+  password (editing `.env` is insufficient) and disable the `junctura-console` direct-access grant.
+
+| Problem | Check / action |
+| --- | --- |
+| No prefilled account | Rebuild Console after provisioning; fetch hints with `Accept: application/json`. |
+| `401` / `login_failed` | Route `/identity/` to Gateway; match `PUBLIC_URL` to the public origin. |
+| Users page says `missing` | Run `demo:provision` to upsert the four principals for the current issuer. |
+| Empty data pages | Run the Layer-2 scenario repository's setup against the running stack. |
+| Wrong issuer after changing `PUBLIC_URL` | For disposable data only, reset as above and reprovision; preserve real data for a reviewed authority migration. |
 
 ## Deployment gate
 
-Before any deployment beyond this local stack, approve the target and review
-TLS, hostnames/proxies, secret storage/rotation, fixture account removal, resource
-limits, vulnerability findings, complete binary license notices, backups and
-rollback. Do not expose the private database, filer or engine interfaces.
-No Layer-2 business GUI/workflow or application-specific schema is supplied here.
-The optional Console is a management client with [audit limitations](architecture/LAYER1_CORE_CATALOG.md#console-evidence-and-contradictions).
-Future application hosting is defined in the [proposed deployment model](architecture/DEPLOYMENT_MODEL.md),
-not enabled by this local operations guide.
+Before anything beyond the local stack, approve the target and check:
+
+- TLS, hostnames/proxies, private provider interfaces and removal of fixture accounts.
+- Secret storage/rotation, explicit permissions and independent approvals: [Security](SECURITY.md), [Capabilities](CAPABILITIES.md).
+- Resource limits, signature updates, vulnerability findings and complete binary license notices.
+- Coordinated backups of every store, retained credentials/roles, tested restore and rollback.
+
+## Limitations
+
+- OpenBao uses internal HTTP without TLS and one-share unseal for local use; no auto-unseal or HA.
+- Upload scanning is synchronous; capacity and signature freshness need operator attention.
+- Quarantine cleanup is best-effort; interrupted uploads can leave orphaned bytes.
+- `test:recovery` covers structured data only; the backup command omits OpenBao and global roles.
+- No production deployment, container registry publication or automatic Core release is configured. The only automated publication is the Node SDK: pushing an `sdk-v*` tag publishes `sdk/node` to npm (`.github/workflows/publish-sdk.yml`).
