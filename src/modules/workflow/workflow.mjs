@@ -9,11 +9,6 @@ import { workflowSummary } from "./summary.mjs";
 
 const engineId = /^[A-Za-z0-9:_-]{1,128}$/;
 const executionStatuses = new Set(["running", "completed", "cancelled"]);
-const businessLabels = {
-  "phe-duyet-yeu-cau": "Phê duyệt yêu cầu",
-  "xac-minh-ho-so": "Xác minh hồ sơ",
-  "doi-soat-chung-tu": "Đối soát chứng từ",
-};
 
 export function canonicalInput(value, depth = 0) {
   if (depth > 32) throw new HttpError(400, "input_too_deep");
@@ -64,17 +59,16 @@ function safeText(value, max = 200) {
     !/[\u0000-\u001f\u007f]/u.test(value) ? value : null;
 }
 
-function businessTitle(item) {
+function caseTitle(item, definitionName) {
+  if (!definitionName) return null;
   const raw = item.variables?.find((variable) => variable.name === "input")?.value;
   let input = raw;
   if (typeof raw === "string") {
     try { input = JSON.parse(raw); } catch { input = null; }
   }
-  if (!input || typeof input !== "object" || Array.isArray(input)) return null;
-  const code = safeText(input.ma_ho_so, 32);
-  if (!code || !/^[A-Z][A-Z0-9-]{0,31}$/.test(code)) return null;
-  const label = businessLabels[input.loai] ?? "Hồ sơ";
-  return `${label} ${code}`;
+  if (!input || typeof input !== "object" || Array.isArray(input)) return definitionName;
+  const reference = safeText(input.reference, 32);
+  return reference && /^[A-Z][A-Z0-9-]{0,31}$/.test(reference) ? `${definitionName} ${reference}` : definitionName;
 }
 
 async function activeTask(config, tenantId, id) {
@@ -116,18 +110,19 @@ function executionView(item, task, definitions) {
   const definitionId = safeText(item.processDefinitionId);
   const parts = definitionParts(item);
   const known = definitionId ? definitions.get(definitionId) : undefined;
+  const definitionName = safeText(item.processDefinitionName) ?? known?.name ?? null;
   return {
     id: item.id,
     definition: {
       id: definitionId,
       key: safeText(item.processDefinitionKey, 128) ?? known?.key ?? parts.key ?? null,
-      name: safeText(item.processDefinitionName) ?? known?.name ?? null,
+      name: definitionName,
       version: Number.isInteger(item.processDefinitionVersion) ? item.processDefinitionVersion : known?.version ?? parts.version ?? null,
     },
     status,
     startedAt: item.startTime ?? null,
     updatedAt: item.endTime ?? task?.createTime ?? item.startTime ?? null,
-    title: businessTitle(item),
+    title: caseTitle(item, definitionName),
     currentStep: status === "running" && task ? {
       name: task.name,
       assignee: task.assignee,

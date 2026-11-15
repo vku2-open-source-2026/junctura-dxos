@@ -14,9 +14,16 @@ All notable changes to Junctura are recorded here. Versions follow
   empty/unset uses the empty `infra/workflows/` directory. Configure deployment
   tenants with `WORKFLOW_TENANTS` (default `tenant-a,tenant-b`). Every business
   file must pass the strict safety policy before any deployment. Changed XML
-  now redeploys an existing key; identical XML is skipped. The unchanged samples
+  now redeploys an existing key; identical XML is skipped. The samples
   temporarily live in `examples/workflows/` pending a move to Layer 2. See
   [workflow deployment](docs/WORKFLOW.md#business-workflow-definitions-supplied-by-applications).
+
+- **Workflow display metadata (issue #35):** summary owners and step labels now
+  come from deployed BPMN process metadata (`junctura:owner` / `junctura:group`)
+  and named user tasks. Core caches metadata by definition ID; an unreadable
+  resource leaves only that definition's metadata empty. Case titles now use
+  the definition name and valid `input.reference` only; other input fields are
+  ignored. The temporary samples include their owner and group declarations.
 
 - **One-click language switch on the sign-in page (issue #33):** the language drop-down on the
   Keycloak sign-in page is now a single button showing the flag and code of the current

@@ -89,6 +89,58 @@ deployment. The final line reports business and technical file counts, tenants
 and the number of deployments. Engine failures retain a generic error message
 that does not expose private configuration.
 
+### Workflow display metadata
+
+Layer-2/3 applications supply owner and group labels in the deployed BPMN;
+Core has no business label tables or local business-definition fallback. Bind
+`xmlns:junctura="https://junctura.studio/schema/bpmn/1"` on `definitions`, and
+put the declarations directly in the process's `extensionElements`:
+
+```xml
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:flowable="http://flowable.org/bpmn"
+             xmlns:junctura="https://junctura.studio/schema/bpmn/1"
+             targetNamespace="https://example.invalid/workflows">
+  <process id="quy_trinh_a" name="Quy trình A" isExecutable="true">
+    <extensionElements>
+      <junctura:owner id="nhom-a" name="Nhóm chủ trì" />
+      <junctura:group id="nhom-a" name="Nhóm A" />
+      <junctura:group id="nhom-b" name="Nhóm B" />
+    </extensionElements>
+    <startEvent id="start" />
+    <sequenceFlow id="to_review" sourceRef="start" targetRef="review" />
+    <userTask id="review" name="Bước 1" flowable:candidateGroups="nhom-a,nhom-b" />
+    <sequenceFlow id="to_end" sourceRef="review" targetRef="end" />
+    <endEvent id="end" />
+  </process>
+</definitions>
+```
+
+Owner and group IDs must match `^[a-z][a-z0-9-]{1,63}$`. Display names must
+contain 1–200 characters without control characters. Declare one group per
+candidate group used by the tasks. The owner supplies the summary's
+`application: { id, name }`, or `null` when absent or invalid. Named user tasks
+become steps in document order, deduplicated by name. Each step uses the first
+candidate group with a declared valid name as its `owner`; if none has a name,
+the owner is `null`. Core never displays a raw candidate-group ID as that label.
+Metadata outside the process's own `extensionElements`, including task-level
+extensions, is ignored. Attribute order and single or double quotes are allowed.
+
+Core reads the XML through Flowable's
+`GET repository/process-definitions/{id}/resourcedata` and caches successfully
+parsed metadata by immutable definition ID (200 entries, oldest evicted first).
+Loading or parsing one resource can fail without failing the summary: that
+definition has `steps: []` and `application: null`, and a later request can retry.
+Definitions that remain only in history also have empty metadata. Technical
+Core definitions stay excluded; definition-list or history failures still
+propagate. Changing labels requires a new deployment, as with other XML changes.
+
+Execution-list case titles use only the definition name and a valid
+`input.reference` matching `^[A-Z][A-Z0-9-]{0,31}$`, for example
+`Quy trình A HS-0002`. Without a valid reference the title is the definition
+name alone; without a definition name it is `null`. Other input fields never
+contribute to case titles.
+
 ## Completion report (mandatory)
 
 Include:

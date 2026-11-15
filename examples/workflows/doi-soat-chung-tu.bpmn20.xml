@@ -3,8 +3,14 @@
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 <definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
              xmlns:flowable="http://flowable.org/bpmn"
+             xmlns:junctura="https://junctura.studio/schema/bpmn/1"
              targetNamespace="https://junctura.invalid/core/workflows">
   <process id="junctura_doi_soat_chung_tu" name="Đối soát chứng từ" isExecutable="true">
+    <extensionElements>
+      <junctura:owner id="don-vi-doi-soat" name="Đơn vị đối soát" />
+      <junctura:group id="don-vi-doi-soat" name="Đơn vị đối soát" />
+      <junctura:group id="don-vi-xet-duyet" name="Đơn vị xét duyệt" />
+    </extensionElements>
     <startEvent id="start" />
     <sequenceFlow id="to_gui_chung_tu" sourceRef="start" targetRef="gui_chung_tu" />
     <userTask id="gui_chung_tu" name="Gửi chứng từ" flowable:candidateGroups="don-vi-doi-soat" />
