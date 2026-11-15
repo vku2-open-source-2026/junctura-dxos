@@ -8,4 +8,4 @@ are not deployed by default and are not included in the Core image. They will
 move to a Layer-2 application repository.
 
 Applications supply their own workflow directory through
-`WORKFLOW_DEFINITIONS_DIR`. See the [deployment policy](../../docs/WORKFLOW.md#business-workflow-definitions-supplied-by-applications).
+`WORKFLOW_DEFINITIONS_DIR`. See the [deployment policy](../../docs/CORE_API.md#business-workflow-definitions).

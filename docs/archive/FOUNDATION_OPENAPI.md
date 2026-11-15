@@ -3,13 +3,13 @@
 
 # Implemented Foundation OpenAPI
 
-[foundation-api.openapi.json](contracts/foundation-api.openapi.json) is the
+[foundation-api.openapi.json](../contracts/foundation-api.openapi.json) is the
 implemented OpenAPI 3.1.1 contract: 44 operations on 30 paths. It covers process
 health/readiness, identity, registration/approvals, legacy and private resources,
 read shares and tenant-scoped workflow lifecycle. Existing URLs, methods,
 payloads, authorization, migrations and provider configuration are unchanged.
 
-The [Capability design](contracts/capability-api-v1.openapi.json) stays separate.
+The [Capability design](../contracts/capability-api-v1.openapi.json) stays separate.
 Its registry, resolver, composition, delegation and provider-dispatch operations
 are not Foundation endpoints. Do not generate a production client from that
 design draft and assume those services exist.
@@ -112,7 +112,7 @@ coverage is not a claim of exhaustive fault/state coverage or vendor conformance
 
 ## Tested backend HTTP example
 
-[foundation-http.mjs](../examples/foundation-http.mjs) contains ordinary HTTP
+[foundation-http.mjs](../../examples/foundation-http.mjs) contains ordinary HTTP
 calls for confidential client authentication, private record creation, binary
 upload/download, one expiring read share, and workflow start/inspect/completion.
 It uses an installed technical checkpoint and puts no private content in workflow

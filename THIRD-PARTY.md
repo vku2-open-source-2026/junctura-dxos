@@ -6,7 +6,7 @@
 Original Junctura code is Apache-2.0; upstream components retain their own terms.
 No third-party application source is copied. Entries describe separately fetched
 runtime/development components and their obligations. See
-[docs/LICENSING.md](docs/LICENSING.md) for the approved project policy.
+[docs/DEVELOPING.md](docs/DEVELOPING.md#licensing-and-third-party-policy) for the approved project policy.
 
 | Component | Version | Upstream and license | Use and obligations |
 | --- | --- | --- | --- |
@@ -112,7 +112,7 @@ The build also generates `THIRD-PARTY-NOTICES.txt` from installed runtime packag
 license/notice files and serves it with the static Console. See the exact
 [246-entry lock inventory](docs/security/console-dependencies.json),
 [container SPDX inventory](docs/security/container-packages.json) and
-[scope/findings](docs/SECURITY_REVIEW.md). Lightning CSS's unmodified MPL-2.0 build
+[scope/findings](docs/archive/SECURITY_REVIEW.md). Lightning CSS's unmodified MPL-2.0 build
 tools and caniuse-lite's CC-BY-4.0 build data are fetched only during builds;
 redistributing builder layers or node_modules requires their upstream terms.
 
@@ -123,5 +123,5 @@ is installed only in ignored `.cache/audit-tools` for advisory checks of pinned
 contract dependencies. Docker Desktop's separately installed Docker Scout 1.24.0
 performs image CVE and SBOM analysis. Neither tool nor its dependencies are bundled
 in Junctura source archives or runtime images. npm's built-in audit/SBOM commands
-inspect the Console lockfile. See [review scope](docs/SECURITY_REVIEW.md).
+inspect the Console lockfile. See [review scope](docs/archive/SECURITY_REVIEW.md).
 

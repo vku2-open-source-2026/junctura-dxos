@@ -122,15 +122,15 @@ const enDocsSections: typeof vi.docs.sections = {
           },
           {
             "label": "Capability invocation",
-            "path": "/blob/main/docs/CAPABILITY_EXECUTION.md"
+            "path": "/blob/main/docs/CAPABILITIES.md#capability-execution"
           },
           {
             "label": "Bounded composition",
-            "path": "/blob/main/docs/CAPABILITY_COMPOSITION.md"
+            "path": "/blob/main/docs/CAPABILITIES.md#composition"
           },
           {
             "label": "Product status",
-            "path": "/blob/main/docs/PRODUCT.md"
+            "path": "/blob/main/docs/ARCHITECTURE.md"
           },
           {
             "label": "Developer and extension guide",
@@ -138,11 +138,11 @@ const enDocsSections: typeof vi.docs.sections = {
           },
           {
             "label": "Application registration",
-            "path": "/blob/main/docs/APPLICATION_REGISTRATION.md"
+            "path": "/blob/main/docs/CAPABILITIES.md#application-registration"
           },
           {
             "label": "Resource authorization",
-            "path": "/blob/main/docs/RESOURCE_AUTHORIZATION.md"
+            "path": "/blob/main/docs/SECURITY.md#resource-authorization"
           },
           {
             "label": "Foundation API contract",

@@ -10,7 +10,7 @@ verifiable cross-application capability composition.
 
 This document is the product-level status catalog. Technical ownership, routes
 and evidence remain in the [implementation catalog](architecture/LAYER1_CORE_CATALOG.md),
-the [Foundation OpenAPI](contracts/foundation-api.openapi.json) and the
+the [Foundation OpenAPI](../contracts/foundation-api.openapi.json) and the
 [architecture index](index.md). When they disagree, the runtime and its tests win.
 
 ## Status vocabulary
@@ -42,7 +42,7 @@ The headless Core. It must remain usable without the Console.
 | Resource sharing | Owner-approved, expiring, read-only shares | `/v2/resource-shares*` |
 
 The exact operation inventory is generated from the Foundation OpenAPI and checked
-in CI (44 operations at this revision). See [CORE_API.md](CORE_API.md) and
+in CI (44 operations at this revision). See [CORE_API.md](../CORE_API.md) and
 [RESOURCE_AUTHORIZATION.md](RESOURCE_AUTHORIZATION.md).
 
 ### Junctura Developer Experience — PARTIAL
@@ -83,7 +83,7 @@ See [CAPABILITY_EXTENSIONS_V1.md](CAPABILITY_EXTENSIONS_V1.md) and
 
 | Area | Status | Evidence or next gate |
 | --- | --- | --- |
-| Five Foundation capabilities | IMPLEMENTED | Real-service integration suites in CI; see [README](README_EN.md#implementation-status). |
+| Five Foundation capabilities | IMPLEMENTED | Real-service integration suites in CI; see [README](../README_EN.md#implementation-status). |
 | Tenant and application isolation | IMPLEMENTED | Negative tests for forged context, foreign IDs and direct SQL/RLS access. |
 | Application registration and approvals | IMPLEMENTED | Operator enrollment required; see [APPLICATION_REGISTRATION.md](APPLICATION_REGISTRATION.md). |
 | Private v2 records/objects and read shares | IMPLEMENTED | Owner-only writes, expiry/revocation and denied cross-app tests. |
@@ -93,7 +93,7 @@ See [CAPABILITY_EXTENSIONS_V1.md](CAPABILITY_EXTENSIONS_V1.md) and
 | Console management UI | PARTIAL | Read/management flows, preview-only mutations in some screens; no admin session. |
 | Server-side HTTP developer example | IMPLEMENTED | `npm run example:foundation`; exercised by the application integration suite. |
 | Getting Started / onboarding | PARTIAL | Console quickstart, commands, expected proofs and cleanup guidance; enrollment is operator-run rather than self-service. |
-| Node server SDK | IMPLEMENTED, bounded | `sdk/node`: public Gateway APIs, memory-only client credentials, safe errors, no mutation retries; see [onboarding](GETTING_STARTED.md). |
+| Node server SDK | IMPLEMENTED, bounded | `sdk/node`: public Gateway APIs, memory-only client credentials, safe errors, no mutation retries; see [onboarding](../GETTING_STARTED.md). |
 | Projects and environments | PROPOSED | P1 gate; no tables or routes. |
 | Application bindings | PROPOSED | P2 gate; no credential lifecycle. |
 | Hosting, deployments, runtime workers | PROPOSED | Separate approval; no controller or runtime. |
@@ -125,8 +125,8 @@ See [CAPABILITY_EXTENSIONS_V1.md](CAPABILITY_EXTENSIONS_V1.md) and
    consumer grant. Discover metadata only with `discover` authority; `invoke`
    is required independently at every dispatch when the guarded runtime is explicitly enabled.
 
-See the [developer guide](DEVELOPING.md) for commands and the
-[HTTP example](../examples/foundation-http.mjs) for the executable journey.
+See the [developer guide](../DEVELOPING.md) for commands and the
+[HTTP example](../../examples/foundation-http.mjs) for the executable journey.
 
 ## Boundaries
 

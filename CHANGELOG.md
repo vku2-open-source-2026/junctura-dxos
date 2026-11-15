@@ -8,6 +8,15 @@ All notable changes to Junctura are recorded here. Versions follow
 
 ## Unreleased
 
+- **Consolidated documentation (issue #40):** `docs/` now holds eleven current
+  documents (getting started, architecture, Core API, capabilities, security,
+  operations, Console, developing, release, OLP requirements, English README),
+  rewritten against the code and free of dated audit statuses. The new
+  `docs/CAPABILITIES.md` and `docs/SECURITY.md` merge the former per-feature
+  capability, registration, audit, resource-authorization and security-review
+  documents. Earlier working notes, reviews, backlogs and the merged sources
+  moved unchanged to `docs/archive/`, whose README marks them as historical.
+
 - **Layer 1 domain-neutral and accurately worded (issue #38):** the Console
   shows collection names exactly as applications supply them (no hard-coded
   business collection labels); Console wording matches its scope — it views
@@ -30,7 +39,7 @@ All notable changes to Junctura are recorded here. Versions follow
   file must pass the strict safety policy before any deployment. Changed XML
   now redeploys an existing key; identical XML is skipped. The samples
   temporarily live in `examples/workflows/` pending a move to Layer 2. See
-  [workflow deployment](docs/WORKFLOW.md#business-workflow-definitions-supplied-by-applications).
+  [workflow deployment](docs/archive/WORKFLOW.md#business-workflow-definitions-supplied-by-applications).
 
 - **Workflow display metadata (issue #35):** summary owners and step labels now
   come from deployed BPMN process metadata (`junctura:owner` / `junctura:group`)
@@ -58,7 +67,7 @@ All notable changes to Junctura are recorded here. Versions follow
 - **Plainer Console text (issue #29):** the Vietnamese and English Console text drops
   unexplained jargon ("tenant", "token", "idempotency key", "digest", ...) in
   favour of one shared set of terms, documented in
-  [docs/CONSOLE_GLOSSARY.md](docs/CONSOLE_GLOSSARY.md). Developer areas (API
+  [docs/CONSOLE_GLOSSARY.md](docs/archive/CONSOLE_GLOSSARY.md). Developer areas (API
   reference, security details) keep technical names. No behavior or i18n key
   changes.
 
@@ -93,7 +102,7 @@ All notable changes to Junctura are recorded here. Versions follow
   local `admin1`–`admin3` Keycloak users, upserts their Console permissions and
   writes the Git-ignored browser login hints, and `npm run demo:console` rebuilds
   the packaged Console. The packaged Nginx now serves a readable `/login-hints.json` without
-  changing the `/api` allowlist. See [the demo server guide](docs/COMPETITION_DEMO.md).
+  changing the `/api` allowlist. See [the demo server guide](docs/archive/COMPETITION_DEMO.md).
 
 - **Console layout cleanup:** Tổ chức now uses a full-width tree with an anchored detail note, Cài đặt uses the full width, Tài liệu opens the guide from the sidebar, and record collections are labelled datasets.
 
@@ -362,7 +371,7 @@ expiring, revocable and audited permission.
 
 ### Known issues
 - Upstream container images carry unresolved advisories recorded in
-  [docs/SECURITY_REVIEW.md](docs/SECURITY_REVIEW.md).
+  [docs/SECURITY_REVIEW.md](docs/archive/SECURITY_REVIEW.md).
 - Loopback-only local installation; production deployment, TLS termination and HA are
   out of scope for this release. Human delegation is not implemented.
 
@@ -382,4 +391,4 @@ expiring, revocable and audited permission.
   remain deferred. See docs/SECURITY_REVIEW.md and implementation status for open gates.
 
 Earlier implementation history and exact verification checkpoints remain in
-[the engineering history](docs/architecture/ENGINEERING_HISTORY.md) and Git.
+[the engineering history](docs/archive/architecture/ENGINEERING_HISTORY.md) and Git.

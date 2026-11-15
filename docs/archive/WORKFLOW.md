@@ -23,8 +23,8 @@
 Core no longer ships business BPMN in its image. Applications maintain these
 definitions in a Layer-2 repository; an operator supplies their directory with
 `WORKFLOW_DEFINITIONS_DIR` (for example `../junctura-workspace/workflows`). Empty
-or unset uses [infra/workflows](../infra/workflows/README.md), which contains no
-business BPMN. The [temporary samples](../examples/workflows/README.md) are not
+or unset uses [infra/workflows](../../infra/workflows/README.md), which contains no
+business BPMN. The [temporary samples](../../examples/workflows/README.md) are not
 deployed by default and will move to a Layer-2 application repository.
 
 `workflow-init` mounts that directory read-only at `/definitions/business` and

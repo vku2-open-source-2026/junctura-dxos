@@ -4,7 +4,7 @@
 # Application Registration operations
 
 The implemented control plane is described by the
-[Foundation OpenAPI](contracts/foundation-api.openapi.json). Its original design
+[Foundation OpenAPI](../contracts/foundation-api.openapi.json). Its original design
 also appears in the separate Capability draft. C1/C2 and opt-in bounded C4A/C4B
 are implemented separately; the resolver remains offline. See [current status](PRODUCT.md).
 Existing Core APIs do

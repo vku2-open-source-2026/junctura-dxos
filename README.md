@@ -75,7 +75,7 @@ flowchart TB
   end
 
   subgraph L2["Tầng 2 · không gian năng lực dùng chung"]
-    W1["Junctura Workspace<br/>quy trình · kết nối · cá nhân"]
+    W1["Junctura Workspace (đang xây dựng)<br/>quy trình · kết nối · cá nhân"]
   end
 
   OPS["Console quản trị<br/>chỉ xem · duyệt quyền truy cập"]
@@ -109,7 +109,7 @@ Chỉ cổng API mở ra ngoài; mọi dịch vụ khác nằm trong mạng nộ
 
 **Tầng 1 không chứa nghiệp vụ.** Lõi chỉ cung cấp năng lực dùng chung qua API. Quy trình, tên đơn vị, tên bộ dữ liệu và chức năng nghiệp vụ do ứng dụng Tầng 2/3 cung cấp khi chạy, nên tầng trên đổi nghiệp vụ mà không phải sửa lõi; `npm run check:neutral` chặn từ vựng nghiệp vụ lọt vào lõi.
 
-**Console là trang quản trị của lõi**, giống Supabase Studio hay Directus Data Studio: xem trạng thái nền tảng và duyệt **quyền truy cập** (đăng ký ứng dụng, công bố chức năng, chia sẻ, hậu kiểm truy cập khẩn cấp). Console không chạy, hoàn thành, hủy hay duyệt **nghiệp vụ**; việc đó thuộc ứng dụng Tầng 2/3. Lõi chạy đầy đủ khi tắt Console. Chi tiết: [Kiến trúc](docs/ARCHITECTURE.md).
+**Console là trang quản trị của lõi**, giống Supabase Studio hay Directus Data Studio: xem trạng thái nền tảng và duyệt **quyền truy cập**: duyệt hoặc thu hồi đăng ký ứng dụng, duyệt hoặc thu hồi quyền chia sẻ chức năng giữa các ứng dụng. Chức năng đã công bố, đồng ý của người dùng và truy cập khẩn cấp chỉ hiển thị để theo dõi (duyệt công bố và hậu kiểm khẩn cấp làm qua API). Console không chạy, hoàn thành, hủy hay duyệt **nghiệp vụ**; việc đó thuộc ứng dụng Tầng 2/3. Lõi chạy đầy đủ khi tắt Console. Chi tiết: [Kiến trúc](docs/ARCHITECTURE.md).
 
 ### Một lần chia sẻ năng lực diễn ra thế nào
 
@@ -208,7 +208,7 @@ const same = await junctura.getRecord("contacts", record.id);
 | `npm run provider:pki -- <tên>…` | Tạo CA và chứng chỉ TLS cho dịch vụ cung cấp năng lực chạy nội bộ (Tầng 2) |
 | `npm run backup` · `npm run restore -- <thư-mục> --yes` | Sao lưu · khôi phục toàn bộ dữ liệu |
 | `npm run console` | Chạy Console ở chế độ phát triển |
-| `npm run demo:provision` · `demo:console` | Tạo tài khoản admin demo · build lại Console kèm login hints ([hướng dẫn](docs/COMPETITION_DEMO.md)) |
+| `npm run demo:provision` · `demo:console` | Tạo tài khoản admin demo · build lại Console kèm login hints ([hướng dẫn](docs/OPERATIONS.md#public-demo-server)) |
 | `npm test` · `npm run test:integration` | Kiểm thử đơn vị · kiểm thử tích hợp |
 
 ## API chính
@@ -255,14 +255,15 @@ Phiên bản chính xác và giấy phép của từng thành phần: [THIRD-PAR
 | | |
 | --- | --- |
 | [Hướng dẫn bắt đầu](docs/GETTING_STARTED.md) | Cài đặt, đăng ký ứng dụng, gọi API, SDK |
-| [Kiến trúc](docs/ARCHITECTURE.md) | Ranh giới các tầng, dịch vụ và cách cô lập |
-| [Core API](docs/CORE_API.md) · [OpenAPI](docs/contracts/foundation-api.openapi.json) | Route, quyền, payload, quy tắc retry |
-| [Capability](docs/CAPABILITY_REGISTRY.md) | Registry, [Trust](docs/CAPABILITY_DIRECT_TRUST.md), [Invocation](docs/CAPABILITY_EXECUTION.md), [Composition](docs/CAPABILITY_COMPOSITION.md) |
-| [Kiểm toán](docs/AUDIT.md) · [Bảo mật](docs/SECURITY_REVIEW.md) | Mô hình đe dọa, kết quả quét, vấn đề còn mở |
-| [Vận hành](docs/OPERATIONS.md) · [Phát hành](docs/RELEASE.md) | Khởi động, migration, sao lưu, đóng gói |
-| [Triển khai demo thi](docs/COMPETITION_DEMO.md) | Server demo, tài khoản mẫu, reverse proxy, reset dữ liệu |
-| [Đối chiếu đề thi OLP'26](docs/OLP_REQUIREMENTS.md) | Yêu cầu của đề và cách Junctura đáp ứng |
-| [Mục lục đầy đủ](docs/index.md) | Toàn bộ thiết kế và quyết định kiến trúc |
+| [Kiến trúc](docs/ARCHITECTURE.md) | Ba tầng, dịch vụ, ranh giới tin cậy, quyết định chính |
+| [Core API](docs/CORE_API.md) · [OpenAPI](docs/contracts/foundation-api.openapi.json) | Route, quyền, payload, quy tắc retry, quy trình do ứng dụng cung cấp |
+| [Chia sẻ năng lực](docs/CAPABILITIES.md) | Đăng ký ứng dụng, registry, cấp quyền, gọi và ghép năng lực |
+| [Bảo mật](docs/SECURITY.md) | Ranh giới tin cậy, phân quyền tài nguyên, kiểm toán, kết quả quét |
+| [Vận hành](docs/OPERATIONS.md) · [Phát hành](docs/RELEASE.md) | Khởi động, bí mật, quét mã độc, sao lưu, server demo, đóng gói |
+| [Console](docs/CONSOLE.md) | Trang quản trị: phạm vi, màn hình, thuật ngữ |
+| [Phát triển](docs/DEVELOPING.md) | Quy trình đóng góp, module, migration, giấy phép |
+| [Đối chiếu đề thi OLP'26](docs/OLP_REQUIREMENTS.md) | Yêu cầu của đề, thể lệ chấm và cách Junctura đáp ứng |
+| [Tài liệu lưu trữ](docs/archive/README.md) | Ghi chép thiết kế và rà soát cũ, chỉ để tham khảo lịch sử |
 
 ## Cấu trúc thư mục
 

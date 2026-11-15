@@ -5,7 +5,7 @@
 
 Implementation update (2026-11-01): C1 Registry, C2 direct Trust, the offline C3 resolver and protected Audit are implemented. Opt-in [C4A guarded invocation](CAPABILITY_EXECUTION.md) and [C4B bounded composition](CAPABILITY_COMPOSITION.md) now have real provider/OIDC/PostgreSQL/Flowable verification and remain disabled by default. Human delegation, general resume/retry, side effects, HA and hosting remain unsupported.
 
-This document retains the full v1 manifest/lifecycle/compatibility design. Current implemented subsets are listed above; broader execution/delegation endpoints remain unavailable; the bounded implementation guides define served behavior. Existing [Core APIs](CORE_API.md), public identity claims and headless platform boundaries remain unchanged.
+This document retains the full v1 manifest/lifecycle/compatibility design. Current implemented subsets are listed above; broader execution/delegation endpoints remain unavailable; the bounded implementation guides define served behavior. Existing [Core APIs](../CORE_API.md), public identity claims and headless platform boundaries remain unchanged.
 
 ## Contract artifacts and reading order
 
@@ -16,8 +16,8 @@ ACLs, not the capability grants, delegation or execution contracts proposed here
 - This document: manifest, registration, ownership, lifecycle and compatibility.
 - [Trust and execution](CAPABILITY_TRUST_EXECUTION_V1.md): caller context, delegation, approvals, Flowable binding, failure and audit rules, sequence diagrams.
 - [Acceptance criteria](CAPABILITY_ACCEPTANCE_V1.md): negative cases, implementation gates and evidence requirements.
-- [Manifest JSON Schema](contracts/capability-manifest-v1.schema.json), [composition JSON Schema](contracts/composition-v1.schema.json) and [OpenAPI draft](contracts/capability-api-v1.openapi.json).
-- [Manifest example](contracts/examples/capability-manifest.json), [composition example](contracts/examples/composition.json), [API examples](contracts/examples/api-examples.json) and [structural negative cases](contracts/examples/negative-cases.json).
+- [Manifest JSON Schema](../contracts/capability-manifest-v1.schema.json), [composition JSON Schema](../contracts/composition-v1.schema.json) and [OpenAPI draft](../contracts/capability-api-v1.openapi.json).
+- [Manifest example](../contracts/examples/capability-manifest.json), [composition example](../contracts/examples/composition.json), [API examples](../contracts/examples/api-examples.json) and [structural negative cases](../contracts/examples/negative-cases.json).
 
 The JSON artifacts define structural wire validation. The prose adds mandatory relational, authorization, state and compatibility checks that JSON Schema cannot express. Passing a schema is not authorization or publication approval. No SDK, GUI, AI planner, business module, second workflow engine or deployment is part of this change.
 

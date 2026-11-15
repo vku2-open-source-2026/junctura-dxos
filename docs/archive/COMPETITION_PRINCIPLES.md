@@ -28,6 +28,6 @@ document does not invent Lakehouse, IoT gateway or OT infrastructure.
 | Lakehouse / analytical plane | Not required for Foundation BaaS scope | Two independent apps needing governed analytical sharing |
 | OT / industrial protocol gateway | Different trust and safety domain | Explicit OT requirement with air-gap and safety review |
 
-See also [OLP_REQUIREMENTS.md](OLP_REQUIREMENTS.md),
+See also [OLP_REQUIREMENTS.md](../OLP_REQUIREMENTS.md),
 [architecture/OLP_REQUIREMENT_TRACEABILITY.md](architecture/OLP_REQUIREMENT_TRACEABILITY.md)
 and [PRODUCT.md](PRODUCT.md).

@@ -17,7 +17,7 @@ Nginx, PostgreSQL/PostgREST, SeaweedFS and Flowable REST. HTTP contracts, tenant
 denials and workflow idempotency are tested against real containers. Cross-core
 tests interrupt/recreate dependencies and verify durable records, object bytes
 and workflow state. Isolated PostgreSQL dump/restore verification covers
-structured data, ownership/ACLs and tenant RLS. See [operations](OPERATIONS.md)
+structured data, ownership/ACLs and tenant RLS. See [operations](../OPERATIONS.md)
 for the limits of this local recovery evidence.
 `/health` remains
 a process-liveness contract and must not silently become an aggregate readiness

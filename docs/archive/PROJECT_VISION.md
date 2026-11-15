@@ -22,7 +22,7 @@ An application can use Identity/SSO, the Gateway, structured records, opaque obj
 
 In the proposed capability-enabled path, an application also publishes explicitly described operations or consumes operations published by other authorized applications. A composition links those operations after platform checks. This path builds on the foundational Cores and their authorization boundaries.
 
-HTTP APIs are the interoperability boundary. Future language-specific SDKs can improve usability, but must remain optional. The [extension contract](CAPABILITY_EXTENSIONS_V1.md) and [OpenAPI](contracts/capability-api-v1.openapi.json) specify the capability direction. [Application Registration](APPLICATION_REGISTRATION.md) is the first implemented control-plane subset; a bounded offline compatibility resolver exists, while registry, resolver endpoints and composition remain proposed. The [Foundation OpenAPI](FOUNDATION_OPENAPI.md) now describes implemented APIs separately; SDKs remain planned. Current working APIs are also described in [CORE_API.md](CORE_API.md).
+HTTP APIs are the interoperability boundary. Future language-specific SDKs can improve usability, but must remain optional. The [extension contract](CAPABILITY_EXTENSIONS_V1.md) and [OpenAPI](../contracts/capability-api-v1.openapi.json) specify the capability direction. [Application Registration](APPLICATION_REGISTRATION.md) is the first implemented control-plane subset; a bounded offline compatibility resolver exists, while registry, resolver endpoints and composition remain proposed. The [Foundation OpenAPI](FOUNDATION_OPENAPI.md) now describes implemented APIs separately; SDKs remain planned. Current working APIs are also described in [CORE_API.md](../CORE_API.md).
 
 ## Ownership and architectural boundaries
 
@@ -87,7 +87,7 @@ AI may eventually propose plans or help discover candidates. Any planner output 
 
 ## Example and validation direction
 
-The [README example](README_EN.md#illustrative-cross-application-use-case) describes an intake application and a review application. Their business operations belong to those applications; Junctura would own the generic checks and orchestration. The example is illustrative and supplies no domain-specific code or commitments about a future demonstration product.
+The [README example](../README_EN.md#illustrative-cross-application-use-case) describes an intake application and a review application. Their business operations belong to those applications; Junctura would own the generic checks and orchestration. The example is illustrative and supplies no domain-specific code or commitments about a future demonstration product.
 
 Before implementing extensions, review capability publication/versioning, supported schema compatibility, trust/delegation, workflow binding and failure semantics. A useful acceptance scenario would demonstrate both a valid connection and rejected incompatible inputs, unauthorized invocation, revoked permission, cross-tenant access and unsafe retry. Evidence must distinguish static validation from runtime enforcement and external side effects.
 
@@ -95,8 +95,8 @@ Before implementing extensions, review capability publication/versioning, suppor
 
 The implemented scope is the five-Core Layer-1 foundation, Application Authority, private resources/shares and Foundation OpenAPI, with source tests, real-service integration checks and isolated structured-data restore verification. An optional Console exists with [partially verified live behavior](architecture/LAYER1_CORE_CATALOG.md#console-evidence-and-contradictions). Future work includes hosting, optional SDKs, the proposed capability Cores and independent Layer-2 products. Optional AI planning remains a separately reviewed integration. No Layer-2 business GUI, registry, hosting controller or composition runtime is implemented here.
 
-Docker Compose is the initial self-hosting strategy. A VPS and public domain are future operational choices; no Kubernetes or OpenStack work is planned in this scope. Public deployment needs an approved target, TLS, secret management, full-platform recovery and rollback verification. Current limits are documented in [OPERATIONS.md](OPERATIONS.md).
+Docker Compose is the initial self-hosting strategy. A VPS and public domain are future operational choices; no Kubernetes or OpenStack work is planned in this scope. Public deployment needs an approved target, TLS, secret management, full-platform recovery and rollback verification. Current limits are documented in [OPERATIONS.md](../OPERATIONS.md).
 
-See [ARCHITECTURE.md](ARCHITECTURE.md) for current service boundaries and [INTEGRATION_ROADMAP.md](INTEGRATION_ROADMAP.md) for foundational acceptance criteria. The README's [development roadmap](README_EN.md#development-roadmap) connects that foundation to the proposed product direction.
+See [ARCHITECTURE.md](../ARCHITECTURE.md) for current service boundaries and [INTEGRATION_ROADMAP.md](INTEGRATION_ROADMAP.md) for foundational acceptance criteria. The README's [development roadmap](../README_EN.md#development-roadmap) connects that foundation to the proposed product direction.
 
 The [Capability v1 design](CAPABILITY_EXTENSIONS_V1.md) now makes concrete proposed choices for the model above. Its [trust/execution rules](CAPABILITY_TRUST_EXECUTION_V1.md) and [acceptance gates](CAPABILITY_ACCEPTANCE_V1.md) require review before runtime work; their publication is not implementation approval.

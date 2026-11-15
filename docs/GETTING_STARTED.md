@@ -93,15 +93,15 @@ A trusted local operator must perform the existing reviewed flow:
    group membership by reading them back through authenticated administration.
 2. Verify separate human owner and approver identities and their management
    clients. Enroll the owner and independent approver with only the permissions
-   needed, using the SQL in [Application Registration](APPLICATION_REGISTRATION.md#operator-enrollment).
+   needed, using the SQL in [Application Registration](CAPABILITIES.md#application-registration).
 3. Enroll the exact OAuth client, owner and canonical HTTPS provider origin. Bind
    `resource_subject` to the verified service-account user ID using
-   [resource enrollment](RESOURCE_AUTHORIZATION.md). Never infer it from a username
+   [resource enrollment](SECURITY.md#resource-authorization). Never infer it from a username
    or accept a tenant/owner override from an application.
 4. The human owner POSTs `/v1/applications`. The separate approver creates a digest-
    and revision-bound application approval at `/v1/approvals`, then POSTs
    `/v1/applications/{appId}/approve` with that approval and exact `If-Match`.
-   Follow the [complete API flow](APPLICATION_REGISTRATION.md#api-flow).
+   Follow the [complete API flow](CAPABILITIES.md#application-registration).
 5. Hand the application developer its own client ID and secret through a private
    channel. Keep operator/database credentials out of the application. Record the
    operator change. No default administrator or self-service enrollment is added.
@@ -217,7 +217,7 @@ server implementation. It never supplies Core credentials to a provider.
    with ETag. A different human with `compositions.approve` must approve its digest and
    revision; an authorized publisher then publishes it. Every step needs its own current
    exact invoke grant. POST/PUT/approval bodies and plan fixtures are linked from
-   [bounded composition](CAPABILITY_COMPOSITION.md).
+   [bounded composition](CAPABILITIES.md#composition).
 
 ```js
 const accepted = await junctura.execute({
@@ -252,8 +252,8 @@ The suites retain synthetic SQL/audit evidence and clean their own identity/cont
 fixtures. They need operator fixture credentials; never run them on real user data.
 
 For your own provider integration, read the ordered HTTP recipe in
-[Capability Registry](CAPABILITY_REGISTRY.md), [Direct Trust](CAPABILITY_DIRECT_TRUST.md),
-[guarded invocation](CAPABILITY_EXECUTION.md) and [bounded composition](CAPABILITY_COMPOSITION.md).
+[Capability Registry](CAPABILITIES.md#capability-registry), [Direct Trust](CAPABILITIES.md#direct-trust-grants),
+[guarded invocation](CAPABILITIES.md#capability-execution) and [bounded composition](CAPABILITIES.md#composition).
 The [Capability OpenAPI](contracts/capability-api-v1.openapi.json) is authoritative
 for exact request bodies, independent permissions, ETags and supported states.
 
@@ -270,10 +270,10 @@ for exact request bodies, independent permissions, ETags and supported states.
 | 412 / 428 | Read the current resource and send its exact ETag as `If-Match`. |
 | 409 idempotency conflict | Reuse the original request with its original key, or deliberately create new work with a new key. |
 | 503 / not ready | Run doctor and `local:status`; inspect only the failing service's logs privately. |
-| Migration checksum/drift refusal | Preserve data; follow [migration diagnostics](MIGRATIONS.md). Never edit applied SQL. |
+| Migration checksum/drift refusal | Preserve data; follow [migration diagnostics](DEVELOPING.md#database-migrations). Never edit applied SQL. |
 | C4 endpoint 404 | Execution is opt-in and disabled by default; use private test fixtures or a reviewed operator configuration. |
 | `auth_required` / `outcome_unknown` | Stop polling as active work; inspect the documented recovery limits. Do not resubmit external effects. |
 
 Resolved Compose configuration and provider logs can contain secrets. Review them
 locally before sharing. See [operations](OPERATIONS.md), [upgrade/release guide](RELEASE.md)
-and [security review](SECURITY_REVIEW.md) for the remaining operational limits.
+and [security review](SECURITY.md) for the remaining operational limits.

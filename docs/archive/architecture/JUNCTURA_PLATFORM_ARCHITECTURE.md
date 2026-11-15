@@ -100,7 +100,7 @@ by this document. Kubernetes/OpenStack have no demonstrated requirement here.
 
 | Question | Controlling document |
 | --- | --- |
-| Exact current route/schema/status | [Foundation OpenAPI](../contracts/foundation-api.openapi.json) and [Core API](../CORE_API.md) |
+| Exact current route/schema/status | [Foundation OpenAPI](../../contracts/foundation-api.openapi.json) and [Core API](../../CORE_API.md) |
 | Current app binding, shares and v1 migration | [Resource authorization](../RESOURCE_AUTHORIZATION.md), migration 004 |
 | Enrollment and application state | [Registration](../APPLICATION_REGISTRATION.md), migration 003 |
 | Future capability wire contracts | [Capability v1](../CAPABILITY_EXTENSIONS_V1.md), [trust/execution](../CAPABILITY_TRUST_EXECUTION_V1.md), [runtime review](../CAPABILITY_RUNTIME_REVIEW_V1.md) |

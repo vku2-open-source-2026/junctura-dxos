@@ -66,7 +66,7 @@ must be consulted before treating this program as complete.
 
 ## Executed container and license audit — 2026-11-02
 
-The [exact lockfile inventory](security/console-dependencies.json) records 246
+The [exact lockfile inventory](../security/console-dependencies.json) records 246
 Console package entries including optional platform variants, source URLs, integrity
 digests and SPDX metadata. Licenses include MIT, ISC, MIT-0, Apache-2.0, BSD-2-Clause,
 BSD-3-Clause, MPL-2.0 (Lightning CSS build tools) and CC-BY-4.0 (caniuse-lite build data).
@@ -85,9 +85,9 @@ and returned no findings. This is not an audit of all host Python
 packages or the audit tool's own dependencies. Root Node has no npm dependency graph.
 
 Docker Scout indexed all seven actual local runtime image families. The
-[container package inventory](security/container-packages.json) contains 1,925 SPDX
+[container package inventory](../security/container-packages.json) contains 1,925 SPDX
 metadata entries. `NOASSERTION`/missing license fields remain unresolved for binary
-redistribution. The [full findings](security/container-vulnerabilities.tsv) record each
+redistribution. The [full findings](../security/container-vulnerabilities.tsv) record each
 advisory/package/image, affected version/range, reported fix and source. Counts below
 deduplicate advisory/package pairs per image; advisory exceptions remain visible.
 
