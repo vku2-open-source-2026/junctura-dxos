@@ -8,6 +8,16 @@ All notable changes to Junctura are recorded here. Versions follow
 
 ## Unreleased
 
+- **Breaking — application-supplied business workflows (issue #35):** Core no
+  longer ships or deploys business BPMN by default. Set
+  `WORKFLOW_DEFINITIONS_DIR` to an operator-provided application directory;
+  empty/unset uses the empty `infra/workflows/` directory. Configure deployment
+  tenants with `WORKFLOW_TENANTS` (default `tenant-a,tenant-b`). Every business
+  file must pass the strict safety policy before any deployment. Changed XML
+  now redeploys an existing key; identical XML is skipped. The unchanged samples
+  temporarily live in `examples/workflows/` pending a move to Layer 2. See
+  [workflow deployment](docs/WORKFLOW.md#business-workflow-definitions-supplied-by-applications).
+
 - **One-click language switch on the sign-in page (issue #33):** the language drop-down on the
   Keycloak sign-in page is now a single button showing the flag and code of the current
   language (VI or EN); one click switches to the other. It has an accessible name and a visible

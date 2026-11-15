@@ -3,7 +3,7 @@
 // Read-only aggregate of business workflow definitions. Admins may inspect the
 // shape and counts of a process, but this module never starts, completes or
 // cancels anything and never reads workflow variables or case data.
-import { readFileSync, readdirSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { workflowRequest } from "./client.mjs";
 
 const DEFINITIONS_DIRECTORY = new URL("./definitions/", import.meta.url);
@@ -69,6 +69,7 @@ function parseDefinition(xml) {
 
 function loadBusinessDefinitions() {
   const definitions = new Map();
+  if (!existsSync(DEFINITIONS_DIRECTORY)) return definitions;
   for (const file of readdirSync(DEFINITIONS_DIRECTORY).filter((name) => name.endsWith(".bpmn20.xml")).sort()) {
     const definition = parseDefinition(readFileSync(new URL(file, DEFINITIONS_DIRECTORY), "utf8"));
     if (!definition || TECHNICAL_DEFINITIONS.has(definition.key)) continue;

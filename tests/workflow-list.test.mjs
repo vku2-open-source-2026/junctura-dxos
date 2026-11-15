@@ -198,21 +198,17 @@ test("workflow summary aggregates real definitions and counts without case data"
   assert.equal(response.status, 200);
   assert.equal(response.headers.get("cache-control"), "no-store");
   const body = await response.json();
-  assert.deepEqual(body.totals, { definitions: 4, running: 1, completed: 1, cancelled: 1 });
+  assert.deepEqual(body.totals, { definitions: 3, running: 1, completed: 1, cancelled: 1 });
   const byKey = new Map(body.definitions.map((item) => [item.key, item]));
   assert.equal(byKey.has("junctura_checkpoint"), false);
   assert.equal(byKey.has("junctura_c4a_single"), false);
   const approval = byKey.get("junctura_phe_duyet_yeu_cau");
-  assert.deepEqual(approval.application, { id: "don-vi-tiep-nhan", name: "Đơn vị tiếp nhận" });
-  assert.deepEqual(approval.steps.map((step) => [step.name, step.owner]), [
-    ["Tiếp nhận yêu cầu", "Đơn vị tiếp nhận"],
-    ["Xét duyệt", "Đơn vị xét duyệt"],
-    ["Hoàn tất", "Đơn vị xét duyệt"],
-  ]);
+  assert.equal(approval.application, null);
+  assert.deepEqual(approval.steps, []);
   assert.deepEqual(approval.counts, { running: 1, completed: 0, cancelled: 0 });
   assert.equal(approval.updatedAt, "2026-02-01T08:00:00.000Z");
   assert.deepEqual(byKey.get("junctura_xac_minh_ho_so").counts, { running: 0, completed: 1, cancelled: 0 });
-  assert.deepEqual(byKey.get("junctura_doi_soat_chung_tu").counts, { running: 0, completed: 0, cancelled: 0 });
+  assert.equal(byKey.has("junctura_doi_soat_chung_tu"), false);
   assert.deepEqual(byKey.get("junctura_missing").counts, { running: 0, completed: 0, cancelled: 1 });
   assert.equal(byKey.get("junctura_missing").application, null);
   const text = JSON.stringify(body);

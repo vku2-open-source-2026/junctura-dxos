@@ -309,15 +309,13 @@ candidate groups for running executions. `title` is a safe business label built
 only from the record code and workflow kind; personal names, identifiers, record
 contents and workflow variables are not included in the list response.
 
-The workflow summary is a strictly read-only dashboard. It reads the three
-business BPMN definitions shipped in `src/modules/workflow/definitions/`, their
-named user tasks and candidate groups, then aggregates tenant-scoped Flowable
-history into running, completed and cancelled counts. `steps` de-duplicates
-names, so a repeated “Hoàn tất” task appears once, and the end event is not a
-step. The owning product is a reviewed code-level declaration: Phê duyệt
-yêu cầu → Đơn vị tiếp nhận, Xác minh hồ sơ → Đơn vị đề nghị, Đối soát chứng từ
-→ Đơn vị đối soát. Other installed non-technical definitions, and definitions that only
-exist in history, are returned with `application: null` rather than guessed.
+The workflow summary is a strictly read-only dashboard. It discovers business
+definitions from tenant-scoped Flowable and aggregates history into running,
+completed and cancelled counts. Core no longer ships local business BPMN, so
+installed non-technical definitions, and definitions that only exist in history,
+are returned with `steps: []` and `application: null` rather than guessed.
+Applications supply business definitions through the operator-configured
+directory described in [workflow deployment](WORKFLOW.md#business-workflow-definitions-supplied-by-applications).
 `cancelled` is the only unsuccessful outcome; the summary never returns personal
 data, variables, record codes or task IDs and cannot start, complete, approve or
 stop a workflow. The technical `junctura_checkpoint` fixture is marked
