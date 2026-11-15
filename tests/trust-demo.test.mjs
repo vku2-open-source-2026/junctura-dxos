@@ -37,9 +37,19 @@ test("demo grants reference demo apps and capabilities and cover every graph sta
   assert.ok(DEMO_GRANTS.some(g => g.target === "active" && g.days < 7), "one grant shows as expiring soon");
 });
 
+test("demo data keeps its shape and uses the neutral organisation-wide apps", () => {
+  assert.equal(DEMO_APPS.length, 4);
+  assert.equal(DEMO_CAPABILITIES.length, 3);
+  assert.deepEqual(DEMO_GRANTS.map(g => g.target), ["active", "active", "active", "pending", "revoked"]);
+  for (const app of DEMO_APPS) assert.match(app.name, /^[a-z][a-z0-9-]{1,39}$/);
+  for (const capability of DEMO_CAPABILITIES) assert.match(capability.name, /^[a-z][a-z0-9-]{0,62}$/);
+  assert.deepEqual(DEMO_APPS.map(app => app.name), ["danhba", "vanban", "lichhop", "thongbao"]);
+  assert.deepEqual(DEMO_CAPABILITIES.map(c => `${c.provider}/${c.name}`), ["danhba/contact-lookup", "vanban/document-summary", "lichhop/availability"]);
+});
+
 test("re-running reuses live grants but recreates expired or revoked ones", () => {
-  const ids = { daotao: "a", thuvien: "b" };
-  const grant = { provider: "daotao", consumer: "thuvien", target: "active" };
+  const ids = { danhba: "a", vanban: "b" };
+  const grant = { provider: "danhba", consumer: "vanban", target: "active" };
   const edge = state => ({ providerAppId: "a", consumerAppId: "b", capabilityId: "cap", version: "1.0.0", state });
   assert.ok(existingGrant([edge("active")], grant, ids, "cap"));
   assert.ok(existingGrant([edge("pending")], grant, ids, "cap"));

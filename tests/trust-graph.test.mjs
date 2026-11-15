@@ -11,9 +11,9 @@ const provider = "11111111-1111-4111-8111-111111111111";
 const consumer = "22222222-2222-4222-8222-222222222222";
 const graph = {
   scope: "tenant",
-  nodes: [{ appId: provider, displayName: "Đào tạo", state: "active", owned: false }, { appId: consumer, displayName: "Thư viện", state: "active", owned: false }],
+  nodes: [{ appId: provider, displayName: "Danh bạ", state: "active", owned: false }, { appId: consumer, displayName: "Văn bản", state: "active", owned: false }],
   edges: [{ grantId: "33333333-3333-4333-8333-333333333333", providerAppId: provider, consumerAppId: consumer,
-    capabilityId: `urn:junctura:capability:${provider}:student-lookup`, version: "1.0.0", title: "Tra cứu sinh viên",
+    capabilityId: `urn:junctura:capability:${provider}:contact-lookup`, version: "1.0.0", title: "Tra cứu liên hệ",
     operations: ["discover", "invoke"], revision: 2, state: "active", createdAt: "2026-11-04T00:00:00+00:00",
     activatedAt: "2026-11-04T00:01:00+00:00", revokedAt: null, expiresAt: "2026-12-04T00:00:00+00:00" }],
   truncated: false, generatedAt: "2026-11-04T00:02:00.000Z",
