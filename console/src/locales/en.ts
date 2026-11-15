@@ -57,11 +57,11 @@ const enDocsSections: typeof vi.docs.sections = {
       {
         "kind": "code",
         "language": "bash",
-        "code": "npm run app:enroll -- daotao --display-name \"Academic Affairs\""
+        "code": "npm run app:enroll -- ung-dung-mau --display-name \"Example application\""
       },
       {
         "kind": "paragraph",
-        "text": "The command creates a service account, registers the application, approves it with a different person, and writes the credentials to .env.app.daotao.local. Never paste secrets into browser code."
+        "text": "The command creates a service account, registers the application, approves it with a different person, and writes the credentials to .env.app.ung-dung-mau.local. Never paste secrets into browser code."
       },
       {
         "kind": "heading",
@@ -283,7 +283,7 @@ const enDocsSections: typeof vi.docs.sections = {
     "blocks": [
       {
         "kind": "paragraph",
-        "text": "An application may be an academic, finance, student affairs or any other system in the organisation. Each application belongs to one unit and has its own data space."
+        "text": "An application may be any system in the organisation. Each application belongs to one unit and has its own data space."
       },
       {
         "kind": "list",
@@ -359,7 +359,7 @@ const enDocsSections: typeof vi.docs.sections = {
     "blocks": [
       {
         "kind": "paragraph",
-        "text": "A student or user can allow an application to use their data for one purpose, until a deadline, and withdraw at any time."
+        "text": "A user can allow an application to use their data for one purpose, until a deadline, and withdraw at any time."
       },
       {
         "kind": "list",
@@ -2079,42 +2079,21 @@ export const en: typeof vi = {
     "nextPage": "Next",
     "pageStatus": "Page {page}/{pages}",
     "nameMap": {
-      "junctura_checkpoint": "Technical check",
-      "application_onboarding": "Application registration approval",
-      "scholarship_review": "Scholarship review",
-      "junctura_phe_duyet_yeu_cau": "Request approval",
-      "junctura_xac_minh_ho_so": "Record verification",
-      "junctura_doi_soat_chung_tu": "Document reconciliation"
+      "junctura_checkpoint": "Technical check"
     },
     "unknownDefinition": "Business workflow",
     "diagrams": {
       "complete": "Complete",
       "roles": {
         "owner": "Owner",
-        "intakeUnit": "Intake unit",
         "reviewer": "Reviewer",
-        "reviewUnit": "Review unit",
-        "requestUnit": "Requesting unit",
-        "reconcileUnit": "Reconciliation unit"
-      },
-      "groups": {
-        "don-vi-tiep-nhan": "Intake unit",
-        "don-vi-xet-duyet": "Review unit",
-        "don-vi-de-nghi": "Requesting unit",
-        "don-vi-doi-soat": "Reconciliation unit"
+        "requester": "Requester",
+        "receiver": "Receiver"
       },
       "labels": {
-        "checkpointTask": "Technical check",
-        "scholarshipIntake": "Submit application",
-        "scholarshipDecision": "Approve",
-        "scholarshipReceive": "Receive",
-        "approvalIntake": "Receive request",
-        "approvalReview": "Review",
-        "approvalComplete": "Complete",
-        "verifySubmit": "Submit record",
-        "verifyConfirm": "Confirm",
-        "verifyComplete": "Complete",
-        "reconcileSubmit": "Submit document"
+        "exampleSubmit": "Submit request",
+        "exampleReview": "Review",
+        "exampleReceive": "Receive"
       }
     }
   },

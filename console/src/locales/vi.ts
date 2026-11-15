@@ -62,11 +62,11 @@ const docsSectionsVi: Record<DocsSectionId, DocSection> = {
       {
         "kind": "code",
         "language": "bash",
-        "code": "npm run app:enroll -- daotao --display-name \"Phòng Đào tạo\""
+        "code": "npm run app:enroll -- ung-dung-mau --display-name \"Ứng dụng mẫu\""
       },
       {
         "kind": "paragraph",
-        "text": "Lệnh tạo tài khoản dịch vụ, đăng ký và phê duyệt ứng dụng bằng một người khác, rồi ghi thông tin đăng nhập vào .env.app.daotao.local. Không dán bí mật vào mã chạy trên trình duyệt."
+        "text": "Lệnh tạo tài khoản dịch vụ, đăng ký và phê duyệt ứng dụng bằng một người khác, rồi ghi thông tin đăng nhập vào .env.app.ung-dung-mau.local. Không dán bí mật vào mã chạy trên trình duyệt."
       },
       {
         "kind": "heading",
@@ -288,7 +288,7 @@ const docsSectionsVi: Record<DocsSectionId, DocSection> = {
     "blocks": [
       {
         "kind": "paragraph",
-        "text": "Ứng dụng có thể là phần mềm đào tạo, tài chính, công tác sinh viên hoặc bất kỳ hệ thống nào trong tổ chức. Mỗi ứng dụng thuộc một đơn vị và có không gian dữ liệu riêng."
+        "text": "Ứng dụng có thể là bất kỳ hệ thống nào trong tổ chức. Mỗi ứng dụng thuộc một đơn vị và có không gian dữ liệu riêng."
       },
       {
         "kind": "list",
@@ -364,7 +364,7 @@ const docsSectionsVi: Record<DocsSectionId, DocSection> = {
     "blocks": [
       {
         "kind": "paragraph",
-        "text": "Sinh viên hoặc người dùng có thể cho phép một ứng dụng dùng dữ liệu của mình cho một mục đích, đến một hạn nhất định, và rút lại bất cứ lúc nào."
+        "text": "Người dùng có thể cho phép một ứng dụng dùng dữ liệu của mình cho một mục đích, đến một hạn nhất định, và rút lại bất cứ lúc nào."
       },
       {
         "kind": "list",
@@ -2084,42 +2084,21 @@ export const vi = {
     "nextPage": "Sau",
     "pageStatus": "Trang {page}/{pages}",
     "nameMap": {
-      "junctura_checkpoint": "Kiểm tra kỹ thuật",
-      "application_onboarding": "Duyệt đăng ký ứng dụng",
-      "scholarship_review": "Duyệt học bổng",
-      "junctura_phe_duyet_yeu_cau": "Phê duyệt yêu cầu",
-      "junctura_xac_minh_ho_so": "Xác minh hồ sơ",
-      "junctura_doi_soat_chung_tu": "Đối soát chứng từ"
+      "junctura_checkpoint": "Kiểm tra kỹ thuật"
     },
     "unknownDefinition": "Quy trình nghiệp vụ",
     "diagrams": {
       "complete": "Hoàn tất",
       "roles": {
         "owner": "Người phụ trách",
-        "intakeUnit": "Đơn vị tiếp nhận",
         "reviewer": "Người xét duyệt",
-        "reviewUnit": "Đơn vị xét duyệt",
-        "requestUnit": "Đơn vị đề nghị",
-        "reconcileUnit": "Đơn vị đối soát"
-      },
-      "groups": {
-        "don-vi-tiep-nhan": "Đơn vị tiếp nhận",
-        "don-vi-xet-duyet": "Đơn vị xét duyệt",
-        "don-vi-de-nghi": "Đơn vị đề nghị",
-        "don-vi-doi-soat": "Đơn vị đối soát"
+        "requester": "Người gửi",
+        "receiver": "Người tiếp nhận"
       },
       "labels": {
-        "checkpointTask": "Kiểm tra kỹ thuật",
-        "scholarshipIntake": "Gửi hồ sơ",
-        "scholarshipDecision": "Duyệt",
-        "scholarshipReceive": "Tiếp nhận",
-        "approvalIntake": "Tiếp nhận yêu cầu",
-        "approvalReview": "Xét duyệt",
-        "approvalComplete": "Hoàn tất",
-        "verifySubmit": "Gửi hồ sơ",
-        "verifyConfirm": "Xác nhận",
-        "verifyComplete": "Hoàn tất",
-        "reconcileSubmit": "Gửi chứng từ"
+        "exampleSubmit": "Gửi yêu cầu",
+        "exampleReview": "Xét duyệt",
+        "exampleReceive": "Tiếp nhận"
       }
     }
   },

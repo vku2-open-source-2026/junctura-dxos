@@ -65,10 +65,10 @@ describe("WorkflowSim step row", () => {
 
   it("shows each step with the person responsible", () => {
     renderSim();
-    const row = screen.getByRole("list", { name: /Gửi hồ sơ/ });
-    expect(within(row).getByText("Đơn vị tiếp nhận")).toBeInTheDocument();
+    const row = screen.getByRole("list", { name: /Gửi yêu cầu/ });
+    expect(within(row).getByText("Người gửi")).toBeInTheDocument();
     expect(within(row).getByText("Người xét duyệt")).toBeInTheDocument();
-    expect(within(row).getByText("Đơn vị xét duyệt")).toBeInTheDocument();
+    expect(within(row).getByText("Người tiếp nhận")).toBeInTheDocument();
     expect(within(row).getByText("Hoàn tất")).toBeInTheDocument();
   });
 
@@ -77,13 +77,13 @@ describe("WorkflowSim step row", () => {
     fireEvent.click(screen.getByRole("button", { name: "Chạy thử từng bước" }));
 
     let step = activeStep();
-    expect(within(step).getByText("Duyệt")).toBeInTheDocument();
+    expect(within(step).getByText("Xét duyệt")).toBeInTheDocument();
     expect(within(step).getByText("Người xét duyệt")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Duyệt" }));
     step = activeStep();
     expect(within(step).getByText("Tiếp nhận")).toBeInTheDocument();
-    expect(within(step).getByText("Đơn vị xét duyệt")).toBeInTheDocument();
+    expect(within(step).getByText("Người tiếp nhận")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Duyệt" }));
     expect(
