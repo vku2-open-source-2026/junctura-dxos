@@ -166,7 +166,7 @@ if [ -n "$stored_fingerprint" ] && [ "$stored_fingerprint" != "$current_fingerpr
   if [ "${MIGRATION_ADOPT_SCHEMA_DRIFT:-0}" = 1 ]; then
     printf 'Adopting reviewed installed-schema drift as the new baseline\n' >&2
   else
-    fail "installed schema drift detected (definitions, owners, ACLs, RLS or policies changed). Review the difference, restore the expected schema, or set MIGRATION_ADOPT_SCHEMA_DRIFT=1 after operator review. See docs/MIGRATIONS.md."
+    fail "installed schema drift detected (definitions, owners, ACLs, RLS or policies changed). Review the difference, restore the expected schema, or set MIGRATION_ADOPT_SCHEMA_DRIFT=1 after operator review. See docs/DEVELOPING.md (Database migrations)."
   fi
 fi
 
@@ -199,7 +199,7 @@ for migration in "$MIGRATION_DIR"/[0-9][0-9][0-9]-*.sql; do
       sql "$@" -c "INSERT INTO core.schema_migration_checksums(version, filename, sha256, adopted) VALUES ($version, '$name', '$checksum', true)"
       printf 'Migration %s adopted after operator review\n' "$version"
     else
-      fail "migration $version is recorded as applied without a checksum. This is version-only history; verify the installed schema, then rerun with MIGRATION_ADOPT_EXISTING=1. See docs/MIGRATIONS.md."
+      fail "migration $version is recorded as applied without a checksum. This is version-only history; verify the installed schema, then rerun with MIGRATION_ADOPT_EXISTING=1. See docs/DEVELOPING.md (Database migrations)."
     fi
   else
     if [ -n "$recorded" ]; then

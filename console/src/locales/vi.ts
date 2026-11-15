@@ -127,15 +127,15 @@ const docsSectionsVi: Record<DocsSectionId, DocSection> = {
           },
           {
             "label": "Gọi năng lực",
-            "path": "/blob/main/docs/CAPABILITY_EXECUTION.md"
+            "path": "/blob/main/docs/CAPABILITIES.md#capability-execution"
           },
           {
             "label": "Composition giới hạn",
-            "path": "/blob/main/docs/CAPABILITY_COMPOSITION.md"
+            "path": "/blob/main/docs/CAPABILITIES.md#composition"
           },
           {
             "label": "Trạng thái sản phẩm",
-            "path": "/blob/main/docs/PRODUCT.md"
+            "path": "/blob/main/docs/ARCHITECTURE.md"
           },
           {
             "label": "Hướng dẫn developer và mở rộng",
@@ -143,11 +143,11 @@ const docsSectionsVi: Record<DocsSectionId, DocSection> = {
           },
           {
             "label": "Đăng ký ứng dụng",
-            "path": "/blob/main/docs/APPLICATION_REGISTRATION.md"
+            "path": "/blob/main/docs/CAPABILITIES.md#application-registration"
           },
           {
             "label": "Phân quyền tài nguyên",
-            "path": "/blob/main/docs/RESOURCE_AUTHORIZATION.md"
+            "path": "/blob/main/docs/SECURITY.md#resource-authorization"
           },
           {
             "label": "Hợp đồng API nền tảng",

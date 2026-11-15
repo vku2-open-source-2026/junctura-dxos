@@ -69,7 +69,7 @@ Use synthetic technical echo/counter providers, not an application domain or GUI
 | I01 | Python/TypeScript serialize null vs absent, safe-number boundaries and encoded URN IDs | Identical wire meaning and digest test vectors; no string-ID normalization or coercion. |
 | I02 | Unknown response field/error code, malformed cursor, automatic client retry of an unapproved POST | Tolerant response parsing, rejected cursor, no unsafe retry behavior. |
 
-The [12 structural negative fixtures](contracts/examples/negative-cases.json) and [compatibility vectors](contracts/examples/compatibility-cases.json) are contract examples. The offline resolver unit suite executes the compatibility vectors, but these are not endpoint tests. Semantic/security/engine cases above remain implementation acceptance requirements. Record which layer actually ran in any handoff.
+The [12 structural negative fixtures](../contracts/examples/negative-cases.json) and [compatibility vectors](../contracts/examples/compatibility-cases.json) are contract examples. The offline resolver unit suite executes the compatibility vectors, but these are not endpoint tests. Semantic/security/engine cases above remain implementation acceptance requirements. Record which layer actually ran in any handoff.
 
 ## Acceptance gates before implementation
 

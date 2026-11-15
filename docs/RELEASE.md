@@ -83,7 +83,7 @@ they restart shared services. Do not run recovery/fault suites on a real data st
    compare `.env.example` key names. Do not regenerate secrets or edit applied SQL.
 5. Build the new Core/Console and run `docker compose run --rm data-migrate`. The
    runner verifies checksums, applied-version inventory, locks and schema drift.
-   Stop on refusal; see [MIGRATIONS](MIGRATIONS.md). Do not adopt drift blindly.
+   Stop on refusal; see [MIGRATIONS](DEVELOPING.md#database-migrations). Do not adopt drift blindly.
 6. Run `npm run local:up`, `npm run healthcheck`, `npm run doctor` and
    `npm run check:schema-drift`. Verify your enrolled application's read/write flow.
 
@@ -117,8 +117,8 @@ SQL, delete ledger entries or delete volumes to force a rollback.
 - [ ] Critical unresolved container findings cleared or explicitly resolved before wider distribution.
 - [ ] Owner approves publication separately; no final release/tag is created automatically.
 
-Consult [release evidence](architecture/LAYER1_IMPLEMENTATION_STATUS.md) and
-[security findings](SECURITY_REVIEW.md); an unchecked item is not a passed gate.
+Consult [release evidence](ARCHITECTURE.md) and
+[security findings](SECURITY.md); an unchecked item is not a passed gate.
 
 | Capability | Local candidate | Production phase |
 | --- | --- | --- |
@@ -149,5 +149,5 @@ On GitHub, create a release from tag `v0.1.0` and attach `junctura-0.1.0.tar.gz`
 `junctura-0.1.0.tar.gz.sha256` and `junctura-0.1.0.manifest.json`. Users verify the
 download with `sha256sum -c junctura-0.1.0.tar.gz.sha256` (or
 `Get-FileHash junctura-0.1.0.tar.gz` on Windows) before extracting. List unresolved
-upstream image advisories from [SECURITY_REVIEW.md](SECURITY_REVIEW.md) under
+upstream image advisories from [SECURITY_REVIEW.md](SECURITY.md) under
 **Known issues**; they are tracked, not hidden.

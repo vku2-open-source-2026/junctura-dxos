@@ -1,30 +1,12 @@
 <!-- SPDX-FileCopyrightText: 2026 Junctura Contributors -->
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 
-# Architecture Boundaries
+# Architecture
 
-> Reviewed: 2026-10-26 | Branch: main | Audit baseline: `7fdd7fc381bdd29d81d56fb08a764efff8c41582`
-
-## Consolidated architecture and changes
-
-Start with the [architecture index](index.md) and
-[platform definition](architecture/JUNCTURA_PLATFORM_ARCHITECTURE.md).
-This consolidation accounts for Application Authority, v2 ownership/sharing,
-Foundation OpenAPI and the partially connected Console. It proposes external
-and Junctura-hosted application models while preserving optional Verifiable
-Capability Composition. Hosting, projects and deployments are not implemented or approved by this documentation. Separately authorized [C4B](CAPABILITY_COMPOSITION.md) adds opt-in bounded composition using the same Core boundaries. The separately authorized
-[C4A runtime](CAPABILITY_EXECUTION.md) implements only opt-in guarded single-capability
-execution, with Flowable as its sole engine and technical providers outside Core.
-
-The [catalog](architecture/LAYER1_CORE_CATALOG.md) owns implementation/evidence;
-[ownership](architecture/RESOURCE_OWNERSHIP.md),
-[planes](architecture/CONTROL_DATA_RUNTIME_PLANES.md) and
-[deployment model](architecture/DEPLOYMENT_MODEL.md) own target responsibilities.
-Use the [eight maps](architecture/ARCHITECTURE_MAPS.md),
-[ADRs](architecture/ARCHITECTURE_DECISIONS.md),
-[dependency DAG](architecture/IMPLEMENTATION_DEPENDENCIES.md) and
-[one-slice handoff](architecture/IMPLEMENTATION_BACKLOG.md).
-Official interpretation is consolidated in [traceability](architecture/OLP_REQUIREMENT_TRACEABILITY.md).
+Junctura Core is a domain-neutral, headless platform exposing reusable infrastructure through authenticated APIs.
+Use [CORE_API.md](CORE_API.md) for API contracts and [CAPABILITIES.md](CAPABILITIES.md) for optional capability reuse.
+See [SECURITY.md](SECURITY.md) for authorization boundaries and [OPERATIONS.md](OPERATIONS.md) to operate and recover the stack.
+Start a local stack with [GETTING_STARTED.md](GETTING_STARTED.md).
 
 ## Layer 1 — Headless PaaS
 
@@ -45,11 +27,140 @@ The Junctura Console is the operator interface of Layer 1, comparable to Supabas
 
 At least one user-facing GUI application must exercise Core APIs in a real end-to-end scenario. Technical vendor administration consoles do not substitute for this application.
 
-Layer 2 provides shared, domain-neutral digital capability spaces on top of Core: [junctura-workspace](https://github.com/vku2-open-source-2026/junctura-workspace) (workflow inbox, capability catalog and access requests, personal consent view) and the shared health contracts and UI kit in [junctura-health](https://github.com/vku2-open-source-2026/junctura-health).
+Layer 2 provides shared, domain-neutral digital capability spaces on top of Core: [junctura-workspace](https://github.com/vku2-open-source-2026/junctura-workspace) (under development; planned workflow inbox, capability catalog and access requests, personal consent view) and the shared health contracts and UI kit in [junctura-health](https://github.com/vku2-open-source-2026/junctura-health).
 
 ## Layer 3 — Business applications
 
-Sector applications plug in and out on top of Layers 1 and 2 without changing them: Clinic, Pharmacy, Hospital, Insurance and MyHealth in the `vku2-open-source-2026` organization. They own their business rules, data and screens, and reach Core only through its public APIs.
+Sector applications plug in and out on top of Layers 1 and 2 without changing them: the Clinic, Pharmacy, Hospital and Insurance applications in the `vku2-open-source-2026` organization (a personal MyHealth application is planned). They own their business rules, data and screens, and reach Core only through its public APIs.
+
+## Runtime topology
+
+[compose.yaml](../compose.yaml) runs one Node.js Core process with private provider services and initialization jobs:
+
+```mermaid
+flowchart TB
+  Client["Browser / API client"] --> Gateway
+  Client --> Console
+  subgraph Edge["edge"]
+    Gateway["gateway: Nginx"]
+    Console["console: optional profile console"]
+    Core["core: router, authorization and logical modules"]
+  end
+  subgraph IdentityNet["identity: internal"]
+    Identity["identity: Keycloak"]
+  end
+  subgraph DataNet["data: internal"]
+    Migrate["data-migrate: numbered SQL migrations"]
+    Data["data: PostgREST"]
+  end
+  subgraph ObjectsNet["objects: internal"]
+    Objects["objects: SeaweedFS"]
+  end
+  subgraph ScannerNet["scanner: internal"]
+    Scanner["clamav: ClamAV"]
+  end
+  subgraph SecretsNet["secrets: internal"]
+    SecretsInit["secrets-init: initialize / unseal"]
+    Secrets["secrets: OpenBao"]
+  end
+  subgraph WorkflowNet["workflow: internal"]
+    WorkflowInit["workflow-init: provision definitions"]
+    Workflow["workflow: Flowable REST"]
+  end
+  Database["database: PostgreSQL<br/>identity, data and workflow databases / separate roles"]
+  Gateway -->|"auth_request /internal/auth and /v1, /v2 APIs"| Core
+  Gateway -->|"/identity/ passthrough"| Identity
+  Core -->|"live introspection"| Identity
+  Core -->|"signed assertions / RPCs / RLS"| Data
+  Core -->|"generated object paths"| Objects
+  Core -->|"scan before publish"| Scanner
+  Core --> Secrets
+  Core -->|"tenant-checked REST"| Workflow
+  SecretsInit --> Secrets
+  WorkflowInit --> Workflow
+  Migrate --> Database
+  Identity --> Database
+  Data --> Database
+  Workflow --> Database
+```
+
+Subgraphs group providers; services can join several networks. Exact membership:
+
+| Network | Services |
+| --- | --- |
+| `edge` | `core`, `gateway`, optional `console` |
+| `identity` | `database`, `identity`, `core`, `gateway` |
+| `data` | `database`, `data-migrate`, `data`, `core` |
+| `objects` | `objects`, `core` |
+| `scanner` | `clamav`, `core` |
+| `secrets` | `secrets`, `secrets-init`, `core` |
+| `workflow` | `database`, `workflow`, `workflow-init`, `core` |
+
+All networks except `edge` have `internal: true`. Provider ports are unpublished.
+Gateway publishes `127.0.0.1:${PORT:-8080}:8080`; the optional Console publishes `127.0.0.1:${CONSOLE_PORT:-3000}:3000`.
+Core runs without a Docker socket, with a read-only root filesystem and dropped Linux capabilities.
+
+Named volumes are `postgres-data` (all three databases), `object-data` (chunks and filer metadata),
+`clamav-signatures`, `openbao-data` (OpenBao Raft state), `openbao-operator` (operator recovery material)
+and `openbao-init` (Core token, mounted read-only into Core). PostgreSQL is a shared failure domain.
+
+| Capability | Provider | Core module |
+| --- | --- | --- |
+| Identity / SSO | Keycloak OIDC with live token introspection | [auth](../src/platform/auth/auth.mjs) |
+| API Gateway | Nginx `auth_request` to Core `/internal/auth`; API rate 100 requests/s per client IP, burst 50; body limit 10 MiB | [router](../src/api.mjs); [gateway config](../infra/nginx/default.conf) |
+| Structured data | PostgreSQL + PostgREST with row-level security (RLS) | [data](../src/modules/data/data.mjs), [resources](../src/modules/resources/resources.mjs) |
+| Objects | SeaweedFS; ClamAV scan before publication | [objects](../src/modules/objects/objects.mjs), [scanner](../src/modules/objects/malware-scan.mjs) |
+| Workflow | Flowable REST; PostgreSQL idempotency ledger | [workflow](../src/modules/workflow/workflow.mjs) |
+| Application authority | Private PostgreSQL enrollment/state; registration and approval RPCs through PostgREST | [applications](../src/modules/applications/applications.mjs) |
+| Capability registry / trust | Private PostgreSQL manifests, approvals, grants and trust graph | [registry](../src/modules/capability/registry/capabilities.mjs), [trust](../src/modules/capability/trust/trust.mjs) |
+| Audit | Protected PostgreSQL events, tenant queries and hash-chain verification | [audit](../src/modules/audit/audit.mjs) |
+| Runtime secrets | OpenBao KV v2; tenant/application paths; public metadata only | [secrets](../src/modules/secrets/secrets.mjs) |
+| Consent | PostgreSQL subject consents and emergency-access reviews | [consent](../src/modules/consent/consent.mjs) |
+
+Capability execution and composition are opt-in (`C4A_ENABLED` / `C4B_ENABLED`, both false by default).
+They reuse Application Authority, live Trust checks and the same Flowable engine; technical providers run outside Core.
+The compatibility resolver is a local module, with no HTTP resolver endpoint. See [CAPABILITIES.md](CAPABILITIES.md).
+
+## Request path and trust boundaries
+
+1. Nginx routes `/identity/` to Keycloak. For `/v1/` and `/v2/`, it asks Core `/internal/auth` to authenticate the bearer token, then forwards the API request.
+2. Core independently introspects the token again at its own boundary. It checks issuer, audience, expiry, tenant membership and required roles; authority modules also check live enrollment and permissions.
+3. The tenant comes from verified Keycloak claims, never a caller-supplied tenant or ownership header. V2 application identity resolves from tenant, issuer, OAuth client and the enrolled backend subject.
+4. Core mints a 30-second signed internal assertion for PostgREST, selecting a fixed API role for the operation. SQL RLS and owner-controlled RPCs enforce tenant/application authority; callers receive neither the assertion nor database credentials.
+5. Object paths derive from the verified tenant and validated/generated UUIDs. V2 adds the immutable owner application and a fresh version UUID; private metadata authorizes the committed version. Quarantine bytes are scanned before publication, and downloads are attachments.
+6. Core checks workflow definition/execution tenant ownership. The RLS-protected `core.workflow_requests` ledger reserves an idempotency key before an engine start; retries reconcile ambiguous starts against history rather than blindly starting again.
+
+Private networks restrict provider reachability; SQL roles and RPCs retain separate authority within the shared database process.
+Operator access to Docker, host storage, database or engine credentials is a trusted administrative boundary.
+Authentication, dependency or authority failures deny the affected operation; the Console supplies no independent authorization.
+
+## Resource ownership
+
+| Resource | Authoritative identity and rules |
+| --- | --- |
+| Tenant | Verified Keycloak `tenant_id` plus `tenant_memberships`; no caller-selected tenant. |
+| Principal | `(issuer, subject)`; management enrollment additionally binds tenant and management client, enabled state and explicit permissions. |
+| Registered application | Server-created `(tenant_id, app_id)`; unique `(tenant_id, issuer, oauth_client_id)`; exact enrolled owner, origin and backend subject. |
+| V2 record / object | Tenant + resource UUID with immutable owner application; `core.app_records` and `app_private.resource_objects` hold authority. Only the owner can mutate. |
+| Resource share | Same-tenant, exact record/object, read only, expiry at most 24 hours; both owner and grantee must remain active/enabled. An object share follows later committed versions of that live object. |
+| Capability manifest | `app_private.capability_versions`: tenant, capability ID, exact version/digest and provider application; published content is immutable. |
+| Capability grant | `trust_private.grants`: exact same-tenant provider/consumer, capability version/digest, operations, permissions, backend subject and expiry; independent approval activates it. Discovery does not grant invocation. |
+| Audit event | `app_private.audit`: tenant/event UUID; server-derived actor and target metadata, appended in the authority mutation transaction. Required append failure rolls back that mutation. |
+
+Applications transition `pending → active → suspended → active`; activation/reactivation consumes a fresh independent approval.
+Any nonterminal state can become `revoked`; revocation is terminal and retains resources.
+Application state changes require revision/ETag checks. Registration does not provision or disable Keycloak clients.
+
+Application content and platform configuration have separate owners: `core.app_records.data` is app content,
+never an authorization store, secret vault or control queue. Keycloak owns identity/client state; Flowable owns engine state.
+Modules call typed owner interfaces and authorized RPCs, never write another subsystem's private tables.
+Capability manifests, grants, execution history and audit use private schemas and dedicated API roles, separate from generic CRUD.
+See [CAPABILITIES.md](CAPABILITIES.md) and the [resource migration](../infra/postgres/004-resource-authorization.sql).
+
+Suspending an owner blocks its grantees; reactivation can restore unexpired shares. Subsequent v2/capability checks reject inactive applications,
+but already authorized requests may finish. There is no cancellation barrier or automatic Keycloak client disablement.
+Legacy v1 records/objects stay tenant-scoped in a separate namespace and require the `LEGACY_RESOURCE_CLIENTS` allowlist;
+no owner is inferred or assigned to legacy data. Foundation workflows remain tenant-scoped and do not inherit application suspension.
 
 ## Platform contracts
 
@@ -64,76 +175,26 @@ Sector applications plug in and out on top of Layers 1 and 2 without changing th
 
 Do not add AI runtimes, sandbox infrastructure, MCP/A2A, vector databases, or other services merely because they are fashionable. Each addition requires a user-facing use case, architecture rationale, license review, minimal test and owner approval.
 
-The current product direction (Capability-Driven DX-OS) is **proposed**, not an excuse to treat unapproved features as requirements.
+## Key decisions
 
-## Implemented foundation
+- Reuse open-source providers for the five required capabilities through thin Core adapters.
+- Keep authority, resource and capability modules in one Core process; catalog entries do not require separate microservices.
+- Core never gets a Docker socket; the optional Console is an API client only.
+- V2 keeps immutable owners and exact read shares, without write grants, ownership transfer or delegation.
+- Capability reuse is optional and reuses Application Authority and the single Flowable engine.
+- Use OSI-licensed OpenBao (MPL-2.0) instead of HashiCorp Vault for runtime secrets; public APIs never return plaintext secrets.
+- Require a clean ClamAV verdict before publishing object bytes; scanner failures block publication.
+- Protect transactional audit in PostgreSQL; database and host administrators remain trusted, including for hash-chain integrity.
+- Keep Foundation workflow definitions, executions and variables tenant-scoped.
+- Keep legacy v1 separate, with an explicit allowlist and no inferred application owner.
+- Apply additive numbered migrations; released/applied migrations are immutable, and the runner checks checksums and schema drift. See [DEVELOPING.md](DEVELOPING.md).
 
-`src/platform/health/health.mjs` exposes a minimal process-health HTTP server;
-`src/server.mjs` supplies environment configuration and shutdown handling.
-`scripts/check-health.mjs` validates its JSON response for local/container probes.
-`compose.yaml` runs this single process as a nonroot container with a read-only
-filesystem for Core. Nginx is the single loopback-published gateway and uses auth-request
-against Core; Core also checks authorization at its own boundary. Keycloak
-provides OIDC/SSO backed by a separate PostgreSQL database/role. Other Core
-integrations provide the five capabilities below; no business application is implemented.
+## Limitations
 
-Identity claims, endpoint versions and tenant authorization are described in
-[CORE_API.md](CORE_API.md). The database is shared infrastructure with separate
-database owners for identity, structured data and workflow; applications never
-receive these credentials.
-
-Structured data uses a private PostgREST service. Core mints a 30-second internal
-assertion from the verified tenant identity; SQL RLS controls every record read
-and write. The database authenticator and nonlogin API role have separate duties;
-neither caller input nor an application chooses the database role or tenant.
-
-Unstructured objects use SeaweedFS OSS behind the authenticated Core adapter.
-The objects network contains only Core and SeaweedFS; a named volume stores both
-chunks and filer metadata. All storage paths derive from verified tenant claims
-and UUIDs. Files are returned as attachments. Stable-UUID PUT is the retryable
-upload contract; POST creates a new object.
-
-Flowable REST is the private BPMN engine. Core checks the tenant's definition
-and execution ownership; an RLS-protected SQL ledger reserves idempotency keys
-before starting work and reconciles ambiguous outcomes against engine history.
-The one-shot initializer provisions the technical checkpoint fixture plus any
-business definitions an operator supplies through `WORKFLOW_DEFINITIONS_DIR`,
-after a strict safety policy ([workflow deployment](WORKFLOW.md#business-workflow-definitions-supplied-by-applications)).
-Core ships no business workflow and no AI component. The
-independent server-side SDK uses public APIs only; see [onboarding](GETTING_STARTED.md).
-The optional Junctura Console is a management client with the limitations recorded
-in the catalog; it is not a separate authorization server or hosting control API.
-
-The current topology is maintained in
-[MAP 02](architecture/ARCHITECTURE_MAPS.md#map-02-current-implemented-architecture),
-including logical authority adapters and public/private boundaries.
-
-Separate private networks isolate identity, data, objects and workflow backends;
-Core joins the networks it integrates. The gateway publishes a loopback
-port; the optional Console profile also publishes loopback port 3000.
-Operator access to Docker/database/engine credentials is a trusted local
-administrative boundary, not an end-user permission model.
-
-See [the integration roadmap](INTEGRATION_ROADMAP.md) for the ordered Core work,
-contract decisions, acceptance checks and SynapseDX reference review.
-
-## Capability extension design boundary
-
-[Capability extensions v1](CAPABILITY_EXTENSIONS_V1.md) retains the full design. Implemented subsets are Application Registration, [C1 Registry](CAPABILITY_REGISTRY.md), [C2 direct Trust/discovery](CAPABILITY_DIRECT_TRUST.md) and the offline C3 resolver. C2 adds private tenant-qualified grants, independent approval and a live internal eligibility check; it adds no service or network. Human delegation and resolver HTTP endpoints remain unimplemented. Opt-in [C4A](CAPABILITY_EXECUTION.md) and [C4B](CAPABILITY_COMPOSITION.md) reuse the guarded transport and sole Flowable engine. Flowable remains the sole workflow engine. GET /v1/identity retains its existing public representation.
-
-## Application resource authorization
-
-[V2 records and objects](RESOURCE_AUTHORIZATION.md) reuse the current adapters
-and providers. PostgreSQL resolves an active application from verified tenant,
-issuer, client and an operator-enrolled backend subject. A separate resource API
-role and forced record RLS enforce ownership and exact read shares. Private
-object metadata authorizes immutable SeaweedFS versions; legacy paths cannot
-address these bytes. Application state and enrollment are checked on every
-operation. Human requests go through a Layer-2 backend; no delegated identity or
-browser writer credential is introduced. Additive migration 004 and the documented
-legacy allowlist/migration contract precede rollout. Workflow isolation remains
-tenant-scoped and is outside this milestone.
-
-## Application Registration implementation
-
-The [runtime review](CAPABILITY_RUNTIME_REVIEW_V1.md) records Application Authority. Private owner-controlled PostgreSQL RPCs separate application, Registry, Trust and protected Audit authority from generic CRUD records. Approval supports applications, capability versions, direct grants and composition versions with independent permissions. Migration 009 integrates discovery; additive 010–017 implement bounded C4A/C4B authority and recovery. Both runtimes are disabled by default. Delegation remains deferred. Existing five-Core contracts and GET /v1/identity stay unchanged.
+- The supplied deployment is single-host Compose; published endpoints use loopback HTTP with no TLS configured.
+- There are no application-hosting, project, environment or deployment-management APIs/controllers.
+- Foundation workflows are tenant-scoped, not application-private; application suspension does not remove those workflow rights.
+- Human delegation and cross-tenant capability grants are unavailable; backend applications enforce their end users' business authorization.
+- Audit hash chains seal events on verification, but provide no independent tamper evidence against a privileged DBA able to rewrite events and chain heads.
+- Automated restore verification covers PostgreSQL data/authority and RLS, not coordinated disaster recovery of identity, workflow history, object bytes/metadata and OpenBao recovery material. See [OPERATIONS.md](OPERATIONS.md).
+- The broad `/identity/` Keycloak passthrough needs review before Internet exposure.

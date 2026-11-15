@@ -30,7 +30,7 @@ authority/Flowable configuration fails startup. The production bootstrap accepts
 no private-network exception or custom TLS trust setting. Provider origins still
 come from operator-enrolled Application Authority; callers cannot supply URLs.
 
-The [extension contract](contracts/capability-api-v1.openapi.json) describes:
+The [extension contract](../contracts/capability-api-v1.openapi.json) describes:
 
 - `POST /v1/capability-executions` with a UUID `Idempotency-Key` and exactly
   `{ "target": { "kind": "capability", "capability": { "capabilityId": "…",

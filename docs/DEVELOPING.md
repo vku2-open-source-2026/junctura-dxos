@@ -2,297 +2,343 @@
 SPDX-FileCopyrightText: 2026 Junctura Contributors
 SPDX-License-Identifier: Apache-2.0
 -->
-# Developer and extension guide
+# Contributor guide
 
-How to work on Junctura without breaking its public contracts or security model.
-Read [PRODUCT.md](PRODUCT.md), [ARCHITECTURE.md](ARCHITECTURE.md),
-[LICENSING.md](LICENSING.md) and [WORKFLOW.md](WORKFLOW.md) first.
+Use this guide for Core, Console and SDK changes; see [Getting started](GETTING_STARTED.md) for installation/integration.
 
-For installation and independent app integration, start with [GETTING_STARTED](GETTING_STARTED.md).
-This file covers extending Core itself. The SDK in `sdk/node` imports no Core module.
+## Rules
 
-## Non-negotiable development rules
+1. **Scope:** Keep Layer 1 headless and reusable: Identity/SSO, API Gateway, structured data, objects and workflow. The competition also requires a Layer 2 GUI application. Official [OLP requirements](OLP_REQUIREMENTS.md) take precedence over internal conventions; never invent requirements.
+2. **Licensing:** Keep the approved license, SPDX headers and upstream notices; record dependencies. Resolve uncertain rights before integration. See [Licensing and third-party policy](#licensing-and-third-party-policy).
+3. **Architecture:** Keep business logic in applications using public contracts. New services, frameworks and breaking APIs need justification and approval; follow [Architecture](ARCHITECTURE.md).
+4. **Security:** Never commit credentials or private data. Validate input, authorize server-side and isolate tenants; never bypass controls for a demo.
+5. **Hygiene:** Read existing code and reuse patterns. Avoid unrelated refactors, duplicate utilities, speculative features, generated clutter and unused dependencies. Keep agent prompts/instructions local.
+6. **Quality:** Update relevant tests and documentation; run available checks. Claim a successful test, build, audit or deployment only when verified.
+7. **Operations:** Obtain explicit approval before force-pushing, rewriting history, deleting data, destructive migrations or production deployment.
+8. **Handoff:** Report changed files, checks run and omitted, risks, dependencies, license impact and decisions requiring approval.
 
-1. **Competition scope:** Keep the Layer 1 PaaS headless and reusable. Deliver the five required capabilities (Identity/SSO, API Gateway, structured data, unstructured data, workflow) and at least one Layer 2 GUI application using the Core. See [OLP_REQUIREMENTS.md](OLP_REQUIREMENTS.md).
-2. **Open-source compliance:** Do not select or change the project's license. Check the root `LICENSE` before adding code. Use the approved SPDX/copyright convention, preserve third-party notices, and record dependencies. Stop and report a blocker if licensing is unresolved. See [LICENSING.md](LICENSING.md).
-3. **Architecture:** Keep domain/business logic out of the reusable Core. Apps integrate through documented APIs/contracts. Do not add a service, framework, or breaking API without justification and approval. See [ARCHITECTURE.md](ARCHITECTURE.md).
-4. **Security:** Never commit credentials or real private data. Enforce authorization server-side, validate untrusted input, and isolate tenants. Never bypass security checks to make a demo pass.
-5. **Repository hygiene:** Inspect existing code before editing; reuse established patterns. Avoid duplicate files, speculative features, unrelated refactors, generated clutter, and unused dependencies. Keep AI-agent prompt and instruction files on the developer machine; do not publish them.
-6. **Quality:** Add or update relevant tests and documentation; run available checks. Never claim a test, build, license audit, or deployment succeeded unless verified. See [WORKFLOW.md](WORKFLOW.md).
-7. **Safe operations:** Do not force-push, rewrite Git history, delete data, run destructive migrations, or deploy to production without explicit approval.
-8. **Honest handoff:** Report changed files, checks run, checks not run, remaining risks, and decisions requiring approval.
+## Workflow for a change
 
-Official OLP rules take precedence over internal project conventions. Never invent competition requirements.
+**Before editing:** Read this guide, relevant docs and existing code. Define the smallest
+change, affected APIs/schemas, risks and tests. Confirm dependencies/licenses before installation.
 
-## Runtime shape
+**While editing:** Separate Core from applications. Validate input, use safe SQL, authorize
+server-side and constrain uploads/timeouts. Make retries with side effects idempotent;
+fail closed on uncertain permissions. Keep secrets, caches, dumps and scratch/binary clutter
+out of Git. Update contracts/tests; never disable validation, tests or scanning to obtain a pass.
 
-Junctura Backend is one Node.js process (`src/server.mjs`) that exposes health,
-readiness and the public API through a small adapter layer. Nginx is the only
-published gateway. Providers stay private:
+**Completion report:** List files/reasons, exact test/build/lint commands and results,
+omitted checks, dependencies/license impact, risks, approvals and migration/rollback steps.
 
-- Keycloak for identity
-- PostgreSQL/PostgREST for structured data and authority tables
-- SeaweedFS for object bytes
-- Flowable for workflow execution
+## Runtime shape and backend module map
 
-There is no dependency-injection framework, plugin loader, microservice split or
-dynamic code execution. Extension conventions are explicit imports, explicit
-routes and explicit contracts.
+Core is one Node.js process with explicit imports/routes/contracts and bootstrap wiring.
+Nginx is the API ingress; the optional Console has its own Nginx proxy. Keycloak,
+PostgreSQL/PostgREST, SeaweedFS, Flowable, ClamAV and OpenBao remain private.
 
-## Backend module map
+| Module | Responsibility / boundary |
+| --- | --- |
+| `src/server.mjs` | Configuration, process startup and shutdown. |
+| `src/bootstrap/config.mjs`, `src/bootstrap/container.mjs` | Validate environment; construct adapters and optional workers with one close hook. |
+| `src/bootstrap/readiness.mjs` | Dependency checks for `GET /ready`. |
+| `src/api.mjs` | Public route dispatch, request IDs and error mapping. |
+| `src/platform/health/health.mjs` | HTTP server, `GET/HEAD /health` and fallback errors. |
+| `src/platform/auth/auth.mjs` | Bearer introspection, tenant and role checks. |
+| `src/platform/http/http.mjs` | Body/JSON helpers, `HttpError`, writer and UUID checks. |
+| `src/platform/security/internal-token.mjs` | Short-lived internal assertions for adapters. |
+| `src/modules/applications/applications.mjs` | Application registration/approval models and private commands. |
+| `src/modules/audit/audit.mjs` | Audit queries, chain verification and subject-access history. |
+| `src/modules/capability/registry/capabilities.mjs`, `src/modules/capability/registry/manifest.mjs`, `src/modules/capability/registry/payload.mjs` | Registry/publication commands, manifest validation, canonical digests and payload validation. |
+| `src/modules/capability/compatibility/compatibility.mjs` | Offline schema compatibility proof and strict JSON parsing. |
+| `src/modules/capability/trust/trust.mjs` | Exact direct grants, lifecycle commands and trust graph. |
+| `src/modules/capability/execution/execution.mjs` | SQL reservations, in-memory authentication leases and tickets. |
+| `src/modules/capability/execution/provider-network.mjs` | Approved-origin TLS transport, DNS pinning and dispatch guard. |
+| `src/modules/capability/execution/runtime.mjs` | Opt-in guarded invocation and Flowable worker correlation. |
+| `src/modules/capability/composition/plan.mjs`, `src/modules/capability/composition/bpmn.mjs` | Linear plan validation and deterministic bounded BPMN. |
+| `src/modules/capability/composition/registry.mjs` | Composition lifecycle and publication authority. |
+| `src/modules/capability/composition/execution.mjs`, `src/modules/capability/composition/runtime.mjs` | Private SQL steps, leases and opt-in ordered dispatch/observation. |
+| `src/modules/consent/consent.mjs` | Subject consents and emergency-access reviews. |
+| `src/modules/data/data.mjs` | Structured records through `/v1/data/*` and `/v2/data/*`. |
+| `src/modules/directory/directory.mjs` | Read-only tenant principals and organization tree. |
+| `src/modules/metrics/metrics.mjs` | Per-process request counters and bounded recent traffic. |
+| `src/modules/objects/objects.mjs`, `src/modules/objects/malware-scan.mjs` | Object routes, storage adapter and fail-closed ClamAV scanning. |
+| `src/modules/resources/resources.mjs` | Verified application context, resource authority and read shares. |
+| `src/modules/secrets/secrets.mjs` | OpenBao-backed application-secret metadata; no plaintext GET. |
+| `src/modules/storage/storage.mjs`, `src/modules/storage/files.mjs` | Read-only storage summaries, file metadata and collection structure. |
+| `src/modules/storage/filer.mjs`, `src/modules/storage/rpc.mjs`, `src/modules/storage/file-names.mjs` | Private storage queries, authorized RPC transport and safe file labels. |
+| `src/modules/workflow/workflow.mjs`, `src/modules/workflow/client.mjs` | Tenant workflow routes, idempotency ledger and private Flowable client. |
+| `src/modules/workflow/definition-policy.mjs`, `src/modules/workflow/summary.mjs` | Definition safety policy and summaries from deployed workflow metadata. |
 
-| Module | Responsibility | Public or internal |
-| --- | --- | --- |
-| `src/server.mjs` | Validate configuration, build the API, bind the process, shut down. | Entrypoint only |
-| `src/bootstrap/config.mjs`, `container.mjs` | Validate environment; construct optional workers once; expose one close hook. | Composition root |
-| `src/platform/health/health.mjs` | Liveness HTTP server and fallback error rendering. | `GET/HEAD /health` |
-| `src/api.mjs` | Route dispatch, readiness, request IDs, error mapping. | Public routing |
-| `src/platform/auth/auth.mjs` | Bearer validation, live introspection, tenant/role checks. | Shared security |
-| `src/platform/http/http.mjs` | JSON/body helpers, strict flat-object reader, writer check, UUID pattern. | Shared transport |
-| `src/bootstrap/readiness.mjs` | Dependency readiness aggregation. | `GET /ready` |
-| `src/platform/security/internal-token.mjs` | Internal short-lived JWT signing for provider adapters. | Shared security |
-| `src/modules/applications/applications.mjs` | Application registration/approval models and command forwarding. | `/v1/applications*`, `/v1/approvals*` |
-| `src/modules/capability/registry/capabilities.mjs` | Capability registry and publication approval command forwarding. | `/v1/capabilities*`, `/v1/approvals*` |
-| `src/modules/capability/registry/manifest.mjs` | Closed manifest validation and JCS digest. | Shared capability contract |
-| `src/modules/resources/resources.mjs` | Application context, resource commands, share validation. | Shared authority |
-| `src/modules/data/data.mjs` | Structured-data adapter and record routes. | `/v1/data/*`, `/v2/data/*` |
-| `src/modules/objects/objects.mjs`, `malware-scan.mjs` | Object readiness, ClamAV fail-closed scan, storage adapter and object routes. | `/v1/objects*`, `/v2/objects*` |
-| `src/modules/secrets/secrets.mjs` | OpenBao-backed application secrets metadata API (no plaintext GET). | `/v2/secrets*` |
-| `src/modules/workflow/workflow.mjs` | Workflow routes, canonical input and idempotency ledger. | `/v1/workflows/*` |
-| `src/modules/workflow/client.mjs` | Private Flowable HTTP client. | Internal provider adapter |
-| `src/modules/capability/compatibility/compatibility.mjs` | Restricted schema proof and strict JSON parsing. | Offline C3 helpers |
-| `src/modules/capability/trust/trust.mjs` | Exact direct grants and private command boundary. | C2 interface |
-| `src/modules/capability/execution/execution.mjs` | SQL reservation, memory authentication leases and ticket authority. | C4A authority |
-| `src/modules/capability/execution/provider-network.mjs` | Approved-origin TLS transport, DNS pinning and dispatch guard. | Shared C4 transport |
-| `src/modules/capability/execution/runtime.mjs` | Guarded single invocation and Flowable worker correlation. | Opt-in C4A runtime |
-| `src/modules/capability/composition/plan.mjs`, `bpmn.mjs` | Linear plan validation and deterministic bounded BPMN. | Pure C4B helpers |
-| `src/modules/capability/composition/registry.mjs` | Composition lifecycle and publication authority. | C4B Registry |
-| `src/modules/capability/composition/execution.mjs`, `runtime.mjs` | Private SQL steps, leases, ordered Flowable dispatch and observation. | Opt-in C4B runtime |
-
-Rules:
-
-- Keep authentication and tenant/application authority at the service boundary.
-- Do not trust caller-supplied tenant, owner, app or role headers.
-- Parse HTTP input in a transport helper; coordinate capability logic separately
-  from provider calls where the existing module already allows it.
-- Reuse `HttpError` and the existing error shape rather than inventing a new one.
-- Never mint provider credentials in a browser or log tokens, secrets or bodies.
-- SQL files 001–021 are immutable. The migration runner owns checksum, applied-version,
-  lock and fingerprint checks. Authority modules use restricted owner-controlled RPCs;
-  generic records cannot administer private tables. See [MIGRATIONS](MIGRATIONS.md).
-- The boundary checker enforces declared public entrypoints, downward dependencies and
-  no cycles. Bootstrap wires optional workers; Flowable owns durable jobs and timers.
+Resolve tenant/application authority server-side; never trust ownership/role headers.
+Reuse transport helpers and `HttpError`; separate coordination from provider calls.
+Keep provider credentials out of browsers and tokens/secrets/bodies out of logs. Authority uses
+restricted RPCs. Boundary checks enforce public entrypoints, downward dependencies and no cycles.
+Bootstrap wires workers; Flowable owns durable jobs/timers. There is no dynamic plugin loader.
 
 ## Add a public API route
 
-The Gateway is authoritative. Adding a route is a security change, not only a
-handler change. Follow every step:
+The Gateway is authoritative; a route changes the security surface.
 
-1. Re-read the relevant requirement, ADR and existing contract. If authorization
-   semantics are unresolved, stop and document the blocker.
-2. Decide the owning module and the exact versioned path (`/v2/...` or `/v1/...`).
-   Legacy `/v1/data` and `/v1/objects` are deprecated and allowlisted; do not add
-   new behavior there.
-3. Add the route to `src/api.mjs` with an explicit method/path branch. Unknown
-   routes must keep returning `404`.
-4. Apply the existing authorizer. Use `resourceIdentity` for app-owned v2
-   resources; never resolve ownership from headers.
-5. Enforce writer permissions with `requireWriter` where mutation is intended.
-6. Add the operation and schemas to
-   `docs/contracts/foundation-api.openapi.json`. Every implemented public
-   operation must be represented.
-7. If the Console may call it, add an explicit `location` to
-   `console/nginx/default.conf`. There is no generic `/api/` passthrough.
-8. Regenerate the Console inventory: `npm --prefix console run generate:endpoints`
-   (or run `npm run generate:endpoints` inside `console/`), then commit the
-   updated `console/src/constants/foundationEndpoints.json`.
-9. Add positive and negative tests: unauthenticated, wrong tenant, wrong app,
-   read-only writer, malformed/oversized input and unknown route.
-10. Run the checks listed below. Do not ship with a stale endpoint inventory.
-11. Update [PRODUCT.md](PRODUCT.md) or the implementation catalog only if the
-    status or ownership actually changed.
-12. If the route changes Gateway security behavior, split that change out for
-    explicit approval instead of folding it into a feature commit.
+1. Read the requirement, architecture decision and existing contract. Resolve authorization semantics before implementation.
+2. Choose the module and versioned path. Legacy `/v1/data` and `/v1/objects` are deprecated and allowlisted; add no new behavior there.
+3. Add explicit method/path dispatch in `src/api.mjs`; unknown routes must remain `404`.
+4. Use the existing authorizer and `resourceIdentity` for application-owned v2 resources; never derive ownership from headers.
+5. Use `requireWriter` for mutations where required, plus the operation's authority checks.
+6. Update operations and schemas in `docs/contracts/foundation-api.openapi.json`; represent every implemented public operation.
+7. If the Console calls it, add an explicit method/path allowlist entry in `console/nginx/default.conf`; there is no generic `/api/` passthrough.
+8. Run `npm --prefix console run generate:endpoints` and `npm --prefix console run generate:api-reference`. Include updated `console/src/constants/foundationEndpoints.json` and `console/src/constants/apiReference.json`.
+9. Cover success and denial: unauthenticated, wrong tenant/application, read-only caller, malformed/oversized input and unknown route.
+10. Run relevant checks, including `npm run console:check:endpoints` and `npm --prefix console run check:api-reference`; update authoritative docs.
+11. Submit Gateway security behavior changes for explicit approval as a separate change.
 
-The Gateway's `/v[12]/` location is intentionally broad because Core still
-authorizes each request. Do not widen it to provider paths or add a generic
-plugin/capability execution endpoint.
+The Gateway's `/v[12]/` match forwards to Core authorization; never widen it to provider paths
+or generic plugin execution. See [Core API](CORE_API.md) for workflow definitions.
 
-## Add or change a Foundation module
+## Add or change a module
 
-Use the status vocabulary from [PRODUCT.md](PRODUCT.md): IMPLEMENTED, PARTIAL,
-PROPOSED, DESIGN ONLY, DEFERRED. A new runtime module needs all of:
+- Give it one responsibility and an owning file under `src/`.
+- Document its public surface, or explicitly keep it internal.
+- State authorization requirements and data ownership.
+- Define readiness behavior for any new dependency.
+- Keep provider ports and credentials private.
+- Identify its API contract when it exposes routes.
+- Add positive, failure and denial tests.
+- Document current behavior and limitations without overstating support.
 
-- A single responsibility and a named owner file under `src/`.
-- A documented public surface, or none if internal.
-- Explicit authorization requirements and a data-ownership statement.
-- Health/readiness behavior if it adds a dependency.
-- Provider isolation: private credentials and ports must not reach the Gateway.
-- A contract location when it exposes an API.
-- Positive and negative tests, including failure and denial paths.
-- A status entry that does not overclaim.
-
-Do not create empty folders, placeholder services, unused tables, fake endpoints
-or "future" controls. A documented convention is enough until a real consumer
-exists.
+New modules need an approved change and tests; avoid empty folders, placeholders and unused tables.
 
 ## Console rules
 
-- Preserve LIVE/PREVIEW separation. Preview data is synthetic; LIVE without a
-  token must show an explicit missing/rejected state, never mock identity.
-- Keep browser tokens memory-only. Do not use `localStorage` for credentials.
-- The packaged Nginx allowlist is the Console's only proxy surface. A new screen
-  does not grant a new backend route.
-- Planned features must be visibly labelled and must not expose working-looking
-  controls.
-- Do not infer administrator rights from `core-reader` or `core-writer`.
-- Keep the existing design system, language switching and theme behavior.
+Follow [Console](CONSOLE.md): show missing/rejected credentials explicitly; label synthetic previews.
+Keep bearer tokens in memory, never `localStorage`, and client secrets out of browsers.
+Preserve the Nginx allowlist, design system, languages/themes; label unimplemented controls.
+`core-reader`/`core-writer` imply no administrator authority. Business decisions belong to applications.
 
-Console checks:
+## Domain-neutral check
 
-```sh
-npm run console:check:endpoints
-npm run console:test
-npm run console:build
-npm run test:console-container
-```
+`npm run check:neutral` (also in `npm run check`) scans tracked text in `src/`, `infra/`,
+`scripts/`, `sdk/`, `console/src/`, `examples/`, `docs/contracts/`, `compose.yaml`,
+`compose.providers.yaml`, both Dockerfiles and `.env.example` for sector vocabulary.
+Vocabulary exclusions: `tests/`, `console/src/tests/`, temporary `examples/workflows/`,
+the checker and allowlist. The separate BPMN rule allows only the two technical definitions
+in `infra/flowable/`, plus any `*.bpmn20.xml` under `tests/fixtures/` or `examples/workflows/`. Exceptions in
+`scripts/domain-neutral-allowlist.json` need an exact path, term and nonempty reason;
+unused entries fail. See [the checker](../scripts/check-domain-neutral.mjs).
 
 ## Local verification
 
-Unit and fast checks (no Docker required):
+Use Node 24. Fast checks need no Docker. First run `npm ci --prefix console` and install
+Python dependencies from `requirements-contracts.txt` and `requirements-reuse.txt`:
 
 ```sh
 npm run check
+npm run check:docs
+npm run check:reuse
 npm test
-python -m pip install -r requirements-contracts.txt
 npm run check:contracts
 npm run test:contract-validator
 npm run console:check:endpoints
+npm --prefix console run check:api-reference
 npm run console:test
 npm run console:build
 ```
 
-`npm run check:neutral` (also run by `npm run check`) scans tracked text files in
-`src/`, `infra/`, `scripts/`, `sdk/`, `console/src/`, `examples/`, `docs/contracts/`,
-the root Compose files, both Dockerfiles and `.env.example` for sector vocabulary,
-and rejects business BPMN outside approved locations. Tests and temporary
-`examples/workflows/` samples are excluded from vocabulary scanning. Exceptions
-in `scripts/domain-neutral-allowlist.json` require an exact path, term and reason;
-unused entries fail the check.
+`npm run check:contracts` and `npm run test:contract-validator` call `python`. With only `python3`,
+use `python3 -B scripts/check-contracts.py` and `python3 -B scripts/check-contracts.py --self-test`.
+`check:reuse` also calls `python`; use `python3 -B -m reuse lint` instead (`reuse lint` is read-only).
+`integration/contract.mjs` honours `PYTHON`; set `PYTHON=python3` on such hosts.
 
-Real-service checks (Docker Engine with Linux containers required; run on a
-disposable test stack and never delete persistent volumes):
+Real-service checks require Docker Engine with Linux containers; provider-network
+checks also require host OpenSSL. Run sequentially on a disposable test stack:
 
 ```sh
 npm run setup
 docker compose config --quiet
-docker compose up --build --detach --wait --wait-timeout 240
+docker compose up --build --detach --wait --wait-timeout 900
 npm run healthcheck
+npm run test:console-container
 npm run test:integration
 npm run test:applications
 npm run test:capabilities
+npm run test:compositions
 npm run test:flowable-worker
 npm run test:recovery
 npm run test:audit
-npm run test:compositions
+npm run test:malware-scan
+npm run test:secrets
 npm run test:migrations
 npm run test:execution-ledger
 npm run test:provider-network
 npm run check:schema-drift
 ```
 
-Do not claim a suite passed if it was not executed. Integration suites restart
-services and alter local test state; they are not unit tests.
+Integration suites restart services and change test state. Retain persistent volumes.
+CI runs syntax/boundary/neutral/docs/REUSE checks, Console audit/inventories/tests/build/container
+checks, OpenAPI validation, host/container unit tests, deterministic packaging, provider/ledger/
+migration checks and real Compose integration, authority, worker, recovery and audit suites.
+See [CI](../.github/workflows/ci.yml).
 
-## Demo data for a domain
+## Database migrations
 
-Layer 1 contains no domain data and no domain scenario. A domain (for example
-health) registers its own applications, capabilities, grants and records through
-the public APIs from its Layer-2 repository. For the health scenario, run
-`npm run demo:setup` in
-[`junctura-health`](https://github.com/vku2-open-source-2026/junctura-health);
-the Console then shows the applications, capabilities and grants it created.
+Run [infra/postgres/migrate.sh](../infra/postgres/migrate.sh) with `docker compose run --rm data-migrate`;
+Compose gates `data` and then Core on success. Number after the highest `infra/postgres/NNN-*.sql`:
+currently `026`, so next is `027`. Mount new files in `compose.yaml`'s `data-migrate` service.
+**All applied files are immutable**: preserve their exact bytes and add forward migrations.
 
-`npm run demo:provision` only creates the demo administrators and the read-only
-`viewer` of this repository (see [COMPETITION_DEMO.md](COMPETITION_DEMO.md)).
-Application enrollment and the `resource_subject` binding remain operator tasks
-under [APPLICATION_REGISTRATION.md](APPLICATION_REGISTRATION.md); the reviewed
-local steps are automated by `scripts/lib/demo-stack.mjs`, which Layer-2
-repositories reuse and which never invents credentials.
+SHA-256 enters `core.schema_migration_checksums` in the applying transaction
+(`psql --single-transaction`, stripping file delimiters); failure leaves neither changes nor checksum.
+The runner refuses checksum/ledger inconsistencies, missing/duplicate versions and newer databases.
+`core.schema_migration_state` fingerprints definitions, owners, ACLs, RLS flags, column grants
+and policies before new SQL. `flock` and PostgreSQL advisory locking serialize runners.
+Repeats print `Migration N verified` and `Migrations current at version N`.
 
-## Developer journey and cleanup
+| Message (verbatim excerpt) | Meaning / action |
+| --- | --- |
+| `applied-version integrity` / `duplicate local migration version` | Missing historical files or duplicate numbers: restore the exact set; never remove ledger rows. |
+| `content differs from its recorded checksum` | Applied bytes changed: restore originals and add a forward migration. |
+| `recorded as applied without a checksum` | Version-only history: review before explicit adoption. |
+| `installed schema drift detected` | Installed authority differs: inspect and restore, or adopt only after review. |
+| `database schema is newer than this migration set` | Use the matching checkout; never replay older authority SQL. |
+| `could not acquire the database migration lock within 120 seconds` | Check the other runner and investigate a stuck session. |
+| `exists but the version is not applied; refusing to guess which side is authoritative` | A checksum lacks its version row: stop and restore from backup. |
 
-Prerequisites: a healthy local stack, an enrolled backend application and a
-second enrolled application to act as the grantee. Enrollment is operator-run;
-see [APPLICATION_REGISTRATION.md](APPLICATION_REGISTRATION.md) and
-[RESOURCE_AUTHORIZATION.md](RESOURCE_AUTHORIZATION.md). The application backend
-must use its own service-account credentials; never put them in a browser.
+Before adoption, take a verified `pg_dump` backup and preserve the volume. Run without flags;
+compare installed definitions, owners, ACLs and RLS with expected migrations. For version-only
+history, use `docker compose run --rm -e MIGRATION_ADOPT_EXISTING=1 data-migrate` after review;
+this records current checksums without proving originally applied bytes. For intentional drift,
+capture `pg_dump --schema-only`, record the reviewed change, add a forward migration if it must
+persist, then run once with
+`docker compose run --rm -e MIGRATION_ADOPT_SCHEMA_DRIFT=1 data-migrate`.
+Re-run without flags and verify no SQL replay. Adoption is an operator decision, never a demo shortcut.
+
+`npm run test:migrations` uses disposable, network-isolated PostgreSQL to test fresh/repeat runs,
+tampered/missing/duplicate files, rollback, concurrency, adoption, drift and newer-database refusal.
+`npm run check:schema-drift` runs [scripts/check-schema-drift.mjs](../scripts/check-schema-drift.mjs)
+read-only; `DATABASE_SERVICE` selects the Compose service (default `database`). It prints a match
+or recorded/installed fingerprints; inspect definitions separately to investigate differences.
+Migration 016 expands fingerprinting to `composition_private` after checking the old scope.
+The runner strips CRLF delimiters for execution but hashes original bytes;
+`.gitattributes` preserves 013's applied CRLF bytes. Never normalize applied migrations.
+
+| Migration | Adds |
+| --- | --- |
+| 001 | Tenant-isolated structured records and data API role. |
+| 002 | Workflow request/idempotency ledger. |
+| 003 | Application registration, principals, approvals and private authority. |
+| 004 | Application-owned resources and exact read shares. |
+| 005 | Protected audit role, transactional append and tenant queries. |
+| 006 | Capability manifests, versions and registry/publication authority. |
+| 007 | Private direct-trust persistence. |
+| 008 | Trust grant lifecycle and approval commands. |
+| 009 | Discovery filtered by current exact grants. |
+| 010 | Capability execution ledger, reservations and ticket authority. |
+| 011 | Finalization correction preserving absent ticket expiry. |
+| 012 | Bounded composition registry and execution authority. |
+| 013 | Composition authority corrections and step digests/dispatch evidence. |
+| 014 | Composition registry digest/lifecycle guards. |
+| 015 | Reservation timestamp and live publication/owner checks. |
+| 016 | Exact result version, lifecycle guards and expanded fingerprint scope. |
+| 017 | Execution checks bound to the originally reserved exact grants. |
+| 018 | Audit chain columns, tenant heads and `core.audit_verify`; existing events seal on verification. |
+| 019 | Read-only `core.trust_graph`. |
+| 020 | Purpose/subject execution context and `core.subject_access`. |
+| 021 | Subject consent, emergency justification and review authority. |
+| 022 | Read-only principal/organization directory and private directory role. |
+| 023 | Nullable principal display/profile fields and directory output. |
+| 024 | Directory relations limited to active, unexpired grants. |
+| 025 | Read-only storage aggregates and workflow audit-access gate. |
+| 026 | Read-only collection field/type inference from at most the 200 newest records, without values. |
+
+## Demo data and developer journey
+
+Layer 1 ships no domain scenario; a Layer-2 repository (for example junctura-workspace)
+registers its own applications, capabilities, grants and records through the public APIs.
+`npm run demo:provision` provisions demo administrators and read-only `viewer`: see [Operations](OPERATIONS.md).
+For operator enrollment/`resource_subject` binding see [Capabilities](CAPABILITIES.md); for resource authorization see [Security](SECURITY.md).
+
+Run [examples/foundation-http.mjs](../examples/foundation-http.mjs) with an active enrolled backend and
+grantee on a running stack. Keep credentials server-side; `PUBLIC_URL` defaults to `http://127.0.0.1:8080`.
 
 ```sh
-JUNCTURA_APP_CLIENT_ID=<enrolled-backend-client> \
-JUNCTURA_APP_CLIENT_SECRET=<backend-secret> \
-JUNCTURA_GRANTEE_APP_ID=<second-enrolled-app-uuid> \
-JUNCTURA_GRANTEE_CLIENT_ID=<grantee-client> \
-JUNCTURA_GRANTEE_CLIENT_SECRET=<grantee-secret> \
+JUNCTURA_APP_CLIENT_ID='<enrolled-backend-client>' \
+JUNCTURA_APP_CLIENT_SECRET='<backend-secret>' \
+JUNCTURA_GRANTEE_APP_ID='<second-enrolled-app-uuid>' \
+JUNCTURA_GRANTEE_CLIENT_ID='<grantee-client>' \
+JUNCTURA_GRANTEE_CLIENT_SECRET='<grantee-secret>' \
 node --env-file=.env examples/foundation-http.mjs
 ```
 
-Expected behavior, in order:
+1. Authenticate with OIDC client credentials; `/v1/identity` returns verified subject, tenant and roles.
+2. Create/read a `/v2` record; with grantee credentials, confirm the grantee receives `404` before sharing.
+3. Upload/download a `/v2` object with identical bytes.
+4. Start, inspect and complete the operator-installed `junctura_checkpoint` workflow.
+5. Create a ten-minute record read share; with grantee credentials, confirm access succeeds afterward.
 
-1. OIDC client-credentials authentication succeeds.
-2. `GET /v1/identity` returns the verified subject, tenant and roles.
-3. A `/v2` record is created and read back by its owner.
-4. A `/v2` object is uploaded and downloaded with identical bytes.
-5. The `junctura_checkpoint` workflow starts, is inspected and completes.
-6. An expiring read share is created for the grantee.
-7. If grantee credentials are supplied, the grantee is denied before the share
-   and allowed after it. Without them, those two steps are skipped.
-
-The CLI prints the created IDs. It intentionally does not delete them because a
-failed POST may have an ambiguous outcome. To clean up, use the owner backend
-with the same credentials and public routes:
+Grantee credentials are optional but must be paired; omitting them skips before/after checks.
+Workflow variables are tenant-visible: exclude private record/object content. The CLI prints IDs
+and keeps resources; failed POST outcomes may be ambiguous, so never blindly rerun.
+For cleanup, use an owner backend token in `$TOKEN`, set `$PUBLIC_URL` and substitute printed IDs:
 
 ```sh
-# Replace values with the IDs printed by the example.
 curl -X DELETE -H "Authorization: Bearer $TOKEN" "$PUBLIC_URL/v2/resource-shares/$SHARE_ID"
 curl -X DELETE -H "Authorization: Bearer $TOKEN" "$PUBLIC_URL/v2/data/http_example/$RECORD_ID"
 curl -X DELETE -H "Authorization: Bearer $TOKEN" "$PUBLIC_URL/v2/objects/$OBJECT_ID"
 ```
 
-Do not use `docker compose down -v` or delete volumes to clean test data.
+Never use `docker compose down -v` or volume deletion for cleanup.
 
-## Add tests
+## Tests
 
-- Unit tests live in `tests/*.test.mjs` and use `node:test`.
-- HTTP-level integration tests live in `integration/` and use real providers.
-- Console tests live in `console/src/tests/` and use Vitest.
-- Contract conformance lives in `scripts/check-contracts.py`; keep the OpenAPI
-  and the observed operation coverage current.
-- Prefer a small deterministic test over a broad snapshot. Always cover the
-  denied path for a new authorization decision.
+- Unit tests: `tests/*.test.mjs`, using `node:test` (including SDK tests).
+- Real-provider integration and fault tests: `integration/`; `integration/contract.mjs` validates observed HTTP traffic against the OpenAPI contract.
+- Console tests: `console/src/tests/`, using Vitest.
+- Contract validation/regressions: `scripts/check-contracts.py`, using `docs/contracts/` schemas and examples.
 
-## Future module conventions
+Prefer deterministic focused tests; cover denial for each new authorization decision.
 
-These are documented integration conventions, not implementations:
+## Licensing and third-party policy
 
-| Future module | Owning area | Required before implementation |
-| --- | --- | --- |
-| Object lifecycle cleanup | Objects | Quarantine scanning is implemented; version reclamation/quota remain separate |
-| Audit export/integrity | Platform security | Independent sink, public/admin contract if approved, retention and key recovery; the bounded PostgreSQL boundary is implemented in [AUDIT.md](AUDIT.md) |
-| Messaging / notification | Platform services | Broker ownership, delivery semantics, tenant quotas |
-| Search / data interoperability | Structured data | Index ownership, reindex/rebuild, tenant isolation |
-| Project / environment metadata | Junctura Cloud | P1 contract, ownership rules, Console trust slice |
-| Application hosting / runtime | Junctura Cloud | Admission, isolation, resource limits, operator controls |
-| General capability plugins, HA and resume | Junctura Connect | Bounded C4A/C4B exist; broader execution/credential recovery needs a separately approved model |
+Apache-2.0 is approved by the maintainer for original source; keep it unless explicitly approved otherwise.
+[LICENSE](../LICENSE) holds terms; `NOTICE` holds attribution. Preserve upstream notices.
+For original source/configuration, Markdown, HTML and SVG, use the language's comment syntax:
 
-Each requires its own approved slice and its own failure/denial tests. DX1 does
-not authorize any of them.
+```text
+SPDX-FileCopyrightText: 2026 Junctura Contributors
+SPDX-License-Identifier: Apache-2.0
+```
+
+Cover JSON and other comment-hostile files with `REUSE.toml` annotations and/or `.license`
+sidecars; never add JSON comments. Keep `Apache-2.0` metadata in root, Console and SDK manifests.
+REUSE text is `LICENSES/Apache-2.0.txt`. CI runs read-only `reuse lint` via `npm run check:reuse`
+alongside source checks; missing/invalid metadata must fail without rewriting files.
+
+For dependencies, images/base OS packages and assets, record name, exact version/commit/digest,
+upstream URL, SPDX license, role, distribution/hosting model and notice obligations in
+[THIRD-PARTY.md](../THIRD-PARTY.md). Verify the OSS edition provides the feature; free access
+does not prove licensing, nor do separate containers remove obligations. Review GPL/AGPL/MPL
+and mixed licenses for actual use/distribution. Reject unresolved rights; never relabel upstream source.
+
+Before publication, reconcile LICENSE/NOTICE/headers/inventory, pin components and preserve bundled
+notices. Verify the GitHub account/repository and exclude secrets/private data. Binary/package/container
+publication needs its own inventory, notice review and approval; source approval does not authorize
+production deployment. Only report license/vulnerability checks actually run.
+
+## Release
+
+Follow [Release](RELEASE.md) for checks, source packaging, organizer-format verification, installation,
+upgrade/rollback and approved publication. Verify the Core-to-application flow; test reproducibility claims.
 
 ## Documentation rules
 
-- One authoritative document per subject. Link instead of copying tables.
-- `docs/PRODUCT.md` owns product status; `docs/architecture/LAYER1_CORE_CATALOG.md`
-  owns implementation evidence; `docs/contracts/foundation-api.openapi.json`
-  owns the machine API contract.
-- Update the README first screen only when the product model or status changes.
-- Preserve audit evidence, licensing records and existing architecture decisions.
+Keep one authoritative document per subject; link rather than duplicate it.
+`docs/contracts/foundation-api.openapi.json` owns the machine API contract.
+Final doc set: [README](../README.md), [GETTING_STARTED](GETTING_STARTED.md), [ARCHITECTURE](ARCHITECTURE.md),
+[CORE_API](CORE_API.md), [CAPABILITIES](CAPABILITIES.md), [SECURITY](SECURITY.md), [OPERATIONS](OPERATIONS.md),
+[CONSOLE](CONSOLE.md), [DEVELOPING](DEVELOPING.md), [OLP_REQUIREMENTS](OLP_REQUIREMENTS.md),
+[RELEASE](RELEASE.md), [README_EN](README_EN.md). Old documents live in `docs/archive/`.
+Update the README opening for product-model changes; preserve licensing records, audit evidence and decisions.
+
+## Limitations
+
+Deployment is single-host Compose with loopback HTTP. Foundation workflows are tenant-scoped.
+Metrics reset on restart; no downgrade migrations are supplied. See [Release](RELEASE.md) for rollback.

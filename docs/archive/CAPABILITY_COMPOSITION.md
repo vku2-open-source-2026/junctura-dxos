@@ -41,7 +41,7 @@ to manufacture a successful composition execution.
 
 ## HTTP and authority
 
-The [OpenAPI](contracts/capability-api-v1.openapi.json) defines eight registry
+The [OpenAPI](../contracts/capability-api-v1.openapi.json) defines eight registry
 operations: create, add version, get, replace draft, validate, publish,
 deprecate and revoke. They require OIDC and explicit tenant management
 permissions. The creating enrolled backend needs `compositions.write`; this

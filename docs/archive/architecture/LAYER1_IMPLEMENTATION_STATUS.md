@@ -145,7 +145,7 @@ at 23001. No checksum adoption, role bypass or historical SQL edit was needed.
 The existing Windows checkout's migration 006 has preexisting mixed-line-ending
 bytes that differ from its committed Git blob. Neither was rewritten. Fresh archive
 and baseline archive upgrades use canonical Git bytes; existing installations must
-retain their own applied files/checksums. [RELEASE](../RELEASE.md) records both hashes
+retain their own applied files/checksums. [RELEASE](../../RELEASE.md) records both hashes
 and the stop condition rather than silently normalizing an installed migration.
 
 ## Remaining blockers and next executable work

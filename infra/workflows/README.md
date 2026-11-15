@@ -17,5 +17,5 @@ or inequality conditions. DTDs, entities, executable service/script elements,
 engine hooks, attribute expressions and namespace aliasing are rejected. A rejection prevents both
 business and technical deployments for that run.
 
-See [workflow deployment](../../docs/WORKFLOW.md#business-workflow-definitions-supplied-by-applications)
+See [workflow deployment](../../docs/CORE_API.md#business-workflow-definitions)
 for the complete policy, tenant configuration and redeployment behavior.

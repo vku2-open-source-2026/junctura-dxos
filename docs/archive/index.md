@@ -3,8 +3,8 @@
 
 # Junctura architecture and codebase context
 
-Current entry points: [local onboarding and SDK](GETTING_STARTED.md),
-[release/upgrade guide](RELEASE.md), [changelog](../CHANGELOG.md),
+Current entry points: [local onboarding and SDK](../GETTING_STARTED.md),
+[release/upgrade guide](../RELEASE.md), [changelog](../../CHANGELOG.md),
 [security audit and inventories](SECURITY_REVIEW.md), and
 [implementation/test evidence](architecture/LAYER1_IMPLEMENTATION_STATUS.md).
 The architecture consolidation below retains its reviewed historical baseline;
@@ -30,7 +30,7 @@ creating competing module, data and API inventories.
 | Document | Authoritative subject |
 | --- | --- |
 | [Product definition and status](PRODUCT.md) | Four product areas, status vocabulary, implemented-versus-planned catalog |
-| [Developer and extension guide](DEVELOPING.md) | Module map, add-a-route checklist, tests and Console rules |
+| [Developer and extension guide](../DEVELOPING.md) | Module map, add-a-route checklist, tests and Console rules |
 | [Platform architecture](architecture/JUNCTURA_PLATFORM_ARCHITECTURE.md) | Product scope, statuses, AS-IS versus target, document precedence |
 | [Core catalog](architecture/LAYER1_CORE_CATALOG.md) | Actual modules, provider ownership, routes, evidence and candidate services |
 | [Planes](architecture/CONTROL_DATA_RUNTIME_PLANES.md) | Control, data, runtime, operational and capability boundaries |
@@ -42,12 +42,12 @@ creating competing module, data and API inventories.
 | [Dependencies](architecture/IMPLEMENTATION_DEPENDENCIES.md) | Acyclic backlog dependencies and independent work |
 | [Implementation backlog](architecture/IMPLEMENTATION_BACKLOG.md) | Bounded implementation slices and stop conditions |
 | [Validation ledger](architecture/VALIDATION.md) | Documentation checks, executed evidence, exclusions and reproducibility notes |
-| [Architecture entry](ARCHITECTURE.md) | Repository boundary rules and navigation |
+| [Architecture entry](../ARCHITECTURE.md) | Repository boundary rules and navigation |
 | [Foundation contract](FOUNDATION_OPENAPI.md) | Implemented public API; exact machine schemas remain in its linked OpenAPI |
 | [Resource authorization](RESOURCE_AUTHORIZATION.md) | Current v1/v2 security, sharing and migration contract |
 | [Protected audit](AUDIT.md) | Audit threat model, write/read boundary, roles, redaction, recovery and remaining integrity gaps |
 | [Capability contracts](CAPABILITY_EXTENSIONS_V1.md), [Registry](CAPABILITY_REGISTRY.md), [direct Trust](CAPABILITY_DIRECT_TRUST.md), [execution](CAPABILITY_EXECUTION.md) | Implemented C1, bounded C2, offline C3 and opt-in C4A; composition and human delegation remain future work |
-| [Operations](OPERATIONS.md), [licensing](LICENSING.md), [workflow](WORKFLOW.md) | Existing operational and contribution policies |
+| [Operations](../OPERATIONS.md), [licensing](LICENSING.md), [workflow](WORKFLOW.md) | Existing operational and contribution policies |
 
 ## Baseline counts
 

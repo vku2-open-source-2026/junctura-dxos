@@ -14,9 +14,9 @@
 | **Junctura Cloud** | Projects/environments, application hosting, deployments, runtime workers, domains and bindings. | **PROPOSED** — architecture only; nothing runs. |
 | **Junctura Connect** | Capability registry, compatibility resolver, cross-app trust, composition and execution. | **PARTIAL** — C1 Registry and bounded C2 direct grants/discovery are implemented; C3 is an offline resolver. C4A invocation and C4B bounded composition are opt-in and disabled by default; human delegation remains deferred. |
 
-A minimal server-side Node SDK is available in `sdk/node/`. There is no public demo, Layer-2 GUI or hosting runtime in this repository. Do not read a design document as a working feature. The authoritative, itemized status list is [docs/PRODUCT.md](PRODUCT.md).
+A minimal server-side Node SDK is available in `sdk/node/`. There is no public demo, Layer-2 GUI or hosting runtime in this repository. Do not read a design document as a working feature. Layer-2 and Layer-3 applications live in separate repositories; current limitations are listed in [ARCHITECTURE.md](ARCHITECTURE.md#limitations).
 
-**Start here:** [What works today](PRODUCT.md) · [Quickstart](#quickstart) · [First API request](#core-api-usage) · [Developer onboarding](GETTING_STARTED.md) · [Extension guide](DEVELOPING.md) · [Architecture](#layer-1-and-layer-2) · [Roadmap](#development-roadmap)
+**Start here:** [What works today](ARCHITECTURE.md) · [Quickstart](#quickstart) · [First API request](#core-api-usage) · [Developer onboarding](GETTING_STARTED.md) · [Extension guide](DEVELOPING.md) · [Architecture](#layer-1-and-layer-2) · [Roadmap](#development-roadmap)
 
 ```sh
 git clone https://github.com/vku2-open-source-2026/junctura-dxos.git
@@ -42,9 +42,9 @@ on approved operator infrastructure and use the same contracts. Project/environm
 management, deployment controllers, app ingress/TLS and credential bindings remain
 **PROPOSED**, not working hosting features. Optional **Verifiable Capability
 Composition** remains the long-term direction and is not required for BaaS/hosting.
-See the [architecture index](index.md),
-[eight editable maps](architecture/ARCHITECTURE_MAPS.md) and
-[implementation backlog](architecture/IMPLEMENTATION_BACKLOG.md).
+See the [architecture index](ARCHITECTURE.md),
+[eight editable maps](ARCHITECTURE.md) and
+[implementation backlog](ARCHITECTURE.md).
 
 The project direction is **Capability-Driven DX-OS**, centered on **Verifiable Capability Composition**. The objectives are to:
 
@@ -55,16 +55,16 @@ The project direction is **Capability-Driven DX-OS**, centered on **Verifiable C
 - Keep business decisions in Layer 2 and reusable platform mechanisms in Layer 1.
 - Support self-hosting with documented contracts and open-source infrastructure.
 
-These objectives describe the direction of the project. The [implementation status](#implementation-status) distinguishes current evidence from planned work; [PROJECT_VISION.md](PROJECT_VISION.md) explains the proposals and unresolved design decisions.
+These objectives describe the direction of the project. The [implementation status](#implementation-status) distinguishes current evidence from planned work; [PROJECT_VISION.md](ARCHITECTURE.md) explains the proposals and unresolved design decisions.
 
 ## Layer 1 and Layer 2
 
 Layer 1 owns generic infrastructure and, in the proposed architecture, platform-level capability discovery, validation, composition and trust enforcement. Layer 2 owns product interfaces, domain rules and application-specific capabilities. A GUI belongs to an application; a provider's administration console does not make the Junctura Core a GUI product.
 
 The canonical diagrams distinguish current integrations and future consumers:
-[competition/product context](architecture/ARCHITECTURE_MAPS.md#map-01-competition-and-product-context),
-[current runtime](architecture/ARCHITECTURE_MAPS.md#map-02-current-implemented-architecture)
-and [target logical architecture](architecture/ARCHITECTURE_MAPS.md#map-03-target-logical-core-taxonomy).
+[competition/product context](ARCHITECTURE.md),
+[current runtime](ARCHITECTURE.md)
+and [target logical architecture](ARCHITECTURE.md).
 “Core” describes a platform boundary; current adapters share one Node process and
 reuse upstream providers. Projects and hosting remain proposed. Bounded C4A/C4B execution is implemented and disabled by default.
 
@@ -110,7 +110,7 @@ Composition coordinates capabilities; the Workflow Engine remains responsible fo
 
 Current clients use HTTP, JSON, OIDC and opaque binary uploads. They can use their language's HTTP and authentication libraries without adopting the Core's Node.js runtime or accessing provider databases directly.
 
-[Foundation OpenAPI 3.1](contracts/foundation-api.openapi.json) describes the implemented public APIs, including v1/v2 resources and registration. [Validation and tested HTTP examples](FOUNDATION_OPENAPI.md) explain the 44-operation coverage, provider boundaries and development tools. [CORE_API.md](CORE_API.md) remains the human-readable guide. The separate [Capability contract](contracts/capability-api-v1.openapi.json) distinguishes implemented C1/C2 registry/trust and opt-in [C4A guarded single-capability execution](CAPABILITY_EXECUTION.md) and [C4B bounded composition](CAPABILITY_COMPOSITION.md) from design-only delegation. Both execution paths are disabled by default. The dependency-free [Node server SDK](../sdk/node/index.mjs) covers public HTTP integration; see [onboarding](GETTING_STARTED.md).
+[Foundation OpenAPI 3.1](contracts/foundation-api.openapi.json) describes the implemented public APIs, including v1/v2 resources and registration. [Validation and tested HTTP examples](CORE_API.md) explain the 44-operation coverage, provider boundaries and development tools. [CORE_API.md](CORE_API.md) remains the human-readable guide. The separate [Capability contract](contracts/capability-api-v1.openapi.json) distinguishes implemented C1/C2 registry/trust and opt-in [C4A guarded single-capability execution](CAPABILITIES.md#capability-execution) and [C4B bounded composition](CAPABILITIES.md#composition) from design-only delegation. Both execution paths are disabled by default. The dependency-free [Node server SDK](../sdk/node/index.mjs) covers public HTTP integration; see [onboarding](GETTING_STARTED.md).
 
 ## Illustrative cross-application use case
 
@@ -131,12 +131,12 @@ This example is illustrative. Neither business application is included. Foundati
 | Workflow retry handling | Implemented with a tenant-scoped SQL reservation and history reconciliation. | Tests cover replay, input conflicts, concurrent starts and ambiguous outcome reconciliation; no exactly-once claim for external business effects. |
 | Dependency failure and persistence | Implemented liveness/readiness and named volumes. | Tests interrupt/recreate services and verify stored records, object bytes and workflow state. |
 | Structured-data restore | Isolated `pg_dump`/`pg_restore` test implemented. | Restored data, tenant RLS and audit role/ACL/query verified; full-platform disaster recovery remains unverified. |
-| Protected authority audit | Transactional audit with derived actor/tenant metadata, redaction, internal tenant query and fail-closed admission. | Negative/role/restart tests pass; DBAs are trusted, and public export, cryptographic sealing and independent retention remain unimplemented. See [AUDIT.md](AUDIT.md). |
-| CI and source licensing | GitHub Actions and approved Apache-2.0 project licensing in place. | Source/unit/container/integration/restore checks pass; [dependency scans](SECURITY_REVIEW.md) record unresolved image advisories and binary redistribution gates. |
-| Capability extensions | C1 Registry and bounded C2 direct grants/discovery implemented; C3 offline resolver. | [Direct Trust](CAPABILITY_DIRECT_TRUST.md) records real OIDC denial, pagination, audit and restore checks. C4A/C4B are implemented behind explicit opt-in; human delegation remains unimplemented. |
+| Protected authority audit | Transactional audit with derived actor/tenant metadata, redaction, internal tenant query and fail-closed admission. | Negative/role/restart tests pass; DBAs are trusted, and public export, cryptographic sealing and independent retention remain unimplemented. See [AUDIT.md](SECURITY.md#audit). |
+| CI and source licensing | GitHub Actions and approved Apache-2.0 project licensing in place. | Source/unit/container/integration/restore checks pass; [dependency scans](SECURITY.md) record unresolved image advisories and binary redistribution gates. |
+| Capability extensions | C1 Registry and bounded C2 direct grants/discovery implemented; C3 offline resolver. | [Direct Trust](CAPABILITIES.md#direct-trust-grants) records real OIDC denial, pagination, audit and restore checks. C4A/C4B are implemented behind explicit opt-in; human delegation remains unimplemented. |
 | OpenAPI and optional SDKs | Foundation/Capability OpenAPI plus a tested server-side Node ESM SDK. | SDK authentication, denial, idempotency and polling tests; real enrolled-app and composition integration. |
-| Optional Junctura Console | React management UI implemented; partially connected, with preview/session resource behavior. | [Audit qualifications](architecture/LAYER1_CORE_CATALOG.md#console-evidence-and-contradictions): fail-closed live identity, memory-only token, preview-only v2 methods and a tested packaged Nginx image. No operator login/session or automated live-browser visual/accessibility proof. |
-| Developer Cloud / application hosting | Proposed architecture only; no project/deployment/controller runtime. | Approve one [handoff slice](architecture/IMPLEMENTATION_BACKLOG.md) and its ADRs before implementation. |
+| Optional Junctura Console | React management UI implemented; partially connected, with preview/session resource behavior. | [Audit qualifications](ARCHITECTURE.md): fail-closed live identity, memory-only token, preview-only v2 methods and a tested packaged Nginx image. No operator login/session or automated live-browser visual/accessibility proof. |
+| Developer Cloud / application hosting | Proposed architecture only; no project/deployment/controller runtime. | Approve one [handoff slice](ARCHITECTURE.md) and its ADRs before implementation. |
 | Layer-2 GUI and optional AI planning | Future work; no implementation here. | Build separately against public contracts; an AI integration needs its own approved scope. |
 | VPS/public-domain deployment | Future operational work. | Approve a target and verify TLS, secrets, backups and rollback. No public demo is configured. |
 
@@ -148,7 +148,7 @@ This example is illustrative. Neither business application is included. Foundati
 - Docker Engine with Linux containers and Docker Compose v2.20 or newer. Docker Desktop with its Linux engine also works on Windows and macOS; start it before running Compose.
 - Network access to fetch the pinned upstream images and sufficient local resources to run PostgreSQL, Keycloak, Flowable and the other services.
 
-The Core runtime has no npm dependencies, package installation or transpilation steps. Contract validation uses separate [Python development tools](FOUNDATION_OPENAPI.md); they are not needed in production containers. A VPS, public domain, Kubernetes and OpenStack are not required.
+The Core runtime has no npm dependencies, package installation or transpilation steps. Contract validation uses separate [Python development tools](CORE_API.md); they are not needed in production containers. A VPS, public domain, Kubernetes and OpenStack are not required.
 
 ### Start the local platform
 
@@ -212,7 +212,7 @@ The identity includes `subject`, `tenantId: 'tenant-a'` and supported roles. Tok
 | `/v1/objects` and `/{uuid}` | Upload/read/delete opaque bytes; stable-UUID PUT supports retryable replacement, with a 1-byte to 5-MiB upload bound. |
 | `/v1/workflows/definitions` and `/v1/workflows/executions` | List operator-installed definitions; start with a UUID idempotency key, inspect, complete one active user task or cancel. |
 
-Foundational reads require `core-reader`; resource/workflow writes also require `core-writer`. Registration uses separately enrolled administrative permissions. V2 resources additionally require an active registered backend with an exact operator-enrolled service-account subject. V1 data/objects are a separate deprecated namespace restricted to an explicit legacy client allowlist; local Compose allows only its three service fixtures. Browsers use an authorized application backend. See [ownership, sharing and migration](RESOURCE_AUTHORIZATION.md) before upgrading. OIDC discovery and health/readiness remain public; verified context, never ownership headers, supplies authority. Detailed contracts are in [CORE_API.md](CORE_API.md).
+Foundational reads require `core-reader`; resource/workflow writes also require `core-writer`. Registration uses separately enrolled administrative permissions. V2 resources additionally require an active registered backend with an exact operator-enrolled service-account subject. V1 data/objects are a separate deprecated namespace restricted to an explicit legacy client allowlist; local Compose allows only its three service fixtures. Browsers use an authorized application backend. See [ownership, sharing and migration](SECURITY.md#resource-authorization) before upgrading. OIDC discovery and health/readiness remain public; verified context, never ownership headers, supplies authority. Detailed contracts are in [CORE_API.md](CORE_API.md).
 
 ### Executable end-to-end example
 
@@ -255,7 +255,7 @@ npm run test:recovery
 npm run test:audit
 ```
 
-Install the pinned development tools with `python -m pip install -r requirements-contracts.txt` before contract/integration checks. Current commands, exact test counts and evidence are recorded in [Layer 1 implementation status](architecture/LAYER1_IMPLEMENTATION_STATUS.md). Real HTTP conformance covers the 44 Foundation operations; the separate Composition suite covers two-provider execution, denial, recovery and restore. This is bounded engineering verification, not full-platform disaster recovery.
+Install the pinned development tools with `python -m pip install -r requirements-contracts.txt` before contract/integration checks. Current commands, exact test counts and evidence are recorded in [Layer 1 implementation status](ARCHITECTURE.md). Real HTTP conformance covers the 44 Foundation operations; the separate Composition suite covers two-provider execution, denial, recovery and restore. This is bounded engineering verification, not full-platform disaster recovery.
 
 The integration suite intentionally interrupts local services, restarts PostgreSQL and recreates containers. Use a development/test stack without application traffic. The recovery suite restores into its own network-isolated temporary PostgreSQL; it does not restore over project data. Run the audit suite last because it also restarts PostgreSQL. These checks do not establish coordinated recovery of identity, objects and workflow databases.
 
@@ -306,38 +306,38 @@ Junctura's adapters use Node.js 24 and its standard HTTP, crypto and test APIs, 
 | Deployment and release | Reproducible local source candidate, checksums and [upgrade guide](RELEASE.md). | Resolve recorded image security/binary-license gates; production target/TLS, coordinated recovery and final publication remain deferred. |
 | Developer Cloud / hosting architecture | Consolidated proposal with logical groups A–F, ownership, planes, ADRs and dependency DAG. | Start with the proposed Console trust slice; project metadata and privileged hosting need separate contract/security approvals. |
 
-There are no promised dates or published release milestones in this roadmap. The [foundation integration roadmap](INTEGRATION_ROADMAP.md) retains detailed acceptance criteria and the SynapseDX reference review. Capability extension work requires reviewed contracts and authorization before implementation.
+There are no promised dates or published release milestones in this roadmap. The [foundation integration roadmap](ARCHITECTURE.md) retains detailed acceptance criteria and the SynapseDX reference review. Capability extension work requires reviewed contracts and authorization before implementation.
 
 ## Contributing, security and licensing
 
-Read [docs/DEVELOPING.md](DEVELOPING.md), [architecture boundaries](ARCHITECTURE.md) and the [development workflow](WORKFLOW.md) before changing code. Use the existing `main` branch and cohesive, tested Conventional Commits. Discuss new services, frameworks, breaking contracts and license changes before implementation. Keep domain logic in Layer 2 and add relevant tests and documentation.
+Read [docs/DEVELOPING.md](DEVELOPING.md), [architecture boundaries](ARCHITECTURE.md) and the [development workflow](CORE_API.md#business-workflow-definitions) before changing code. Use the existing `main` branch and cohesive, tested Conventional Commits. Discuss new services, frameworks, breaking contracts and license changes before implementation. Keep domain logic in Layer 2 and add relevant tests and documentation.
 
 Use [GitHub Issues](https://github.com/vku2-open-source-2026/junctura-dxos/issues) for public bugs and design discussions. Do not post credentials, private data or vulnerability exploit details there; arrange a private channel with the repository maintainer before disclosure. No dedicated security contact or response SLA is published. Do not commit `.env`, private AI-agent prompts/instructions, execution logs or local tool state. Inspect exclusions, indexed files and secret exposure before pushing; never force-push or deploy to production without approval.
 
-Original Junctura source and documentation are licensed under [Apache License 2.0](../LICENSE), with attribution **Copyright 2026 Junctura Contributors**, subject to contributors' actual rights and agreement. Preserve upstream notices. See [NOTICE](../NOTICE), [THIRD-PARTY.md](../THIRD-PARTY.md) and the [licensing policy](LICENSING.md). `private: true` in package metadata prevents accidental npm publication; it does not change the project's open-source license.
+Original Junctura source and documentation are licensed under [Apache License 2.0](../LICENSE), with attribution **Copyright 2026 Junctura Contributors**, subject to contributors' actual rights and agreement. Preserve upstream notices. See [NOTICE](../NOTICE), [THIRD-PARTY.md](../THIRD-PARTY.md) and the [licensing policy](DEVELOPING.md#licensing-and-third-party-policy). `private: true` in package metadata prevents accidental npm publication; it does not change the project's open-source license.
 
 ## Documentation and self-hosting
 
-- [Product definition and status](PRODUCT.md): the four product areas,
+- [Product definition and status](ARCHITECTURE.md): the four product areas,
   status vocabulary and an accurate implemented-versus-planned catalog.
 - [Developer and extension guide](DEVELOPING.md): backend module map,
   add-an-API checklist, tests, Console rules and future module conventions.
-- [Architecture index and implementation evidence](index.md): current versus target, eight maps, official traceability, decisions and the implementation backlog.
+- [Architecture index and implementation evidence](ARCHITECTURE.md): current versus target, eight maps, official traceability, decisions and the implementation backlog.
 
 - [Junctura Console](CONSOLE.md): Layer-1 operational control plane design, setup, architecture and feature matrix.
-- [Project vision](PROJECT_VISION.md): capability model, proposed Cores and open design decisions.
-- [Capability extensions v1](CAPABILITY_EXTENSIONS_V1.md): draft manifests, lifecycle, ownership and compatibility, with linked trust/execution and OpenAPI contracts.
-- [Capability acceptance criteria](CAPABILITY_ACCEPTANCE_V1.md): negative cases, validation recipe and implementation approval gates.
+- [Project vision](ARCHITECTURE.md): capability model, proposed Cores and open design decisions.
+- [Capability extensions v1](CAPABILITIES.md): draft manifests, lifecycle, ownership and compatibility, with linked trust/execution and OpenAPI contracts.
+- [Capability acceptance criteria](CAPABILITIES.md): negative cases, validation recipe and implementation approval gates.
 - [Architecture](ARCHITECTURE.md): Layer boundaries, current providers and isolation.
 - [Core API contracts](CORE_API.md): routes, permissions, payloads and retry semantics.
 - [Local operations](OPERATIONS.md): startup, persistence, migrations and recovery limits.
-- [Protected audit](AUDIT.md): audit threat model, roles, write/read boundary, redaction and recovery.
-- [Integration roadmap](INTEGRATION_ROADMAP.md): foundational acceptance criteria and reference review.
-- [Development workflow](WORKFLOW.md): verification, handoff and release procedure.
-- [Licensing](LICENSING.md): approved project terms and dependency obligations.
-- [Object malware scanning](OBJECT_SCANNING.md): ClamAV quarantine ingress and fail-closed rules.
-- [Secrets management](SECRETS.md): OpenBao bootstrap versus runtime secrets.
-- [Competition principles](COMPETITION_PRINCIPLES.md): implemented versus deferred principle mapping.
+- [Protected audit](SECURITY.md#audit): audit threat model, roles, write/read boundary, redaction and recovery.
+- [Integration roadmap](ARCHITECTURE.md): foundational acceptance criteria and reference review.
+- [Development workflow](CORE_API.md#business-workflow-definitions): verification, handoff and release procedure.
+- [Licensing](DEVELOPING.md#licensing-and-third-party-policy): approved project terms and dependency obligations.
+- [Object malware scanning](OPERATIONS.md#object-malware-scanning-clamav): ClamAV quarantine ingress and fail-closed rules.
+- [Secrets management](OPERATIONS.md#secrets-openbao): OpenBao bootstrap versus runtime secrets.
+- [Competition principles](OLP_REQUIREMENTS.md): implemented versus deferred principle mapping.
 - [OLP requirements](OLP_REQUIREMENTS.md): project compliance notes and official references.
 
 Self-hosting currently means the loopback-bound local Compose stack. VPS hosting, a public domain and production operation are future steps, not quickstart prerequisites. No public demo, registry publishing, Kubernetes or OpenStack deployment is provided. The broader project includes a future Layer-2 application; the implemented and verified scope here remains the Layer-1 foundation.
