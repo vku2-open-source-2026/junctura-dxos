@@ -145,7 +145,7 @@ This example is illustrative. Neither business application is included. Foundati
 ### Prerequisites
 
 - Git and Node.js 24; the target runtime is recorded in [.node-version](../.node-version).
-- Docker Engine with Linux containers and Docker Compose v2.20 or newer. On Windows, start Docker Desktop's Linux engine before running Compose.
+- Docker Engine with Linux containers and Docker Compose v2.20 or newer. Docker Desktop with its Linux engine also works on Windows and macOS; start it before running Compose.
 - Network access to fetch the pinned upstream images and sufficient local resources to run PostgreSQL, Keycloak, Flowable and the other services.
 
 The Core runtime has no npm dependencies, package installation or transpilation steps. Contract validation uses separate [Python development tools](FOUNDATION_OPENAPI.md); they are not needed in production containers. A VPS, public domain, Kubernetes and OpenStack are not required.

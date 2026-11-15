@@ -42,6 +42,8 @@ jobs:
         run: npm audit --prefix console --audit-level=high
       - name: Verify generated Console endpoint inventory
         run: npm run console:check:endpoints
+      - name: Verify generated Console API reference
+        run: npm --prefix console run check:api-reference
       - name: Test and build Console
         run: |
           npm run console:test

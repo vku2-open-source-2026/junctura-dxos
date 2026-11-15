@@ -133,7 +133,7 @@ sequenceDiagram
 
 ## Bắt đầu nhanh
 
-**Yêu cầu:** Git, Node.js 24, Docker Desktop (Linux engine) với Docker Compose ≥ 2.20. Khuyến nghị RAM 16 GB (dành ≥ 8 GB cho Docker).
+**Yêu cầu:** Git, Node.js 24, Docker Engine với Linux container (hoặc Docker Desktop) cùng Docker Compose ≥ 2.20. Khuyến nghị RAM 16 GB (dành ≥ 8 GB cho Docker).
 
 ```sh
 git clone https://github.com/vku2-open-source-2026/junctura-dxos.git
@@ -155,10 +155,10 @@ Lần chạy đầu cần tải image và bộ nhận diện mã độc của Cl
 ### Đăng ký ứng dụng đầu tiên
 
 ```sh
-npm run app:enroll -- daotao --display-name "Phòng Đào tạo"
+npm run app:enroll -- lichhop --display-name "Lịch họp"
 ```
 
-Lệnh tạo tài khoản dịch vụ cho ứng dụng, đăng ký và phê duyệt nó (người duyệt độc lập với người đăng ký), rồi ghi thông tin đăng nhập riêng của ứng dụng vào `.env.app.daotao.local`.
+Lệnh tạo tài khoản dịch vụ cho ứng dụng, đăng ký và phê duyệt nó (người duyệt độc lập với người đăng ký), rồi ghi thông tin đăng nhập riêng của ứng dụng vào `.env.app.lichhop.local`.
 
 ### Gọi API từ ứng dụng
 
@@ -177,8 +177,8 @@ const junctura = createJuncturaClient({
   clientSecret: process.env.JUNCTURA_APP_CLIENT_SECRET,
 });
 
-const record = await junctura.createRecord("students", { name: "Nguyễn Văn A" });
-const same = await junctura.getRecord("students", record.id);
+const record = await junctura.createRecord("contacts", { name: "Nguyễn Văn A" });
+const same = await junctura.getRecord("contacts", record.id);
 ```
 
 Ứng dụng cung cấp năng lực dùng `junctura.redeemTicket(...)` để đổi vé trước khi xử lý ([hướng dẫn SDK](sdk/node/README.md)). Ứng dụng viết bằng ngôn ngữ nào cũng tích hợp được qua HTTP + JSON + OIDC; SDK chỉ là lựa chọn tiện lợi cho Node.js.

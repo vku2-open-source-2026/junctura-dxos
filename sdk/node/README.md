@@ -29,9 +29,10 @@ const junctura = createJuncturaClient({
 });
 
 // Call a capability another application shares, stating why and for whom.
-const execution = await junctura.execute(target, { referralId: "R-001" }, undefined, {
-  purpose: "treatment",
-  dataSubject: patientSubject,
+const subjectId = "<person's identity-provider subject>";
+const execution = await junctura.execute(target, { requestId: "R-001" }, undefined, {
+  purpose: "service_delivery",
+  dataSubject: subjectId,
 });
 const result = await junctura.waitForExecution(execution.executionId);
 ```

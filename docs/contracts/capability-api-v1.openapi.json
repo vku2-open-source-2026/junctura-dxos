@@ -4598,7 +4598,7 @@
       "get": {
         "operationId": "listWorkflowExecutions",
         "summary": "List the caller tenant workflow executions, newest first",
-        "description": "Implemented. Returns a bounded page of Flowable history scoped to the caller tenant. Requires a verified management principal with audit.read in its own tenant; the private workflow audit role enforces the permission. Running rows include the active task name, assignee and candidate groups. The business title contains only the workflow kind and record code, never patient names, identifiers, record content or workflow variables. The internal junctura_c4a_single definition is excluded.",
+        "description": "Implemented. Returns a bounded page of Flowable history scoped to the caller tenant. Requires a verified management principal with audit.read in its own tenant; the private workflow audit role enforces the permission. Running rows include the active task name, assignee and candidate groups. The title is the workflow definition name, followed by input.reference only when that value is a string matching ^[A-Z][A-Z0-9-]{0,31}$; without a definition name it is null. No other input fields contribute; personal names, other identifiers, record content and workflow variables are never included. The internal junctura_c4a_single definition is excluded.",
         "tags": [
           "workflow-runs"
         ],

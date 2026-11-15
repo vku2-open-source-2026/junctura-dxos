@@ -64,7 +64,7 @@ function compose(args, { input, output } = {}) {
     const transfers = [];
     if (output) transfers.push(pipeline(child.stdout, createWriteStream(output)));
     if (input) transfers.push(pipeline(createReadStream(input), child.stdin));
-    child.once("error", () => fail(new Error("Docker is not available; start Docker Desktop first")));
+    child.once("error", () => fail(new Error("Docker is not available; start the Docker engine first")));
     child.once("close", async code => {
       try { await Promise.all(transfers); } catch (error) { return fail(error); }
       if (code === 0) done(); else fail(new Error(`docker compose ${args.slice(0, 3).join(" ")} failed: ${stderr.trim().split("\n").slice(-3).join(" ")}`));
