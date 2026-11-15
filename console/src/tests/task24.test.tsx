@@ -49,7 +49,7 @@ function explainerIllustration(): HTMLElement {
   const image = screen.queryAllByRole("img")[0];
   if (image) return image;
   return screen.getByRole("list", {
-    name: new RegExp(viStrings.workflows.diagrams.labels.scholarshipIntake),
+    name: new RegExp(viStrings.workflows.diagrams.labels.exampleSubmit),
   });
 }
 
@@ -83,6 +83,21 @@ describe("Layer 1 function introductions", () => {
     expect(await screen.findByText("Quy trình đã hoàn thành.")).toBeInTheDocument();
   });
 
+  it("renders the neutral example workflow steps in the explainer", async () => {
+    await openPlatform("workflows");
+    const labels = viStrings.workflows.diagrams.labels;
+    const roles = viStrings.workflows.diagrams.roles;
+    const diagram = screen.getByRole("list", {
+      name: new RegExp(labels.exampleSubmit),
+    });
+    for (const key of ["exampleSubmit", "exampleReview", "exampleReceive"] as const) {
+      expect(diagram).toHaveAccessibleName(new RegExp(labels[key]));
+    }
+    for (const key of ["requester", "reviewer", "receiver"] as const) {
+      expect(diagram).toHaveAccessibleName(new RegExp(roles[key]));
+    }
+  });
+
   it("hides and restores the introduction from the function page", async () => {
     await openPlatform("workflows");
     expect(explainerIllustration()).toBeInTheDocument();
@@ -90,7 +105,7 @@ describe("Layer 1 function introductions", () => {
     expect(screen.queryByRole("img")).not.toBeInTheDocument();
     expect(
       screen.queryByRole("list", {
-        name: new RegExp(viStrings.workflows.diagrams.labels.scholarshipIntake),
+        name: new RegExp(viStrings.workflows.diagrams.labels.exampleSubmit),
       })
     ).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: viStrings.platform.showExplainer }));

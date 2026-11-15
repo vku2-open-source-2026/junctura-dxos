@@ -20,12 +20,11 @@ export function friendlyWorkflowName(
   definition: DefinitionLike,
   strings: WorkflowStrings
 ): string {
+  const name = definition.name?.trim();
+  if (name && !/^core checkpoint$/i.test(name)) return name;
   const key = definitionKeyOf(definition);
   const mapped = key
     ? (strings.nameMap as Record<string, string>)[key]
     : undefined;
-  if (mapped) return mapped;
-  const name = definition.name?.trim();
-  if (name && !/^core checkpoint$/i.test(name)) return name;
-  return strings.unknownDefinition;
+  return mapped ?? strings.unknownDefinition;
 }

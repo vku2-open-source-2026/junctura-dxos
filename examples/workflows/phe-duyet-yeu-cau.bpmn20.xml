@@ -3,8 +3,14 @@
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 <definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
              xmlns:flowable="http://flowable.org/bpmn"
+             xmlns:junctura="https://junctura.studio/schema/bpmn/1"
              targetNamespace="https://junctura.invalid/core/workflows">
   <process id="junctura_phe_duyet_yeu_cau" name="Phê duyệt yêu cầu" isExecutable="true">
+    <extensionElements>
+      <junctura:owner id="don-vi-tiep-nhan" name="Đơn vị tiếp nhận" />
+      <junctura:group id="don-vi-tiep-nhan" name="Đơn vị tiếp nhận" />
+      <junctura:group id="don-vi-xet-duyet" name="Đơn vị xét duyệt" />
+    </extensionElements>
     <startEvent id="start" />
     <sequenceFlow id="to_tiep_nhan" sourceRef="start" targetRef="tiep_nhan" />
     <userTask id="tiep_nhan" name="Tiếp nhận yêu cầu" flowable:candidateGroups="don-vi-tiep-nhan" />

@@ -15,9 +15,9 @@ export interface SimStep {
 }
 
 export const SIM_STEPS: SimStep[] = [
-  { id: "submit", labelKey: "scholarshipIntake", kind: "task", actor: "auto" },
-  { id: "review", labelKey: "scholarshipDecision", kind: "approval", actor: "person" },
-  { id: "receive", labelKey: "scholarshipReceive", kind: "approval", actor: "person" },
+  { id: "submit", labelKey: "exampleSubmit", kind: "task", actor: "auto" },
+  { id: "review", labelKey: "exampleReview", kind: "approval", actor: "person" },
+  { id: "receive", labelKey: "exampleReceive", kind: "approval", actor: "person" },
   { id: "done", labelKey: "complete", kind: "done" },
 ];
 

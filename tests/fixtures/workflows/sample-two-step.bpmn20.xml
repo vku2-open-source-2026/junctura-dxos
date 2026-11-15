@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- SPDX-FileCopyrightText: 2026 Junctura Contributors -->
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:flowable="http://flowable.org/bpmn"
+             xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+             targetNamespace="https://example.invalid/workflows">
+  <process id="sample_two_step" name="Quy trình mẫu" isExecutable="true">
+    <startEvent id="start" />
+    <sequenceFlow id="to_first" sourceRef="start" targetRef="first" />
+    <userTask id="first" name="Bước 1" flowable:candidateGroups="nhom-a" />
+    <sequenceFlow id="to_decision" sourceRef="first" targetRef="decision_gateway" />
+    <exclusiveGateway id="decision_gateway" />
+    <sequenceFlow id="approved" sourceRef="decision_gateway" targetRef="second">
+      <conditionExpression xsi:type="tFormalExpression">${decision == 'approved'}</conditionExpression>
+    </sequenceFlow>
+    <sequenceFlow id="rejected" sourceRef="decision_gateway" targetRef="first">
+      <conditionExpression xsi:type="tFormalExpression">${decision != 'approved'}</conditionExpression>
+    </sequenceFlow>
+    <userTask id="second" name="Bước 2" flowable:candidateGroups="nhom-b" />
+    <sequenceFlow id="to_end" sourceRef="second" targetRef="end" />
+    <endEvent id="end" />
+  </process>
+</definitions>

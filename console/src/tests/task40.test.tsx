@@ -129,25 +129,25 @@ function workflowExecutions() {
       execution(
         "exec-running",
         "running",
-        "junctura_chuyen_tuyen",
-        "Phê duyệt yêu cầu",
-        "Phê duyệt yêu cầu YC-0001",
-        "Tiếp nhận yêu cầu",
-        ["don-vi-tiep-nhan"]
+        "quy_trinh_a",
+        "Quy trình A",
+        "Quy trình A YC-0001",
+        "Bước một",
+        ["nhom-a"]
       ),
       execution(
         "exec-completed",
         "completed",
-        "junctura_xac_minh_don_thuoc",
-        "Xác minh hồ sơ",
-        "Xác minh hồ sơ HS-0002"
+        "quy_trinh_b",
+        "Quy trình B",
+        "Quy trình B HS-0002"
       ),
       execution(
         "exec-cancelled",
         "cancelled",
-        "junctura_xac_minh_chi_phi",
-        "Xác minh chi phí bảo hiểm",
-        "Xác minh chi phí BH-0003"
+        "quy_trinh_c",
+        "Quy trình C",
+        "Quy trình C BH-0003"
       ),
     ],
     limit: 100,
@@ -168,29 +168,29 @@ function workflowSummaryRoute(url: string) {
   return json(200, {
     definitions: [
       {
-        key: "junctura_chuyen_tuyen",
-        name: "Phê duyệt yêu cầu",
-        application: { id: "don-vi-tiep-nhan", name: "Đơn vị tiếp nhận" },
+        key: "quy_trinh_a",
+        name: "Quy trình A",
+        application: { id: "nhom-a", name: "Nhóm A" },
         steps: [
-          { name: "Tiếp nhận yêu cầu", owner: "Đơn vị tiếp nhận" },
-          { name: "Xét duyệt", owner: "Đơn vị xét duyệt" },
+          { name: "Bước một", owner: "Nhóm A" },
+          { name: "Bước hai", owner: "Nhóm B" },
         ],
         counts: { running: 1, completed: 0, cancelled: 0 },
         updatedAt: "2026-11-10T05:16:57.509Z",
       },
       {
-        key: "junctura_xac_minh_don_thuoc",
-        name: "Xác minh hồ sơ",
-        application: { id: "don-vi-de-nghi", name: "Đơn vị đề nghị" },
-        steps: [{ name: "Gửi hồ sơ", owner: "Đơn vị đề nghị" }],
+        key: "quy_trinh_b",
+        name: "Quy trình B",
+        application: { id: "nhom-b", name: "Nhóm B" },
+        steps: [{ name: "Bước gửi", owner: "Nhóm B" }],
         counts: { running: 0, completed: 1, cancelled: 0 },
         updatedAt: "2026-11-10T05:16:57.509Z",
       },
       {
-        key: "junctura_xac_minh_chi_phi",
-        name: "Xác minh chi phí bảo hiểm",
-        application: { id: "bao-hiem", name: "Bảo hiểm" },
-        steps: [{ name: "Bảo hiểm gửi", owner: "Bảo hiểm" }],
+        key: "quy_trinh_c",
+        name: "Quy trình C",
+        application: { id: "nhom-c", name: "Nhóm C" },
+        steps: [{ name: "Bước xử lý", owner: "Nhóm C" }],
         counts: { running: 0, completed: 0, cancelled: 1 },
         updatedAt: "2026-11-10T05:16:57.509Z",
       },
@@ -276,9 +276,9 @@ describe("Task 40 — read-only workflow dashboard", () => {
       screen.getByText(viStrings.workflows.readOnlyNote)
     ).toBeInTheDocument();
     expect(
-      (await screen.findAllByText("Phê duyệt yêu cầu")).length
+      (await screen.findAllByText("Quy trình A")).length
     ).toBeGreaterThan(0);
-    expect(screen.getAllByText("Đơn vị tiếp nhận").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Nhóm A").length).toBeGreaterThan(0);
     expect(
       screen.queryByRole("button", {
         name: /Chạy thử|Hoàn thành bước này|Dừng hồ sơ/,
@@ -290,8 +290,8 @@ describe("Task 40 — read-only workflow dashboard", () => {
     });
     expect(within(casesTable).getByText("exec-running")).toBeInTheDocument();
     expect(within(casesTable).queryByText("exec-completed")).toBeNull();
-    expect(screen.queryByText("Tiếp nhận yêu cầu")).toBeNull();
-    expect(screen.queryByText("Phê duyệt yêu cầu YC-0001")).toBeNull();
+    expect(screen.queryByText("Bước một")).toBeNull();
+    expect(screen.queryByText("Quy trình A YC-0001")).toBeNull();
 
     const completedTab = screen.getByRole("tab", {
       name: new RegExp(viStrings.workflows.filterCompleted),
@@ -317,6 +317,55 @@ describe("Task 40 — read-only workflow dashboard", () => {
     expect(
       within(cancelledTable).getByText("exec-cancelled")
     ).toBeInTheDocument();
+  });
+
+  it("uses the API-provided name and owner for an unknown workflow key", async () => {
+    installApiFetch([
+      workflowRoute,
+      (url) =>
+        url.includes("/v1/workflows/summary")
+          ? json(200, {
+              definitions: [
+                {
+                  key: "quy_trinh_moi",
+                  name: "Quy trình mới",
+                  application: { id: "nhom-c", name: "Nhóm C" },
+                  steps: [{ name: "Bước mới", owner: "Nhóm C" }],
+                  counts: { running: 0, completed: 0, cancelled: 0 },
+                  updatedAt: "2026-11-10T05:16:57.509Z",
+                },
+              ],
+              totals: {
+                definitions: 1,
+                running: 0,
+                completed: 0,
+                cancelled: 0,
+              },
+            })
+          : undefined,
+    ]);
+    await openScreen("workflows");
+    await screen.findByRole("heading", {
+      level: 1,
+      name: viStrings.workflows.title,
+    });
+
+    const summaryTable = await screen.findByRole("table", {
+      name: viStrings.workflows.summaryTitle,
+    });
+    const nameButton = within(summaryTable).getByRole("button", {
+      name: "Quy trình mới",
+    });
+    expect(nameButton).toBeInTheDocument();
+    expect(within(summaryTable).getByText("Nhóm C")).toBeInTheDocument();
+
+    fireEvent.click(nameButton);
+    const dialog = await screen.findByRole("dialog", {
+      name: viStrings.workflows.stepsTitle,
+    });
+    expect(within(dialog).getByText("Quy trình mới")).toBeInTheDocument();
+    expect(within(dialog).getByText("Bước mới")).toBeInTheDocument();
+    expect(within(dialog).getByText("Nhóm C")).toBeInTheDocument();
   });
 
   it("links the overview case card to the waiting workflow filter", async () => {

@@ -305,26 +305,38 @@ The workflow list accepts only `limit` (1–100, default 20) and
 `status=running|completed|cancelled`; other or repeated parameters return
 `400`. It reads Flowable history scoped to the caller tenant, excludes the
 internal `junctura_c4a_single` definition, and returns the active task name and
-candidate groups for running executions. `title` is a safe business label built
-only from the record code and workflow kind; personal names, identifiers, record
-contents and workflow variables are not included in the list response.
+candidate groups for running executions. `title` uses the available definition
+name plus `input.reference` only when that reference is a string matching
+`^[A-Z][A-Z0-9-]{0,31}$`. Without a valid reference it is the definition name
+alone; without a name it is `null`. No other input fields contribute to the
+title. Personal names, other identifiers, record contents and workflow variables
+are not included in the list response.
 
-The workflow summary is a strictly read-only dashboard. It reads the three
-business BPMN definitions shipped in `src/modules/workflow/definitions/`, their
-named user tasks and candidate groups, then aggregates tenant-scoped Flowable
-history into running, completed and cancelled counts. `steps` de-duplicates
-names, so a repeated “Hoàn tất” task appears once, and the end event is not a
-step. The owning product is a reviewed code-level declaration: Phê duyệt
-yêu cầu → Đơn vị tiếp nhận, Xác minh hồ sơ → Đơn vị đề nghị, Đối soát chứng từ
-→ Đơn vị đối soát. Other installed non-technical definitions, and definitions that only
-exist in history, are returned with `application: null` rather than guessed.
+The workflow summary is a strictly read-only dashboard. It discovers business
+definitions from tenant-scoped Flowable and aggregates history into running,
+completed and cancelled counts. For each latest deployed non-technical
+definition, Core reads its original XML from Flowable's
+`repository/process-definitions/{id}/resourcedata`. Named user tasks supply
+`steps`, deduplicated by name. Process-level `extensionElements` can declare
+`junctura:owner` to supply `application: { id, name }` and `junctura:group` to
+label candidate groups. A step's `owner` is the name of the first candidate group
+with a declared valid name, or `null`; raw group IDs are never used as labels.
+Missing owner metadata gives `application: null`. Labels and owner IDs are validated, with no Core
+business lookup tables. Applications supply these declarations using the
+[deployed metadata convention](WORKFLOW.md#workflow-display-metadata).
+
+Parsed metadata is cached by immutable definition ID, up to 200 entries with
+the oldest evicted first. If one resource cannot be loaded or parsed, only that
+definition falls back to `steps: []` and `application: null`; the summary still
+returns `200`. Definitions present only in history have the same empty metadata.
 `cancelled` is the only unsuccessful outcome; the summary never returns personal
 data, variables, record codes or task IDs and cannot start, complete, approve or
 stop a workflow. The technical `junctura_checkpoint` fixture is marked
 `technical: true` in code (display name “Kiểm tra kỹ thuật”) and, together with
 the C4A engine definition, is excluded from the summary. No query parameters are
 accepted, only `GET` is allowed and responses are `Cache-Control: no-store`.
-Permission, database or engine failures fail closed with `503`.
+Permission, database, definition-list or history failures retain the existing
+error behavior, including `503` when a provider is unavailable.
 
 ## Capability extension APIs
 

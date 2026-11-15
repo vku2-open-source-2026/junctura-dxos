@@ -3,11 +3,11 @@
 // Read-only aggregate of business workflow definitions. Admins may inspect the
 // shape and counts of a process, but this module never starts, completes or
 // cancels anything and never reads workflow variables or case data.
-import { readFileSync, readdirSync } from "node:fs";
-import { workflowRequest } from "./client.mjs";
+import { workflowRequest, workflowText } from "./client.mjs";
 
-const DEFINITIONS_DIRECTORY = new URL("./definitions/", import.meta.url);
 const MAX_SUMMARY_PAGES = 100;
+const metadataCache = new Map();
+const MAX_METADATA_ENTRIES = 200;
 
 // Technical fixtures are installed for core verification only. junctura_checkpoint
 // is deliberately marked technical:true; neither it nor the C4A engine definition
@@ -17,70 +17,116 @@ const TECHNICAL_DEFINITIONS = new Map([
   ["junctura_c4a_single", { name: "Kỹ thuật C4A", technical: true }],
 ]);
 
-// Ownership is a reviewed code-level declaration until applications expose a
-// stable key the workflow schema can join on. IDs are stable application keys,
-// not database UUIDs.
-const APPLICATIONS = new Map([
-  ["junctura_phe_duyet_yeu_cau", { id: "don-vi-tiep-nhan", name: "Đơn vị tiếp nhận" }],
-  ["junctura_xac_minh_ho_so", { id: "don-vi-de-nghi", name: "Đơn vị đề nghị" }],
-  ["junctura_doi_soat_chung_tu", { id: "don-vi-doi-soat", name: "Đơn vị đối soát" }],
-]);
-
-const OWNER_LABELS = new Map([
-  ["don-vi-tiep-nhan", "Đơn vị tiếp nhận"],
-  ["don-vi-xet-duyet", "Đơn vị xét duyệt"],
-  ["don-vi-de-nghi", "Đơn vị đề nghị"],
-  ["don-vi-doi-soat", "Đơn vị đối soát"],
-]);
-
 function safeText(value, max = 200) {
   return typeof value === "string" && value.length >= 1 && value.length <= max &&
     !/[\u0000-\u001f\u007f]/u.test(value) ? value : null;
 }
 
-function ownerLabel(groups) {
-  if (!groups) return null;
-  const labels = [];
-  for (const group of groups.split(",").map((item) => item.trim()).filter(Boolean)) {
-    const label = OWNER_LABELS.get(group) ?? safeText(group, 128);
-    if (label && !labels.includes(label)) labels.push(label);
-  }
-  return labels.length ? labels.join(", ") : null;
+function metadataId(value) {
+  const id = safeText(value, 64);
+  return id && /^[a-z][a-z0-9-]{1,63}$/.test(id) ? id : null;
 }
 
-function parseDefinition(xml) {
-  const key = safeText(/<process\b[^>]*\bid="([^"]+)"/.exec(xml)?.[1], 128);
-  const name = safeText(/<process\b[^>]*\bname="([^"]+)"/.exec(xml)?.[1]);
-  if (!key || !name) return null;
-  const steps = [];
+function decodeReferences(value) {
+  const entities = { amp: "&", lt: "<", gt: ">", quot: '"', apos: "'" };
+  return value.replace(/&(#x[\da-fA-F]+|#\d+|amp|lt|gt|quot|apos);/g, (reference, entity) => {
+    if (!entity.startsWith("#")) return entities[entity];
+    const code = entity.startsWith("#x") ? parseInt(entity.slice(2), 16) : Number(entity.slice(1));
+    return code <= 0x10ffff ? String.fromCodePoint(code) : reference;
+  });
+}
+
+function attributes(source) {
+  const attrs = new Map();
+  const pattern = /\s+([A-Za-z_][\w.:-]*)\s*=\s*(?:"([^"]*)"|'([^']*)')/gy;
+  let end = 0;
+  for (let match; (match = pattern.exec(source));) {
+    if (attrs.has(match[1])) return null;
+    attrs.set(match[1], decodeReferences(match[2] ?? match[3]));
+    end = pattern.lastIndex;
+  }
+  return source.slice(end).trim() ? null : attrs;
+}
+
+export function parseDefinition(xml) {
+  if (typeof xml !== "string" || /<!DOCTYPE|<!ENTITY/i.test(xml)) return null;
+  const stack = [];
+  const tasks = [];
+  let definition = null;
+  let processElement;
+  let processDepth;
+  let end = 0;
+  let rootSeen = false;
+  // Track nesting so task extensions, comments and metadata outside the process
+  // cannot supply ownership. Quoted '>' characters belong to attribute values.
+  const tags = /<!--[\s\S]*?-->|<!\[CDATA\[[\s\S]*?\]\]>|<\?[\s\S]*?\?>|<(\/?)([A-Za-z_][\w.:-]*)((?:[^"'<>]|"[^"]*"|'[^']*')*)>/g;
+  for (const match of xml.matchAll(tags)) {
+    const gap = xml.slice(end, match.index);
+    if (gap.includes("<") || (!stack.length && gap.trim())) return null;
+    end = match.index + match[0].length;
+    const [, closing, element, source] = match;
+    if (!element) continue;
+    if (closing) {
+      if (source.trim() || stack.pop() !== element) return null;
+      continue;
+    }
+    if (!stack.length) {
+      if (rootSeen) return null;
+      rootSeen = true;
+    }
+    const attrs = attributes(source.replace(/\/\s*$/, ""));
+    if (!attrs) return null;
+    const localName = element.split(":").at(-1);
+    if (localName === "process") {
+      if (definition) return null;
+      const key = safeText(attrs.get("id"), 128);
+      const name = safeText(attrs.get("name"));
+      if (!key || !name) return null;
+      definition = { key, name, steps: [], owner: null, groups: new Map() };
+      processElement = element;
+      processDepth = stack.length;
+    } else if (definition && stack[processDepth] === processElement) {
+      if (localName === "userTask") {
+        tasks.push({ name: safeText(attrs.get("name")), groups: safeText(attrs.get("flowable:candidateGroups"), 4096) });
+      } else if (stack.length === processDepth + 2 && stack.at(-1).split(":").at(-1) === "extensionElements") {
+        const id = metadataId(attrs.get("id"));
+        const name = safeText(attrs.get("name"));
+        if (id && name) {
+          if (element === "junctura:owner") definition.owner ??= { id, name };
+          if (element === "junctura:group") definition.groups.set(id, name);
+        }
+      }
+    }
+    if (!/\/\s*$/.test(source)) stack.push(element);
+  }
+  if (!definition || stack.length || xml.slice(end).trim()) return null;
   const seen = new Set();
-  for (const match of xml.matchAll(/<userTask\b([^>]*)>/g)) {
-    const attributes = match[1];
-    const stepName = safeText(/\bname="([^"]+)"/.exec(attributes)?.[1]);
-    if (!stepName || seen.has(stepName)) continue;
-    seen.add(stepName);
-    steps.push({
-      name: stepName,
-      owner: ownerLabel(/\bflowable:candidateGroups="([^"]+)"/.exec(attributes)?.[1]),
-    });
+  for (const task of tasks) {
+    if (!task.name || seen.has(task.name)) continue;
+    seen.add(task.name);
+    const owner = (task.groups ?? "").split(",")
+      .map((group) => definition.groups.get(metadataId(group.trim()))).find(Boolean) ?? null;
+    definition.steps.push({ name: task.name, owner });
   }
-  return { key, name, steps };
+  return definition;
 }
 
-function loadBusinessDefinitions() {
-  const definitions = new Map();
-  for (const file of readdirSync(DEFINITIONS_DIRECTORY).filter((name) => name.endsWith(".bpmn20.xml")).sort()) {
-    const definition = parseDefinition(readFileSync(new URL(file, DEFINITIONS_DIRECTORY), "utf8"));
-    if (!definition || TECHNICAL_DEFINITIONS.has(definition.key)) continue;
-    definitions.set(definition.key, {
-      ...definition,
-      application: APPLICATIONS.get(definition.key) ?? null,
-    });
+async function definitionMetadata(config, id) {
+  if (!id) return null;
+  if (metadataCache.has(id)) return metadataCache.get(id);
+  try {
+    const xml = await workflowText(config, `repository/process-definitions/${encodeURIComponent(id)}/resourcedata`);
+    const metadata = parseDefinition(xml);
+    if (metadata) {
+      metadataCache.set(id, metadata);
+      if (metadataCache.size > MAX_METADATA_ENTRIES) metadataCache.delete(metadataCache.keys().next().value);
+    }
+    return metadata;
+  } catch {
+    // Missing or unreadable metadata affects this definition only. Retry later.
+    return null;
   }
-  return definitions;
 }
-
-const BUSINESS_DEFINITIONS = loadBusinessDefinitions();
 
 function definitionParts(item) {
   const parts = typeof item.processDefinitionId === "string" ? item.processDefinitionId.split(":") : [];
@@ -116,9 +162,9 @@ async function definitionIndex(config, tenantId) {
     const key = safeText(item?.key, 128);
     const name = safeText(item?.name);
     if (!key) continue;
-    const definition = { key, name: name ?? key };
-    byKey.set(key, definition);
     const id = safeText(item?.id, 256);
+    const definition = { id, key, name: name ?? key };
+    byKey.set(key, definition);
     if (id) byId.set(id, definition);
   }
   return { byId, byKey };
@@ -162,12 +208,14 @@ export async function workflowSummary(config, tenantId) {
   const index = await definitionIndex(config, tenantId);
   const { counts, names } = await collectCounts(config, tenantId, index);
   const definitions = new Map();
-  for (const [key, definition] of BUSINESS_DEFINITIONS) {
-    definitions.set(key, { ...definition, application: APPLICATIONS.get(key) ?? null });
-  }
-  for (const [key, definition] of index.byKey) {
-    if (definitions.has(key) || TECHNICAL_DEFINITIONS.has(key)) continue;
-    definitions.set(key, { key, name: definition.name, steps: [], application: null });
+  const deployed = await Promise.all([...index.byKey.values()]
+    .filter((definition) => !TECHNICAL_DEFINITIONS.has(definition.key))
+    .map(async (definition) => {
+      const metadata = await definitionMetadata(config, definition.id);
+      return { key: definition.key, name: definition.name, steps: metadata?.steps ?? [], application: metadata?.owner ?? null };
+    }));
+  for (const definition of deployed) {
+    definitions.set(definition.key, definition);
   }
   for (const key of counts.keys()) {
     if (definitions.has(key)) continue;

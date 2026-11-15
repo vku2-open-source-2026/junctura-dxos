@@ -5,7 +5,7 @@ import { Check, Play, RotateCcw, X } from "lucide-react";
 import { useI18n } from "../../locales/i18n";
 import { Button } from "../common/Button";
 import { WorkflowDiagram } from "../screens/workflows/WorkflowDiagram";
-import { diagramForKey } from "../../constants/workflowDiagrams";
+import { EXAMPLE_WORKFLOW } from "../../constants/workflowDiagrams";
 import {
   SIM_STEPS,
   currentStep,
@@ -15,7 +15,7 @@ import {
 } from "./workflowSimModel";
 import { WORKFLOW_SIM_STRINGS } from "./workflowSim.i18n";
 
-const DIAGRAM = diagramForKey("scholarship_review");
+const DIAGRAM = EXAMPLE_WORKFLOW;
 const TOTAL_STEPS = SIM_STEPS.length - 1;
 
 export const WorkflowSim: React.FC<{ className?: string }> = ({ className = "" }) => {

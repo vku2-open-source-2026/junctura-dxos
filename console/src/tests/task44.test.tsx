@@ -115,9 +115,9 @@ function execution(
     currentStep:
       status === "running"
         ? {
-            name: "Tiếp nhận yêu cầu",
-            assignee: "Chuyên viên Nguyễn Văn A",
-            groups: ["don-vi-tiep-nhan"],
+            name: "Bước một",
+            assignee: "Chuyên viên A",
+            groups: ["nhom-a"],
           }
         : null,
   };
@@ -127,21 +127,21 @@ function workflowSummaryFixture() {
   return {
     definitions: [
       {
-        key: "junctura_chuyen_tuyen",
-        name: "Phê duyệt yêu cầu",
-        application: { id: "don-vi-tiep-nhan", name: "Đơn vị tiếp nhận" },
+        key: "quy_trinh_a",
+        name: "Quy trình A",
+        application: { id: "nhom-a", name: "Nhóm A" },
         steps: [
-          { name: "Tiếp nhận yêu cầu", owner: "Đơn vị tiếp nhận" },
-          { name: "Xét duyệt", owner: "Đơn vị xét duyệt" },
+          { name: "Bước một", owner: "Nhóm A" },
+          { name: "Bước hai", owner: "Nhóm B" },
         ],
         counts: { running: 1, completed: 2, cancelled: 1 },
         updatedAt: "2026-11-10T06:16:57.508Z",
       },
       {
-        key: "junctura_xac_minh_don_thuoc",
-        name: "Xác minh hồ sơ",
-        application: { id: "don-vi-de-nghi", name: "Đơn vị đề nghị" },
-        steps: [{ name: "Gửi hồ sơ", owner: "Đơn vị đề nghị" }],
+        key: "quy_trinh_b",
+        name: "Quy trình B",
+        application: { id: "nhom-b", name: "Nhóm B" },
+        steps: [{ name: "Bước gửi", owner: "Nhóm B" }],
         counts: { running: 0, completed: 1, cancelled: 0 },
         updatedAt: "2026-11-10T06:16:57.508Z",
       },
@@ -156,20 +156,20 @@ function workflowExecutionsFixture() {
       execution(
         "case-running",
         "running",
-        "junctura_chuyen_tuyen",
-        "Phê duyệt yêu cầu"
+        "quy_trinh_a",
+        "Quy trình A"
       ),
       execution(
         "case-completed",
         "completed",
-        "junctura_xac_minh_don_thuoc",
-        "Xác minh hồ sơ"
+        "quy_trinh_b",
+        "Quy trình B"
       ),
       execution(
         "case-cancelled",
         "cancelled",
-        "junctura_chuyen_tuyen",
-        "Phê duyệt yêu cầu"
+        "quy_trinh_a",
+        "Quy trình A"
       ),
     ],
     limit: 100,
@@ -265,7 +265,7 @@ describe("Task 44 — read-only workflow dashboard", () => {
       screen.getByText(viStrings.workflows.readOnlyNote)
     ).toBeInTheDocument();
     expect(
-      (await screen.findAllByText("Phê duyệt yêu cầu")).length
+      (await screen.findAllByText("Quy trình A")).length
     ).toBeGreaterThan(0);
 
     expect(
@@ -279,8 +279,8 @@ describe("Task 44 — read-only workflow dashboard", () => {
     });
     expect(within(casesTable).getByText("case-running")).toBeInTheDocument();
     expect(within(casesTable).queryByText("case-completed")).toBeNull();
-    expect(screen.queryByText("Tiếp nhận yêu cầu")).toBeNull();
-    expect(screen.queryByText("Chuyên viên Nguyễn Văn A")).toBeNull();
+    expect(screen.queryByText("Bước một")).toBeNull();
+    expect(screen.queryByText("Chuyên viên A")).toBeNull();
     expect(screen.queryByText("Hồ sơ nội bộ")).toBeNull();
 
     fireEvent.click(
@@ -300,12 +300,13 @@ describe("Task 44 — read-only workflow dashboard", () => {
     });
     fireEvent.click(
       within(summaryTable).getByRole("button", {
-        name: "Phê duyệt yêu cầu",
+        name: "Quy trình A",
       })
     );
-    expect(
-      await screen.findByText("Tiếp nhận yêu cầu")
-    ).toBeInTheDocument();
-    expect(screen.getByText("Đơn vị xét duyệt")).toBeInTheDocument();
+    const dialog = await screen.findByRole("dialog", {
+      name: viStrings.workflows.stepsTitle,
+    });
+    expect(within(dialog).getByText("Bước một")).toBeInTheDocument();
+    expect(within(dialog).getByText("Nhóm B")).toBeInTheDocument();
   });
 });
