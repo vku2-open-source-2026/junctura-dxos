@@ -29,7 +29,7 @@ export function parseArgs(argv) {
   options.origin ??= `https://${options.clientId}.junctura.local`;
   const origin = new URL(options.origin);
   if (origin.protocol !== "https:" || origin.origin !== options.origin || !origin.hostname.includes(".") ||
-    isIP(origin.hostname.replace(/^\[|\]$/g, ""))) throw new Error("--origin must be an exact https origin such as https://daotao.example.org");
+    isIP(origin.hostname.replace(/^\[|\]$/g, ""))) throw new Error("--origin must be an exact https origin such as https://app.example.org");
   options.displayName ??= options.name;
   return options;
 }

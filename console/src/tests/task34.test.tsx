@@ -105,7 +105,7 @@ function directoryFixture() {
       ],
     },
     relations: [
-      { from: "app-1", to: "app-2", label: "hồ sơ" },
+      { from: "app-1", to: "app-2", label: "văn bản" },
     ],
     truncated: false,
   };
@@ -344,7 +344,7 @@ describe("Task 34 — users and organisations from the directory API", () => {
       await screen.findByRole("button", { name: "Đơn vị tiếp nhận" })
     );
     expect(
-      (await screen.findAllByText("hồ sơ")).length
+      (await screen.findAllByText("văn bản")).length
     ).toBeGreaterThan(0);
     expect(screen.queryByText("app-1")).toBeNull();
   });

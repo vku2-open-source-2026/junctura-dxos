@@ -50,4 +50,6 @@ assert.ok(existsSync("THIRD-PARTY.md"));
 assert.ok(existsSync("REUSE.toml"), "REUSE.toml annotations required for comment-hostile files");
 assert.ok(existsSync("LICENSES/Apache-2.0.txt"), "REUSE license text required");
 await import("./check-boundaries.mjs");
+const { runCheck: checkDomainNeutral } = await import("./check-domain-neutral.mjs");
+assert.equal(checkDomainNeutral(), 0, "Domain-neutral check failed (see violations above)");
 console.log("Source syntax, SPDX headers and project license files verified");

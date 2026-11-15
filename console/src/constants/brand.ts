@@ -64,7 +64,7 @@ export const BRAND = {
       provider: "Flowable REST 8.0.0 OSS",
       protocol: "BPMN 2.0 Engine via REST",
       port: "Internal (8080)",
-      description: "Động cơ thực thi quy trình nghiệp vụ BPMN 2.0 chuẩn với sổ cái Idempotency bảo vệ bằng SQL RLS chống chạy lặp.",
+      description: "Động cơ thực thi quy trình BPMN 2.0, lưu bền lịch sử lượt chạy và có sổ ghi chống chạy lặp được bảo vệ bằng SQL RLS.",
       enDescription: "BPMN 2.0 process engine with durable execution history and RLS-protected idempotency reservations.",
       statusRoute: "/v1/workflows/definitions",
       limitations: "Tenant-scoped definitions. Single active user task completion supported in Foundation contract.",

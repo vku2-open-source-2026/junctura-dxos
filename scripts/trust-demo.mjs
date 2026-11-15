@@ -13,25 +13,25 @@ import { APPROVER_PERMISSIONS, OWNER_PERMISSIONS, connectDemoStack, enrollApplic
 import { renderEnv } from "./enroll-app.mjs";
 
 export const DEMO_APPS = [
-  { name: "daotao", displayName: "Phòng Đào tạo" },
-  { name: "thuvien", displayName: "Thư viện" },
-  { name: "ktx", displayName: "Ký túc xá" },
-  { name: "taichinh", displayName: "Phòng Tài chính" },
+  { name: "danhba", displayName: "Danh bạ" },
+  { name: "vanban", displayName: "Văn bản" },
+  { name: "lichhop", displayName: "Lịch họp" },
+  { name: "thongbao", displayName: "Thông báo" },
 ];
 
 export const DEMO_CAPABILITIES = [
-  { provider: "daotao", name: "student-lookup", title: "Tra cứu sinh viên", description: "Trả về thông tin cơ bản của một sinh viên theo mã số." },
-  { provider: "daotao", name: "transcript", title: "Bảng điểm", description: "Trả về bảng điểm tóm tắt của một sinh viên." },
-  { provider: "taichinh", name: "tuition-status", title: "Trạng thái học phí", description: "Cho biết sinh viên đã hoàn thành học phí học kỳ hay chưa." },
+  { provider: "danhba", name: "contact-lookup", title: "Tra cứu liên hệ", description: "Trả về thông tin liên hệ công việc của một người theo mã định danh." },
+  { provider: "vanban", name: "document-summary", title: "Lấy tóm tắt văn bản", description: "Trả về tiêu đề, ngày ban hành và tóm tắt ngắn của một văn bản theo số hiệu." },
+  { provider: "lichhop", name: "availability", title: "Kiểm tra lịch trống", description: "Cho biết một người hoặc phòng họp có trống trong khoảng thời gian được hỏi hay không." },
 ];
 
 // The final state each grant should reach; days = validity from now.
 export const DEMO_GRANTS = [
-  { provider: "daotao", capability: "student-lookup", consumer: "thuvien", operations: ["discover", "invoke"], days: 30, target: "active" },
-  { provider: "daotao", capability: "student-lookup", consumer: "ktx", operations: ["invoke"], days: 3, target: "active" },
-  { provider: "taichinh", capability: "tuition-status", consumer: "daotao", operations: ["discover", "invoke"], days: 60, target: "active" },
-  { provider: "daotao", capability: "transcript", consumer: "ktx", operations: ["invoke"], days: 14, target: "pending" },
-  { provider: "taichinh", capability: "tuition-status", consumer: "thuvien", operations: ["discover"], days: 20, target: "revoked" },
+  { provider: "danhba", capability: "contact-lookup", consumer: "vanban", operations: ["discover", "invoke"], days: 30, target: "active" },
+  { provider: "danhba", capability: "contact-lookup", consumer: "thongbao", operations: ["invoke"], days: 3, target: "active" },
+  { provider: "lichhop", capability: "availability", consumer: "danhba", operations: ["discover", "invoke"], days: 60, target: "active" },
+  { provider: "vanban", capability: "document-summary", consumer: "thongbao", operations: ["invoke"], days: 14, target: "pending" },
+  { provider: "lichhop", capability: "availability", consumer: "vanban", operations: ["discover"], days: 20, target: "revoked" },
 ];
 
 export function parseArgs(argv) {

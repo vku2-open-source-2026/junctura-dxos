@@ -39,11 +39,11 @@ function summaryFixture() {
     applications: [
       {
         id: "app-records",
-        name: "Sổ hồ sơ",
+        name: "Sổ dữ liệu A",
         state: "active",
         collections: [
-          { name: "nguoi-nop", records: 40, updatedAt: "2026-11-10T00:28:20.543Z" },
-          { name: "chung-tu", records: 50, updatedAt: "2026-11-10T00:28:23.476Z" },
+          { name: "bo-du-lieu-a", records: 40, updatedAt: "2026-11-10T00:28:20.543Z" },
+          { name: "bo-du-lieu-b", records: 50, updatedAt: "2026-11-10T00:28:23.476Z" },
         ],
         files: {
           count: 8,
@@ -62,8 +62,8 @@ function summaryFixture() {
     ],
     totals: {
       collections: [
-        { name: "nguoi-nop", records: 40, updatedAt: "2026-11-10T05:16:58.689Z" },
-        { name: "chung-tu", records: 50, updatedAt: "2026-11-10T05:17:01.119Z" },
+        { name: "bo-du-lieu-a", records: 40, updatedAt: "2026-11-10T05:16:58.689Z" },
+        { name: "bo-du-lieu-b", records: 50, updatedAt: "2026-11-10T05:17:01.119Z" },
       ],
       files: {
         count: 8,
@@ -77,10 +77,10 @@ function summaryFixture() {
 
 function collectionsFixture() {
   return {
-    application: { id: "app-records", name: "Sổ hồ sơ" },
+    application: { id: "app-records", name: "Sổ dữ liệu A" },
     collections: [
       {
-        name: "nguoi-nop",
+        name: "bo-du-lieu-a",
         records: 40,
         updatedAt: "2026-11-10T00:28:20.543Z",
         fields: [
@@ -97,11 +97,11 @@ function collectionsFixture() {
 
 function filesFixture() {
   const root = {
-    application: { id: "app-records", name: "Sổ hồ sơ" },
+    application: { id: "app-records", name: "Sổ dữ liệu A" },
     path: "/",
     folders: [
       {
-        name: "ho-so",
+        name: "thu-muc-a",
         files: 2,
         bytes: 536,
         updatedAt: "2026-11-10T06:31:06.258Z",
@@ -119,8 +119,8 @@ function filesFixture() {
     truncated: false,
   };
   const folder = {
-    application: { id: "app-records", name: "Sổ hồ sơ" },
-    path: "/ho-so",
+    application: { id: "app-records", name: "Sổ dữ liệu A" },
+    path: "/thu-muc-a",
     folders: [],
     files: [
       {
@@ -140,7 +140,7 @@ function filesFixture() {
     ],
     truncated: false,
   };
-  return (path: string) => (path === "/ho-so" ? folder : root);
+  return (path: string) => (path === "/thu-muc-a" ? folder : root);
 }
 
 function orgFixture() {
@@ -156,8 +156,8 @@ function orgFixture() {
       ],
     },
     relations: [
-      { from: "unit-a", to: "unit-b", label: "Tóm tắt hồ sơ" },
-      { from: "unit-b", to: "unit-c", label: "Chứng từ" },
+      { from: "unit-a", to: "unit-b", label: "Tóm tắt văn bản" },
+      { from: "unit-b", to: "unit-c", label: "Tra cứu liên hệ" },
     ],
     truncated: false,
   };
@@ -179,7 +179,7 @@ describe("Task 46 — collection structure", () => {
 
     fireEvent.click(
       await screen.findByRole("button", {
-        name: viStrings.records.viewStructure.replace("{name}", "Người nộp"),
+        name: viStrings.records.viewStructure.replace("{name}", "bo-du-lieu-a"),
       })
     );
 
@@ -204,7 +204,7 @@ describe("Task 46 — collection structure", () => {
     ).toBeInTheDocument();
     expect(
       screen.getByText(
-        viStrings.records.structureBelongs.replace("{app}", "Sổ hồ sơ")
+        viStrings.records.structureBelongs.replace("{app}", "Sổ dữ liệu A")
       )
     ).toBeInTheDocument();
     expect(
@@ -231,7 +231,7 @@ describe("Task 46 — collection structure", () => {
     await openScreen("records", viStrings.records.title);
     fireEvent.click(
       await screen.findByRole("button", {
-        name: viStrings.records.viewStructure.replace("{name}", "Người nộp"),
+        name: viStrings.records.viewStructure.replace("{name}", "bo-du-lieu-a"),
       })
     );
     expect(
@@ -264,20 +264,20 @@ describe("Task 46 — folder file manager", () => {
     ]);
     await openScreen("files", viStrings.files.title);
 
-    expect((await screen.findAllByText("Sổ hồ sơ")).length).toBeGreaterThan(
+    expect((await screen.findAllByText("Sổ dữ liệu A")).length).toBeGreaterThan(
       0
     );
     expect(await screen.findByText("ba…01.txt")).toBeInTheDocument();
     fireEvent.click(
       screen.getByRole("button", {
-        name: viStrings.files.openFolder.replace("{name}", "ho-so"),
+        name: viStrings.files.openFolder.replace("{name}", "thu-muc-a"),
       })
     );
 
     const breadcrumb = await screen.findByRole("navigation", {
       name: viStrings.files.breadcrumbLabel,
     });
-    expect(within(breadcrumb).getByText("ho-so")).toBeInTheDocument();
+    expect(within(breadcrumb).getByText("thu-muc-a")).toBeInTheDocument();
     expect(await screen.findByText("đơn…05.txt")).toBeInTheDocument();
     expect(screen.getByText("đơn…06.txt")).toBeInTheDocument();
     expect(screen.getByText(viStrings.files.statusQuarantined)).toBeInTheDocument();
@@ -312,7 +312,7 @@ describe("Task 46 — folder file manager", () => {
     await openScreen("files", viStrings.files.title);
     fireEvent.click(
       await screen.findByRole("button", {
-        name: viStrings.files.openFolder.replace("{name}", "ho-so"),
+        name: viStrings.files.openFolder.replace("{name}", "thu-muc-a"),
       })
     );
     await screen.findByText("đơn…05.txt");

@@ -5,11 +5,11 @@ import { test } from "node:test";
 import { parseArgs, renderEnv } from "../scripts/enroll-app.mjs";
 
 test("app:enroll derives a client id and default https origin", () => {
-  const options = parseArgs(["daotao"]);
-  assert.equal(options.clientId, "app-daotao");
+  const options = parseArgs(["lichhop"]);
+  assert.equal(options.clientId, "app-lichhop");
   assert.equal(options.tenant, "tenant-a");
-  assert.equal(options.origin, "https://app-daotao.junctura.local");
-  assert.equal(options.displayName, "daotao");
+  assert.equal(options.origin, "https://app-lichhop.junctura.local");
+  assert.equal(options.displayName, "lichhop");
 });
 
 test("app:enroll accepts explicit tenant, origin and display name", () => {

@@ -722,10 +722,10 @@ test("C4A real two-application OIDC invocation redeems a ticket and completes th
 
   // Purpose-bound call naming a data subject: the provider sees the context, the
   // audit chain seals it, and only that subject can list the access.
-  const context = { purpose: "treatment", dataSubject: owner.id };
+  const context = { purpose: "service_delivery", dataSubject: owner.id };
   const unconsented = await c4aStart({ ...executionBody("purpose"), context });
   assert.deepEqual([unconsented.status, unconsented.body.error], [403, "subject_consent_required"], "naming a person needs their consent");
-  const consentBody = { consumerAppId: c4aConsumer.app.appId, capabilityId: c4aReference.capabilityId, purposes: ["treatment"],
+  const consentBody = { consumerAppId: c4aConsumer.app.appId, capabilityId: c4aReference.capabilityId, purposes: ["service_delivery"],
     expiresAt: new Date(Date.now() + 86_400_000).toISOString() };
   const consentResponse = await api("/v1/me/consents", owner, consentBody);
   assert.equal(consentResponse.status, 201);
@@ -737,12 +737,12 @@ test("C4A real two-application OIDC invocation redeems a ticket and completes th
   assert.equal(purposeful.status, 202);
   const purposefulDone = await c4aWait(purposeful.body.executionId, ["succeeded"]);
   const purposefulState = (await c4aFixture.providerState()).body;
-  assert.equal(purposefulState.last.authorization.context.purpose, "treatment");
+  assert.equal(purposefulState.last.authorization.context.purpose, "service_delivery");
   assert.equal(purposefulState.last.authorization.context.dataSubject, owner.id);
   trustCases.push({ schema: "TicketResult", value: purposefulState.last.authorization });
   trustCases.push({ schema: "ExecutionContext", value: context });
   const sealed = await sql(`SELECT reason_code||'|'||reason FROM app_private.audit WHERE resource_id=${q(purposefulDone.executionId)} AND event='execution.subject_accessed';`);
-  assert.equal(sealed.stdout.trim(), `treatment|data_subject_sha256:${createHash("sha256").update(owner.id).digest("hex")}`);
+  assert.equal(sealed.stdout.trim(), `service_delivery|data_subject_sha256:${createHash("sha256").update(owner.id).digest("hex")}`);
   const accessLog = await api("/v1/me/data-access", owner);
   assert.equal(accessLog.status, 200);
   const accessed = await accessLog.json();
@@ -750,11 +750,11 @@ test("C4A real two-application OIDC invocation redeems a ticket and completes th
   const entry = accessed.entries.find(item => item.executionId === purposefulDone.executionId);
   assert.ok(entry, "the data subject sees the call");
   assert.deepEqual([entry.purpose, entry.consumer.appId, entry.provider.appId, entry.capability.capabilityId],
-    ["treatment", c4aConsumer.app.appId, c4aProvider.app.appId, c4aReference.capabilityId]);
+    ["service_delivery", c4aConsumer.app.appId, c4aProvider.app.appId, c4aReference.capabilityId]);
   const strangerLog = await (await api("/v1/me/data-access", stranger)).json();
   assert.ok(!strangerLog.entries.some(item => item.executionId === purposefulDone.executionId), "other subjects see nothing");
   assert.equal((await c4aApi("/v1/capability-executions", c4aConsumer, { ...executionBody(), context: { purpose: "Not valid" } }, { "Idempotency-Key": crypto.randomUUID() })).status, 422);
-  assert.equal((await c4aStart({ ...executionBody("purpose"), context: { ...context, purpose: "insurance_claim" } })).body.error, "subject_consent_required", "consent covers named purposes only");
+  assert.equal((await c4aStart({ ...executionBody("purpose"), context: { ...context, purpose: "marketing" } })).body.error, "subject_consent_required", "consent covers named purposes only");
   const consents = await (await api("/v1/me/consents", owner)).json();
   trustCases.push({ schema: "SubjectConsentList", value: consents });
   assert.ok(consents.consents.some(item => item.consentId === consent.consentId && item.state === "active"));
@@ -764,12 +764,12 @@ test("C4A real two-application OIDC invocation redeems a ticket and completes th
   assert.equal((await c4aStart({ ...executionBody("purpose"), context })).body.error, "subject_consent_required", "revocation is immediate");
 
   // Break-glass: no consent, but a justification; sealed, visible to the person, reviewed.
-  const emergencyContext = { purpose: "emergency_care", dataSubject: owner.id, emergency: true, justification: "Patient unconscious in the emergency room" };
+  const emergencyContext = { purpose: "urgent_response", dataSubject: owner.id, emergency: true, justification: "Person unreachable during an urgent incident" };
   const emergency = await c4aStart({ ...executionBody("emergency"), context: emergencyContext });
   assert.equal(emergency.status, 202);
   await c4aWait(emergency.body.executionId, ["succeeded"]);
   assert.equal((await c4aFixture.providerState()).body.last.authorization.context.emergency, true);
-  const sealedEmergency = await sql(`SELECT count(*) FROM app_private.audit WHERE resource_id=${q(emergency.body.executionId)} AND event='execution.emergency_access' AND reason_code='emergency_care';`);
+  const sealedEmergency = await sql(`SELECT count(*) FROM app_private.audit WHERE resource_id=${q(emergency.body.executionId)} AND event='execution.emergency_access' AND reason_code='urgent_response';`);
   assert.equal(sealedEmergency.stdout.trim(), "1");
   const reviews = await api("/v1/emergency-accesses", approver);
   assert.equal(reviews.status, 200);

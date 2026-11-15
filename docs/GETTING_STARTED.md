@@ -4,9 +4,10 @@
 # Start Junctura locally
 
 This is the application developer's entry point. You need Git, Node 24 and Docker
-Desktop using Linux containers. No server, domain or public TLS is needed.
-Windows PowerShell and Docker Desktop are exercised by the local release checks;
-Ubuntu 24.04 is exercised by CI. Other host platforms are not verified here.
+Engine with Linux containers (Docker Desktop also works). No server, domain or
+public TLS is needed. Windows PowerShell with Docker Desktop (Linux containers) is
+exercised by the local release checks; Ubuntu 24.04 is exercised by CI. Other host
+platforms are not verified here.
 
 ## Install, start, inspect and stop
 
@@ -64,16 +65,16 @@ the full-stack `npm run healthcheck` deliberately also requires `/ready`.
 For Layer-2 prototyping on a local stack, one command performs the flow below:
 
 ```sh
-npm run app:enroll -- daotao --display-name "Phòng Đào tạo"
-node --env-file=.env --env-file=.env.app.daotao.local examples/sdk-foundation.mjs --enrolled
+npm run app:enroll -- lichhop --display-name "Lịch họp"
+node --env-file=.env --env-file=.env.app.lichhop.local examples/sdk-foundation.mjs --enrolled
 ```
 
-It creates the confidential Keycloak client `app-daotao` and its tenant service
+It creates the confidential Keycloak client `app-lichhop` and its tenant service
 account, demo owner and independent approver identities
 (`junctura-demo-owner-<tenant>`, `junctura-demo-approver-<tenant>`) with separated
 permissions, the SQL enrollment bound to the verified service-account subject, then
 registers, approves and activates the application. Only the app's own settings are
-written to the Git-ignored `.env.app.daotao.local`; operator credentials are never
+written to the Git-ignored `.env.app.lichhop.local`; operator credentials are never
 written. Options: `--tenant`, `--origin https://exact.origin`, `--display-name`.
 Run it only on development/demo stacks; production enrollment follows the reviewed
 manual flow below.
@@ -260,7 +261,7 @@ for exact request bodies, independent permissions, ETags and supported states.
 
 | Symptom | Next action |
 | --- | --- |
-| Docker Linux engine unavailable | Start Docker Desktop, select Linux containers, rerun doctor. |
+| Docker Linux engine unavailable | Start the Docker engine (on Windows/macOS: Docker Desktop with Linux containers), rerun doctor. |
 | `.env already exists` | Keep it; compare key names with `.env.example`. Do not rerun setup over it. |
 | Port occupied / wrong service | Run `local:status`; stop the conflicting project or choose distinct ports before a fresh install. |
 | 401 | Check issuer, expiry, enabled OAuth client and credentials; never retry a write blindly. |

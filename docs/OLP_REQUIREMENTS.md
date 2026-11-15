@@ -20,7 +20,8 @@ remains the quick submission checklist; the organizer's pages remain authoritati
 | Headless, không giao diện người dùng | Core chỉ cung cấp API; Console là công cụ quản trị tách riêng |
 | Zero-Trust, an toàn thông tin | Xác thực tại cổng, cô lập tenant/ứng dụng, OpenBao, audit được bảo vệ |
 | Sao lưu và khôi phục | Kiểm thử `pg_dump`/`pg_restore` cô lập, kiểm tra lại RLS và audit |
-| Ít nhất một ứng dụng Tầng 2 trong H-P-D-I | Phát triển ở giai đoạn v0.2.0 |
+| Ít nhất một ứng dụng Tầng 2 trong H-P-D-I | [junctura-workspace](https://github.com/vku2-open-source-2026/junctura-workspace) (repo riêng); ứng dụng nghiệp vụ Tầng 3 ở các repo Clinic, Pharmacy, Hospital, Insurance |
+| Tầng trên đổi nghiệp vụ không ảnh hưởng tầng nền | Lõi trung lập miền: quy trình nghiệp vụ do ứng dụng cấp khi triển khai, Console không ghi cứng tên nghiệp vụ, `npm run check:neutral` chặn từ vựng nghiệp vụ trong CI |
 
 ## Official references
 
@@ -45,12 +46,14 @@ Verify the latest organizer announcements before submission. The references, not
 
 ## Pre-submission review
 
-- [ ] Confirm updated official rules/deadline.
+- [x] Confirm updated official rules/deadline (re-read 2026-11-15: submission 2026-12-06 17:00, source review 2026-12-07 to 12-09, final demo 2026-12-10).
 - [x] Public repository, license and third-party notices in place.
-- [ ] A versioned release exists before the deadline (Layer 1: `v0.1.0`, see [RELEASE](RELEASE.md#publishing-a-github-release)).
-- [ ] Clone/build/run on a clean environment without editing source to configure it.
+- [x] A versioned release exists (Layer 1: `v0.1.0`, tar.gz with checksum; see [RELEASE](RELEASE.md#publishing-a-github-release)). Publish the next release before 2026-12-06.
+- [x] Clone/build/run on a clean environment without editing source to configure it (CI builds and starts the full stack on a fresh runner for every push; configuration lives in `.env`).
+- [x] Only open-source tools are required to build and run (Docker Engine, Docker Compose, Node.js).
 - [x] Required five Core capabilities work together.
+- [x] Layer 1 is domain-neutral and the Console decides platform access only (`npm run check:neutral`).
 - [ ] Layer 2 GUI uses Core in an end-to-end scenario.
 - [x] README, setup, architecture, dependency list, changelog, and issue tracker are usable.
 
-**Note:** Exact scoring deductions and interpretations of license-header/source archive requirements should be checked directly against the official rules before final release.
+**Note:** Rules part I (50 points) deducts for: no web/open VCS use; missing per-file license, conflicting licenses, missing license notice or full text; no versioned release or a closed archive format; missing build instructions, manual edits in source, closed or self-made build tools, location-bound builds; bundled or modified dependencies; missing bug tracker, changelog or README. Re-check each item against the official rules before the final release.

@@ -21,6 +21,8 @@ SPDX-License-Identifier: Apache-2.0
 
 > **Architectural Boundary Notice:**
 > The Admin Console is a **Layer-1 operational control plane**, designed for platform operators to monitor infrastructure health, govern application registration and inspect foundation contracts. It is **not** a Layer-2 business application and does **not** replace the competition's mandatory Layer-2 demonstration application. The five foundational Cores remain completely headless and operational without this UI.
+>
+> The Console decides **platform access** only (application registration, capability publication, sharing grants, emergency-access review); it never starts, completes, cancels or approves **business** work. It is domain-neutral: workflow, owner, step and collection names are shown exactly as applications supply them, and no sector vocabulary is hard-coded in the Console.
 
 ---
 

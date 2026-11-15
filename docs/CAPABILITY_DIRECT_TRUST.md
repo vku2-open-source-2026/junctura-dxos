@@ -108,13 +108,17 @@ unchanged `POST /v1/trust/grants/{grantId}/revoke` and its audit event.
 
 ### Local demo
 
-On a development stack, `npm run trust:demo` enrolls four demo applications
-(`app-daotao`, `app-thuvien`, `app-ktx`, `app-taichinh`), publishes three capabilities
-and creates active, expiring-soon, pending and revoked grants, all through the public
-API with the demo owner proposing and the independent demo approver approving.
+On a development stack, `npm run trust:demo` enrolls four neutral, organisation-wide
+demo applications (`app-danhba` Danh bạ/contacts, `app-vanban` Văn bản/documents,
+`app-lichhop` Lịch họp/meetings, `app-thongbao` Thông báo/notifications), publishes
+three capabilities (`contact-lookup`, `document-summary`, `availability`) and creates
+active, expiring-soon, pending and revoked grants, all through the public API with
+the demo owner proposing and the independent demo approver approving.
 `npm run trust:demo -- token` prints a short-lived approver token: in the Console set
 LIVE mode, paste the token and open *Capability sharing*. The demo identities and
 `.env.app.*.local` files are local only and must never be used in production.
+The earlier education-domain demo is moving to the Layer-2 repository
+`junctura-workspace`; Layer 1 ships only domain-neutral demo data.
 
 ## Internal eligibility and consistency
 

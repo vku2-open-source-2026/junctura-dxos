@@ -2,10 +2,10 @@
 # SPDX-License-Identifier: Apache-2.0
 # Optional override for internal capability providers (Layer 2 services that run
 # next to the platform). Use together with compose.yaml:
-#   npm run provider:pki -- tramyte benhvien
+#   npm run provider:pki -- provider-a provider-b
 #   docker compose -f compose.yaml -f compose.providers.yaml up -d
 # Providers join the isolated "providers" network with an alias such as
-# tramyte.provider.internal and serve HTTPS with their certificate from
+# provider-a.provider.internal and serve HTTPS with their certificate from
 # .junctura/pki. Core only trusts them through the provider CA mounted here.
 services:
   core:

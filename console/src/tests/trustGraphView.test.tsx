@@ -13,15 +13,15 @@ const graph: TrustGraph = {
   truncated: false,
   generatedAt: new Date(now).toISOString(),
   nodes: [
-    { appId: "a", displayName: "Phòng Đào tạo", state: "active", owned: true },
-    { appId: "b", displayName: "Thư viện", state: "active", owned: false },
-    { appId: "c", displayName: "Ký túc xá", state: "active", owned: false },
+    { appId: "a", displayName: "Danh bạ", state: "active", owned: true },
+    { appId: "b", displayName: "Văn bản", state: "active", owned: false },
+    { appId: "c", displayName: "Thông báo", state: "active", owned: false },
   ],
   edges: [
-    { grantId: "g1", providerAppId: "a", consumerAppId: "b", capabilityId: "x", version: "1.0.0", title: "Tra cứu sinh viên",
+    { grantId: "g1", providerAppId: "a", consumerAppId: "b", capabilityId: "x", version: "1.0.0", title: "Tra cứu liên hệ",
       operations: ["discover", "invoke"], revision: 1, state: "active", createdAt: new Date(now).toISOString(),
       activatedAt: new Date(now - day).toISOString(), revokedAt: null, expiresAt: new Date(now + 40 * day).toISOString() },
-    { grantId: "g2", providerAppId: "a", consumerAppId: "c", capabilityId: "y", version: "2.0.0", title: "Bảng điểm",
+    { grantId: "g2", providerAppId: "a", consumerAppId: "c", capabilityId: "y", version: "2.0.0", title: "Tra cứu nhóm liên hệ",
       operations: ["invoke"], revision: 1, state: "pending", createdAt: new Date(now).toISOString(),
       activatedAt: null, revokedAt: null, expiresAt: new Date(now + 10 * day).toISOString() },
   ],
@@ -40,7 +40,7 @@ describe("TrustGraphView", () => {
     expect(node.innerHTML).toContain("scale(1.25)");
     expect(screen.getByTestId("tg-node-b").innerHTML).toBe(before);
     const card = screen.getByRole("complementary");
-    expect(within(card).getByText("Phòng Đào tạo")).toBeTruthy();
+    expect(within(card).getByText("Danh bạ")).toBeTruthy();
     expect(within(card).getByText(/Cho ứng dụng khác dùng 2 quyền/)).toBeTruthy();
   });
 
@@ -48,8 +48,8 @@ describe("TrustGraphView", () => {
     renderView();
     fireEvent.click(screen.getByTestId("tg-edge-g1"));
     const card = screen.getByRole("complementary");
-    expect(within(card).getByText("Tra cứu sinh viên")).toBeTruthy();
-    expect(within(card).getByText(/Phòng Đào tạo cho Thư viện dùng/)).toBeTruthy();
+    expect(within(card).getByText("Tra cứu liên hệ")).toBeTruthy();
+    expect(within(card).getByText(/Danh bạ cho Văn bản dùng/)).toBeTruthy();
     expect(within(card).getByText(/gọi chức năng/)).toBeTruthy();
     expect(card.textContent).not.toContain("1.0.0");
     expect(card.textContent).not.toContain("v1");
@@ -72,6 +72,6 @@ describe("TrustGraphView", () => {
     fireEvent.click(screen.getByRole("button", { name: /Chờ duyệt · 1/ }));
     expect(screen.queryByTestId("tg-edge-g1")).toBeNull();
     fireEvent.keyDown(screen.getByTestId("tg-edge-g2"), { key: "Enter" });
-    expect(within(screen.getByRole("complementary")).getByText("Bảng điểm")).toBeTruthy();
+    expect(within(screen.getByRole("complementary")).getByText("Tra cứu nhóm liên hệ")).toBeTruthy();
   });
 });

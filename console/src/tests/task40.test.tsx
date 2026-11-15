@@ -11,6 +11,7 @@ import {
 import App from "../App";
 import { api } from "../services/apiClient";
 import { vi as viStrings } from "../locales/vi";
+import { en as enStrings } from "../locales/en";
 import { installApiFetch, json } from "./apiMock";
 
 function resetState() {
@@ -38,16 +39,16 @@ function storageSummary() {
     applications: [
       {
         id: "app-records",
-        name: "Sổ hồ sơ",
+        name: "Sổ dữ liệu A",
         state: "active",
         collections: [
           {
-            name: "nguoi-nop",
+            name: "bo-du-lieu-a",
             records: 40,
             updatedAt: "2026-11-10T00:28:20.543Z",
           },
           {
-            name: "chung-tu",
+            name: "bo-du-lieu-b",
             records: 50,
             updatedAt: "2026-11-10T00:28:23.476Z",
           },
@@ -75,12 +76,12 @@ function storageSummary() {
     totals: {
       collections: [
         {
-          name: "nguoi-nop",
+          name: "bo-du-lieu-a",
           records: 40,
           updatedAt: "2026-11-10T05:16:58.689Z",
         },
         {
-          name: "chung-tu",
+          name: "bo-du-lieu-b",
           records: 50,
           updatedAt: "2026-11-10T05:17:01.119Z",
         },
@@ -215,15 +216,59 @@ describe("Task 40 — data and file summaries", () => {
       name: viStrings.records.title,
     });
 
-    expect(await screen.findByText("Sổ hồ sơ")).toBeInTheDocument();
+    expect(await screen.findByText("Sổ dữ liệu A")).toBeInTheDocument();
     expect(screen.getByText(viStrings.records.privacyNote)).toBeInTheDocument();
-    expect(screen.getByText("Người nộp")).toBeInTheDocument();
-    expect(screen.getByText("Chứng từ")).toBeInTheDocument();
+    expect(screen.getByText("bo-du-lieu-a")).toBeInTheDocument();
+    expect(screen.getByText("bo-du-lieu-b")).toBeInTheDocument();
     expect(screen.getByText(viStrings.records.colRecords)).toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: /Tạo bản ghi|Create record/ })
     ).toBeNull();
-    expect(screen.queryByText("nguoi-nop")).toBeNull();
+  });
+
+  it("shows an unknown collection name exactly as the API returns it", async () => {
+    installApiFetch([
+      (url) =>
+        url.includes("/v1/storage/summary")
+          ? json(200, {
+              applications: [
+                {
+                  id: "app-unknown",
+                  name: "Sổ dữ liệu B",
+                  state: "active",
+                  collections: [
+                    { name: "Bang_tam-XYZ 2", records: 3, updatedAt: null },
+                  ],
+                  files: {
+                    count: 0,
+                    bytes: 0,
+                    quarantined: 0,
+                    updatedAt: null,
+                  },
+                },
+              ],
+              totals: {
+                collections: [
+                  { name: "Bang_tam-XYZ 2", records: 3, updatedAt: null },
+                ],
+                files: {
+                  count: 0,
+                  bytes: 0,
+                  quarantined: 0,
+                  updatedAt: null,
+                },
+              },
+            })
+          : undefined,
+    ]);
+    await openScreen("records");
+    await screen.findByRole("heading", {
+      level: 1,
+      name: viStrings.records.title,
+    });
+
+    expect(await screen.findByText("Bang_tam-XYZ 2")).toBeInTheDocument();
+    expect(screen.queryByText("Bang tam XYZ 2")).toBeNull();
   });
 
   it("shows only aggregate file counts, storage and quarantine", async () => {
@@ -240,7 +285,7 @@ describe("Task 40 — data and file summaries", () => {
     });
 
     expect(
-      await screen.findByRole("button", { name: /Sổ hồ sơ/ })
+      await screen.findByRole("button", { name: /Sổ dữ liệu A/ })
     ).toBeInTheDocument();
     // Wait for the browser's duplicate storage label before checking the stat.
     expect(
@@ -281,7 +326,7 @@ describe("Task 40 — read-only workflow dashboard", () => {
     expect(screen.getAllByText("Nhóm A").length).toBeGreaterThan(0);
     expect(
       screen.queryByRole("button", {
-        name: /Chạy thử|Hoàn thành bước này|Dừng hồ sơ/,
+        name: /Chạy thử|Hoàn thành bước này|Dừng hồ sơ|Hủy lượt chạy/,
       })
     ).toBeNull();
 
@@ -402,5 +447,26 @@ describe("Task 40 — read-only workflow dashboard", () => {
     });
     expect(runningTab).toHaveAttribute("aria-selected", "true");
     expect(runningTab).toHaveTextContent(`(${waitCount})`);
+  });
+
+  it("explains that applications handle workflow steps and administrators only view", async () => {
+    installApiFetch();
+    await openScreen("platform/workflows");
+    await screen.findByRole("heading", {
+      level: 1,
+      name: viStrings.platform.functions.workflows.name,
+    });
+
+    expect(
+      screen.getByText(viStrings.platform.functions.workflows.care)
+    ).toBeInTheDocument();
+
+    const forbidden = /hoàn thành bước|hủy|complete the waiting step|cancel/i;
+    for (const strings of [viStrings, enStrings]) {
+      const workflows = strings.platform.functions.workflows;
+      for (const text of [workflows.care, workflows.short, workflows.what]) {
+        expect(text).not.toMatch(forbidden);
+      }
+    }
   });
 });
