@@ -55,8 +55,8 @@ function orgFixture() {
       ],
     },
     relations: [
-      { from: "app-1", to: "app-2", label: "Tóm tắt hồ sơ" },
-      { from: "app-2", to: "app-3", label: "Chứng từ" },
+      { from: "app-1", to: "app-2", label: "Tóm tắt văn bản" },
+      { from: "app-2", to: "app-3", label: "Tra cứu liên hệ" },
     ],
     truncated: false,
   };
@@ -107,7 +107,7 @@ describe("Task 37 — organisation tree", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Đơn vị tiếp nhận" }));
     expect(
-      screen.getAllByText("Tóm tắt hồ sơ").length
+      screen.getAllByText("Tóm tắt văn bản").length
     ).toBeGreaterThan(0);
     expect(screen.getByText(viStrings.orgs.noIncoming)).toBeInTheDocument();
 

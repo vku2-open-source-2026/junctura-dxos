@@ -199,7 +199,7 @@ describe("Task 45 — application detail", () => {
                     capabilityId: "cap-1",
                     providerAppId: "app-provider",
                     version: "1.0.0",
-                    title: "Tóm tắt hồ sơ",
+                    title: "Tóm tắt văn bản",
                   },
                   state: "published",
                   revision: 1,
@@ -217,8 +217,8 @@ describe("Task 45 — application detail", () => {
                   name: "Đơn vị tiếp nhận",
                   state: "active",
                   collections: [
-                    { name: "nguoi-nop", records: 10, updatedAt: null },
-                    { name: "chung-tu", records: 4, updatedAt: null },
+                    { name: "bo-du-lieu-a", records: 10, updatedAt: null },
+                    { name: "bo-du-lieu-b", records: 4, updatedAt: null },
                   ],
                   files: {
                     count: 7,
@@ -296,7 +296,7 @@ describe("Task 45 — application detail", () => {
     expect(await screen.findByText("Đơn vị tiếp nhận")).toBeInTheDocument();
     expect(screen.getByText("Chị Hoa")).toBeInTheDocument();
     expect(screen.getByText("Anh Minh")).toBeInTheDocument();
-    expect(screen.getByText("Tóm tắt hồ sơ")).toBeInTheDocument();
+    expect(screen.getByText("Tóm tắt văn bản")).toBeInTheDocument();
     expect(screen.getByText(viStrings.applications.technicalDetails)).toBeInTheDocument();
     expect(
       screen.queryByRole("button", {

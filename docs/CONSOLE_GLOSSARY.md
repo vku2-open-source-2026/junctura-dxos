@@ -25,7 +25,10 @@ reference, security details), never as the only explanation of what happened.
 | request | lệnh gọi | request / call | One message an application sends to the platform. |
 | backend / provider origin | phần máy chủ của ứng dụng; địa chỉ máy chủ ứng dụng | application server; application server address | The part of an application that runs on a server and can keep secrets. |
 | consumer / provider | ứng dụng gọi / ứng dụng cung cấp | calling / providing application | Who uses a capability and who offers it. |
-| workflow | quy trình | workflow | Steps done in order by people in different units. |
+| workflow | quy trình | workflow | A BPMN process an application starts; the platform runs its steps in order. |
+| workflow definition | định nghĩa quy trình | workflow definition | The installed description of a workflow's steps. |
+| execution | lượt chạy | execution | One run of a workflow, started by an application. |
+| application-handled step | bước do ứng dụng xử lý | step handled in an application | A workflow step handled by an application; Console administrators only view its status. |
 
 Rules of thumb: explain a term the first time it appears on a screen; a
 Vietnamese text and its English text must mean the same; an error message says

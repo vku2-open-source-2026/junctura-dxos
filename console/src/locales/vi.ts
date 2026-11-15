@@ -33,7 +33,7 @@ const docsSectionsVi: Record<DocsSectionId, DocSection> = {
         "kind": "list",
         "items": [
           "Git và Node.js 24.",
-          "Docker Desktop dùng Linux container, Docker Compose 2.20 trở lên.",
+          "Docker Engine (hoặc Docker Desktop) chạy Linux container, Docker Compose 2.20 trở lên.",
           "Máy có ít nhất 16 GB RAM, dành khoảng 8 GB cho Docker."
         ]
       },
@@ -228,7 +228,7 @@ const docsSectionsVi: Record<DocsSectionId, DocSection> = {
       },
       {
         "kind": "paragraph",
-        "text": "Năng lực là một chức năng cụ thể bạn cho ứng dụng khác gọi, ví dụ Đọc bảng điểm. Hãy khai báo đầu vào, đầu ra và phiên bản trước khi công bố. Phiên bản đã công bố không sửa được."
+        "text": "Năng lực là một chức năng cụ thể bạn cho ứng dụng khác gọi, ví dụ Tra cứu thông tin liên hệ. Hãy khai báo đầu vào, đầu ra và phiên bản trước khi công bố. Phiên bản đã công bố không sửa được."
       },
       {
         "kind": "heading",
@@ -254,7 +254,7 @@ const docsSectionsVi: Record<DocsSectionId, DocSection> = {
         "items": [
           "Tra cứu sự kiện theo người, hành động, đối tượng, kết quả và thời gian.",
           "Xuất CSV để lưu trữ hoặc đối chiếu với báo cáo khác.",
-          "Xem ai đã truy cập dữ liệu của một người dân.",
+          "Xem ai đã truy cập dữ liệu của một người dùng.",
           "Theo dõi các lượt truy cập khẩn cấp và kết quả hậu kiểm."
         ]
       },
@@ -307,7 +307,7 @@ const docsSectionsVi: Record<DocsSectionId, DocSection> = {
     "blocks": [
       {
         "kind": "paragraph",
-        "text": "Ví dụ Đọc bảng điểm hoặc Tra cứu lịch thi. Ứng dụng cung cấp công bố năng lực; ứng dụng khác chỉ thấy những gì được công bố, không thấy toàn bộ cơ sở dữ liệu."
+        "text": "Ví dụ Tra cứu thông tin liên hệ hoặc Kiểm tra lịch trống. Ứng dụng cung cấp công bố năng lực; ứng dụng khác chỉ thấy những gì được công bố, không thấy toàn bộ cơ sở dữ liệu."
       },
       {
         "kind": "list",
@@ -370,7 +370,7 @@ const docsSectionsVi: Record<DocsSectionId, DocSection> = {
         "kind": "list",
         "items": [
           "Đồng ý gắn với ứng dụng, phạm vi dữ liệu, mục đích và hạn dùng.",
-          "Người dân xem được ai đã xem dữ liệu của mình.",
+          "Người dùng xem được ai đã xem dữ liệu của mình.",
           "Rút lại đồng ý có hiệu lực ở lần gọi tiếp theo.",
           "Không có đồng ý thì lời gọi bị từ chối, trừ trường hợp khẩn cấp."
         ]
@@ -488,7 +488,7 @@ const docsSectionsVi: Record<DocsSectionId, DocSection> = {
           },
           {
             "question": "Truy cập khẩn cấp khác đồng ý ở chỗ nào?",
-            "answer": "Truy cập khẩn cấp không cần đồng ý trước nhưng phải khai báo lý do, được niêm phong và bắt buộc hậu kiểm. Đồng ý là sự cho phép chủ động của người dân và có thể rút lại."
+            "answer": "Truy cập khẩn cấp không cần đồng ý trước nhưng phải khai báo lý do, được niêm phong và bắt buộc hậu kiểm. Đồng ý là sự cho phép chủ động của người dùng và có thể rút lại."
           },
           {
             "question": "Tôi nên bắt đầu với bí mật ứng dụng ở đâu?",
@@ -713,15 +713,15 @@ export const vi = {
     },
     "files": {
       "label": "Tệp",
-      "desc": "Tệp và hồ sơ, quét mã độc khi nhận."
+      "desc": "Tệp và tài liệu, quét mã độc khi nhận."
     },
     "shares": {
       "label": "Chia sẻ",
       "desc": "Bản ghi hoặc tệp chia sẻ chỉ đọc, có hạn dùng."
     },
     "workflows": {
-      "label": "Quy trình nghiệp vụ",
-      "desc": "Các bước xử lý và hồ sơ đang chạy."
+      "label": "Quy trình",
+      "desc": "Định nghĩa quy trình và lượt chạy."
     },
     "users": {
       "label": "Người dùng",
@@ -740,7 +740,7 @@ export const vi = {
       "desc": "Mọi thao tác quan trọng, niêm phong bằng chuỗi băm."
     },
     "consents": {
-      "label": "Đồng ý của người dân",
+      "label": "Đồng ý của người dùng",
       "desc": "Ai đồng ý cho ứng dụng nào dùng dữ liệu của mình."
     },
     "emergency": {
@@ -976,7 +976,7 @@ export const vi = {
     "applicationsSection": "ỨNG DỤNG",
     "platform": "DỊCH VỤ NỀN TẢNG",
     "resources": "Dữ liệu & Chia sẻ tài nguyên",
-    "workflows": "Quy trình nghiệp vụ",
+    "workflows": "Quy trình",
     "developers": "NHÀ PHÁT TRIỂN",
     "apiExplorer": "API Explorer & Ví dụ",
     "gettingStarted": "Bắt đầu tích hợp",
@@ -1002,11 +1002,11 @@ export const vi = {
     "effectiveGrantsHint": "quyền giữa các ứng dụng còn hiệu lực",
     "pendingStat": "Việc chờ duyệt",
     "pendingStatHint": "yêu cầu đang chờ quyết định",
-    "pendingCasesTitle": "Hồ sơ đang xử lý",
-    "pendingCasesDesc": "{n} hồ sơ đang chờ duyệt ở các bước xử lý.",
-    "pendingCasesLoading": "Đang tải số hồ sơ đang xử lý…",
-    "pendingCasesError": "Không tải được số hồ sơ đang xử lý.",
-    "viewPendingCases": "Xem hồ sơ đang chờ",
+    "pendingCasesTitle": "Lượt chạy đang chạy",
+    "pendingCasesDesc": "{n} lượt chạy chưa kết thúc (đếm tối đa 100). Các bước do ứng dụng xử lý.",
+    "pendingCasesLoading": "Đang tải số lượt chạy đang chạy…",
+    "pendingCasesError": "Không tải được số lượt chạy đang chạy.",
+    "viewPendingCases": "Xem lượt chạy đang chạy",
     "calls": "Lượt gọi năng lực",
     "totalCalls": "Tổng lệnh gọi",
     "successRate": "Tỷ lệ thành công",
@@ -1167,7 +1167,7 @@ export const vi = {
     "workflowRunning": "Đang chạy",
     "workflowCompleted": "Hoàn thành",
     "workflowCancelled": "Đã huỷ",
-    "workflowEmpty": "Chưa có lượt chạy quy trình nào. Hồ sơ đang xử lý sẽ xuất hiện ở đây khi một quy trình được bắt đầu.",
+    "workflowEmpty": "Chưa có lượt chạy nào. Lượt chạy xuất hiện khi một ứng dụng bắt đầu quy trình.",
     "workflowAria": "Biểu đồ thanh quy trình theo trạng thái",
     "workflowTableCaption": "Bảng quy trình theo trạng thái",
     "storageTitle": "Dung lượng tệp & kết quả quét",
@@ -1400,8 +1400,8 @@ export const vi = {
       },
       "files": {
         "name": "Lưu trữ tệp",
-        "short": "Lưu hồ sơ, tài liệu; tự quét virus trước khi nhận.",
-        "what": "Lưu hồ sơ và tài liệu của các ứng dụng. Tệp được quét virus tự động trước khi nhận; tệp nhiễm bệnh bị chặn vào khu cách ly.",
+        "short": "Lưu tệp và tài liệu; tự quét virus trước khi nhận.",
+        "what": "Lưu tệp và tài liệu của các ứng dụng. Tệp được quét virus tự động trước khi nhận; tệp nhiễm mã độc bị chặn vào khu cách ly.",
         "care": "Nếu tệp không tải lên được, hãy kiểm tra dung lượng và thử lại. Tệp bị chặn xem ở trang Tệp bị chặn.",
         "stats": [
           {
@@ -1419,17 +1419,17 @@ export const vi = {
         ]
       },
       "workflows": {
-        "name": "Quy trình nghiệp vụ",
-        "short": "Chạy các chuỗi bước xử lý hồ sơ theo đúng thứ tự.",
-        "what": "Chạy các chuỗi bước xử lý hồ sơ theo đúng thứ tự. Mỗi lần chạy là một hồ sơ đang được xử lý và có thể dừng ở bước cần người duyệt.",
-        "care": "Nếu hồ sơ bị kẹt, mở Quy trình nghiệp vụ để hoàn thành bước đang chờ hoặc hủy.",
+        "name": "Quy trình",
+        "short": "Động cơ quy trình BPMN cho các ứng dụng: lưu định nghĩa, chạy theo đúng thứ tự, chống chạy lặp.",
+        "what": "Động cơ quy trình BPMN cho các ứng dụng: lưu định nghĩa, chạy theo đúng thứ tự, chống chạy lặp. Ứng dụng tự xử lý từng bước.",
+        "care": "Lượt chạy bị kẹt được xử lý trong ứng dụng đã bắt đầu nó; trang Quy trình chỉ hiển thị trạng thái.",
         "stats": [
           {
             "label": "Định nghĩa quy trình",
             "value": "2"
           },
           {
-            "label": "Hồ sơ đang xử lý",
+            "label": "Lượt chạy đang chạy",
             "value": "6"
           },
           {
@@ -1554,8 +1554,8 @@ export const vi = {
       },
       "workflow": {
         "name": "Quy trình",
-        "provider": "quy trình nghiệp vụ REST 8.0.0 OSS",
-        "description": "Chạy các bước nhiều người theo đúng thứ tự, có sổ cái chống chạy lặp.",
+        "provider": "Động cơ quy trình BPMN (mã nguồn mở)",
+        "description": "Chạy các bước của quy trình theo đúng thứ tự, có sổ ghi chống chạy lặp.",
         "port": "Nội bộ (8080)",
         "route": "/v1/workflows/definitions",
         "limitation": "Định nghĩa được tách riêng theo từng tổ chức; hợp đồng nền tảng hiện chỉ hỗ trợ hoàn thành một tác vụ đang hoạt động."
@@ -1613,7 +1613,7 @@ export const vi = {
     "oauthClientLabel": "Mã OAuth client",
     "title": "Ứng dụng",
     "subtitle": "Phần mềm của từng đơn vị kết nối vào Junctura. Mỗi ứng dụng có danh tính và dữ liệu riêng.",
-    "selfRegistrationNotice": "Ứng dụng tự đăng ký qua API. Quản trị viên chỉ xem, duyệt, từ chối hoặc thu hồi; không tạo hồ sơ từ Console.",
+    "selfRegistrationNotice": "Ứng dụng tự đăng ký qua API. Quản trị viên chỉ xem, duyệt, từ chối hoặc thu hồi; không tạo ứng dụng từ Console.",
     "detailOwnerUnit": "Đơn vị sở hữu",
     "detailRegisteredAt": "Ngày đăng ký",
     "detailApprovedAt": "Ngày duyệt",
@@ -1762,7 +1762,7 @@ export const vi = {
     "actionReactivate": "Kích hoạt lại",
     "actionRevoke": "Thu hồi vĩnh viễn",
     "actionReason": "Lý do thay đổi trạng thái",
-    "actionReasonPlaceholder": "Nhập lý do nghiệp vụ hoặc quyết định kiểm toán...",
+    "actionReasonPlaceholder": "Nhập lý do quyết định…",
     "createApprovalTitle": "Ghi nhận quyết định phê duyệt",
     "decisionApprove": "Chấp thuận",
     "decisionDeny": "Từ chối",
@@ -1850,13 +1850,7 @@ export const vi = {
     "loadErrorTitle": "Không tải được tổng quan dữ liệu",
     "loadErrorDesc": "Hệ thống chưa trả về số liệu dữ liệu lúc này. Hãy thử lại sau ít phút.",
     "permissionDeniedTitle": "Cần quyền xem tổng quan dữ liệu",
-    "permissionDeniedDesc": "Tài khoản cần quyền audit.read để xem số liệu tổng hợp của các ứng dụng.",
-    "collectionNames": {
-      "nguoi-nop": "Người nộp",
-      "ho-so": "Hồ sơ",
-      "yeu-cau": "Yêu cầu",
-      "chung-tu": "Chứng từ"
-    }
+    "permissionDeniedDesc": "Tài khoản cần quyền audit.read để xem số liệu tổng hợp của các ứng dụng."
   },
   "files": {
     "title": "Kho tệp",
@@ -2032,14 +2026,14 @@ export const vi = {
     "writerRequired": "Cần quyền core-writer để thao tác chia sẻ."
   },
   "workflows": {
-    "title": "Quy trình nghiệp vụ",
-    "subtitle": "Tổng quan quy trình và trạng thái hồ sơ. Quản trị viên chỉ xem, không can thiệp vào bước xử lý.",
-    "readOnlyNote": "Quản trị viên chỉ xem; hồ sơ được xử lý trong ứng dụng của từng đơn vị.",
+    "title": "Quy trình",
+    "subtitle": "Tổng quan định nghĩa và lượt chạy. Quản trị viên chỉ xem; các bước do ứng dụng xử lý.",
+    "readOnlyNote": "Quản trị viên chỉ xem; lượt chạy được xử lý trong ứng dụng đã bắt đầu nó.",
     "statDefinitions": "Quy trình",
-    "statRunning": "Đang chờ",
-    "statCompleted": "Thành công",
-    "statCancelled": "Thất bại",
-    "summaryTitle": "Quy trình và tỷ lệ thành công",
+    "statRunning": "Đang chạy",
+    "statCompleted": "Hoàn tất",
+    "statCancelled": "Đã dừng",
+    "summaryTitle": "Quy trình và tỷ lệ hoàn tất",
     "summaryDesc": "Bấm một dòng để xem các bước và đơn vị phụ trách.",
     "summaryEmptyTitle": "Chưa có quy trình nào",
     "summaryEmptyDesc": "Quy trình do người vận hành cài lên hệ thống. Hiện chưa có quy trình nào để hiển thị.",
@@ -2047,37 +2041,37 @@ export const vi = {
     "summaryErrorDesc": "Hệ thống chưa trả về số liệu quy trình lúc này. Hãy thử lại sau ít phút.",
     "colWorkflow": "Quy trình",
     "colProduct": "Sản phẩm sở hữu",
-    "colRunning": "Đang chờ",
-    "colCompleted": "Thành công",
-    "colCancelled": "Thất bại",
-    "colSuccessRate": "Tỷ lệ thành công",
+    "colRunning": "Đang chạy",
+    "colCompleted": "Hoàn tất",
+    "colCancelled": "Đã dừng",
+    "colSuccessRate": "Tỷ lệ hoàn tất",
     "productNone": "Chưa xác định",
     "successRateValue": "{rate}%",
-    "successRateAria": "Tỷ lệ thành công của {name}: {rate}%",
+    "successRateAria": "Tỷ lệ hoàn tất của {name}: {rate}%",
     "stepsTitle": "Cách quy trình hoạt động",
-    "stepsDesc": "Các bước theo thứ tự và đơn vị phụ trách. Không hiển thị tiến độ của từng hồ sơ.",
+    "stepsDesc": "Các bước theo thứ tự và đơn vị phụ trách. Không hiển thị tiến độ của từng lượt chạy.",
     "stepsEmpty": "Hệ thống chưa cung cấp các bước của quy trình này.",
     "stepNumber": "Bước {n}",
     "stepOwnerUnknown": "Chưa xác định đơn vị",
-    "casesTitle": "Hồ sơ",
-    "casesDesc": "Danh sách hồ sơ theo trạng thái, kèm thời điểm bắt đầu và kết thúc.",
-    "casesEmptyTitle": "Chưa có hồ sơ nào",
-    "casesEmptyDesc": "Hồ sơ do ứng dụng của các đơn vị gửi lên sẽ xuất hiện ở đây khi được xử lý.",
-    "filterLabel": "Lọc hồ sơ theo trạng thái",
-    "filterRunning": "Đang chờ",
-    "filterCompleted": "Thành công",
-    "filterCancelled": "Thất bại",
-    "caseCount": "{n} hồ sơ",
-    "filterEmptyDesc": "Chưa có hồ sơ nào ở trạng thái này. Chọn trạng thái khác để xem các hồ sơ còn lại.",
-    "loadErrorTitle": "Không tải được danh sách hồ sơ",
-    "loadErrorDesc": "Hệ thống chưa trả về danh sách hồ sơ lúc này. Hãy thử lại sau ít phút.",
-    "colCaseId": "Mã hồ sơ",
+    "casesTitle": "Lượt chạy",
+    "casesDesc": "Danh sách lượt chạy theo trạng thái, kèm thời điểm bắt đầu và kết thúc.",
+    "casesEmptyTitle": "Chưa có lượt chạy nào",
+    "casesEmptyDesc": "Lượt chạy xuất hiện ở đây khi một ứng dụng bắt đầu quy trình.",
+    "filterLabel": "Lọc lượt chạy theo trạng thái",
+    "filterRunning": "Đang chạy",
+    "filterCompleted": "Hoàn tất",
+    "filterCancelled": "Đã dừng",
+    "caseCount": "{n} lượt chạy",
+    "filterEmptyDesc": "Chưa có lượt chạy nào ở trạng thái này. Chọn trạng thái khác để xem các lượt chạy còn lại.",
+    "loadErrorTitle": "Không tải được danh sách lượt chạy",
+    "loadErrorDesc": "Hệ thống chưa trả về danh sách lượt chạy lúc này. Hãy thử lại sau ít phút.",
+    "colCaseId": "Mã lượt chạy",
     "colStatus": "Trạng thái",
     "colStarted": "Bắt đầu",
     "colEnded": "Kết thúc",
-    "statusRunning": "Đang chờ",
+    "statusRunning": "Đang chạy",
     "statusCompleted": "Đã hoàn tất",
-    "statusCancelled": "Thất bại / bị dừng",
+    "statusCancelled": "Đã dừng",
     "unknownTime": "Chưa có",
     "noEndTime": "—",
     "prevPage": "Trước",
@@ -2086,7 +2080,7 @@ export const vi = {
     "nameMap": {
       "junctura_checkpoint": "Kiểm tra kỹ thuật"
     },
-    "unknownDefinition": "Quy trình nghiệp vụ",
+    "unknownDefinition": "Quy trình chưa đặt tên",
     "diagrams": {
       "complete": "Hoàn tất",
       "roles": {
@@ -2176,9 +2170,9 @@ export const vi = {
     "tableCaption": "Danh sách sự kiện kiểm toán"
   },
   "consents": {
-    "title": "Đồng ý của người dân",
-    "subtitle": "Khi lời gọi liên quan tới một người, người đó phải đồng ý trước. Người dân tự cấp và rút lại đồng ý.",
-    "readOnlyNote": "Quản trị viên chỉ xem; việc thu hồi đồng ý do công dân thực hiện trong ứng dụng.",
+    "title": "Đồng ý của người dùng",
+    "subtitle": "Khi lời gọi liên quan tới một người, người đó phải đồng ý trước. Người dùng tự cấp và rút lại đồng ý.",
+    "readOnlyNote": "Quản trị viên chỉ xem; việc rút lại đồng ý do người dùng thực hiện trong ứng dụng.",
     "searchPlaceholder": "Tìm theo người, ứng dụng hoặc phạm vi dữ liệu…",
     "activeCount": "Đồng ý đang hiệu lực",
     "revokedCount": "Đã rút lại",
@@ -2186,7 +2180,7 @@ export const vi = {
     "blockedCount": "Lượt gọi bị chặn vì thiếu đồng ý",
     "blockedNote": "7 ngày qua",
     "cardCount": "{n} đồng ý",
-    "personLabel": "Người dân",
+    "personLabel": "Người dùng",
     "scopeLabel": "Phạm vi dữ liệu",
     "purposeLabel": "Mục đích",
     "expiresLabel": "Có hạn đến",
@@ -2201,8 +2195,8 @@ export const vi = {
     "emptyDesc": "Đồng ý là nơi người dùng cho phép một ứng dụng dùng dữ liệu của mình trong phạm vi và thời hạn nhất định. Hiện chưa có đồng ý nào; khi người dùng chấp thuận, đồng ý sẽ xuất hiện ở đây.",
     "noMatches": "Không có đồng ý nào khớp bộ lọc.",
     "noMatchesDesc": "Thử từ khóa khác hoặc xóa bộ lọc để xem lại toàn bộ đồng ý.",
-    "privacyNote": "Danh tính người dân chỉ lưu dạng băm. Người dân xem “ai đã xem dữ liệu của tôi” qua ứng dụng của họ.",
-    "permissionHint": "Cần quyền audit.read để xem và thu hồi đồng ý của người dân."
+    "privacyNote": "Danh tính người dùng chỉ lưu dạng băm. Người dùng xem “ai đã xem dữ liệu của tôi” qua ứng dụng của họ.",
+    "permissionHint": "Cần quyền audit.read để xem đồng ý của người dùng."
   },
   "emergency": {
     "title": "Truy cập khẩn cấp",
@@ -2522,7 +2516,7 @@ export const vi = {
     "nameLabel": "Tên vai trò",
     "descriptionLabel": "Mô tả",
     "permissionsLabel": "Quyền",
-    "namePlaceholder": "Ví dụ: Quản lý học vụ",
+    "namePlaceholder": "Ví dụ: Người duyệt ứng dụng",
     "descriptionPlaceholder": "Vai trò này dùng để làm gì?",
     "submit": "Tạo vai trò",
     "nameRequired": "Hãy nhập tên vai trò.",

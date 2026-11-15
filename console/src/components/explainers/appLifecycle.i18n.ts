@@ -9,7 +9,7 @@ import type {
 const vi = {
   title: "Thử dòng đời một ứng dụng",
   subtitle: "Đi qua từng trạng thái để thấy ai làm gì. Người đề xuất không thể tự bấm duyệt.",
-  appName: "Ứng dụng: Thư viện số",
+  appName: "Ứng dụng: Lịch họp",
   actorTitle: "Bạn đang là",
   actors: { requester: "Người đề xuất", approver: "Người duyệt" } as Record<LifecycleActor, string>,
   states: {
@@ -20,7 +20,7 @@ const vi = {
     revoked: "Thu hồi",
   } as Record<AppLifecycleState, string>,
   stateHelp: {
-    proposed: "Ứng dụng vừa được đề xuất. Người đề xuất gửi hồ sơ để chuyển sang bước chờ duyệt.",
+    proposed: "Ứng dụng vừa được đề xuất. Người đề xuất gửi thông tin đăng ký để chuyển sang bước chờ duyệt.",
     pending: "Đang chờ một người khác duyệt. Nếu bạn là người đề xuất, nút Duyệt bị khóa.",
     active: "Ứng dụng đang hoạt động và nhận lệnh gọi. Có thể tạm ngưng khi cần.",
     suspended: "Ứng dụng bị tạm ngưng. Mọi lệnh gọi của ứng dụng bị chặn ngay.",
@@ -38,7 +38,7 @@ const vi = {
   logTitle: "Nhật ký",
   logEmpty: "Chưa có thao tác nào.",
   log: {
-    proposed: "Người đề xuất gửi hồ sơ ứng dụng.",
+    proposed: "Người đề xuất gửi thông tin đăng ký ứng dụng.",
     approved: "Người duyệt thứ hai chấp thuận; ứng dụng chuyển sang Hoạt động.",
     selfApprovalBlocked: "Không cho phép: người đề xuất tự duyệt yêu cầu của mình.",
     suspended: "Ứng dụng bị tạm ngưng; mọi lệnh gọi bị chặn.",
@@ -53,7 +53,7 @@ export type AppLifecycleStrings = typeof vi;
 const en: AppLifecycleStrings = {
   title: "Try an application's lifecycle",
   subtitle: "Move through each state to see who does what. The proposer cannot approve their own request.",
-  appName: "Application: Digital Library",
+  appName: "Application: Meeting calendar",
   actorTitle: "You are",
   actors: { requester: "Requester", approver: "Approver" },
   states: {
@@ -64,7 +64,7 @@ const en: AppLifecycleStrings = {
     revoked: "Revoked",
   },
   stateHelp: {
-    proposed: "The application was just proposed. The requester submits it for approval.",
+    proposed: "The application was just proposed. The requester submits its registration details for approval.",
     pending: "Waiting for a different person to approve. If you are the requester, the Approve button is locked.",
     active: "The application is running and receiving calls. It can be suspended when needed.",
     suspended: "The application is suspended. Every call from it is blocked immediately.",
@@ -82,7 +82,7 @@ const en: AppLifecycleStrings = {
   logTitle: "Log",
   logEmpty: "No action yet.",
   log: {
-    proposed: "The requester submitted the application.",
+    proposed: "The requester submitted the application's registration details.",
     approved: "A second approver accepted it; the application is now Active.",
     selfApprovalBlocked: "Not allowed: the proposer cannot approve their own request.",
     suspended: "The application was suspended; every call is blocked.",

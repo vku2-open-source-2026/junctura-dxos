@@ -28,7 +28,7 @@ const enDocsSections: typeof vi.docs.sections = {
         "kind": "list",
         "items": [
           "Git and Node.js 24.",
-          "Docker Desktop using Linux containers, Docker Compose 2.20 or later.",
+          "Docker Engine (or Docker Desktop) running Linux containers, Docker Compose 2.20 or later.",
           "A machine with at least 16 GB RAM, with about 8 GB available to Docker."
         ]
       },
@@ -223,7 +223,7 @@ const enDocsSections: typeof vi.docs.sections = {
       },
       {
         "kind": "paragraph",
-        "text": "A capability is one specific function you let another application call, for example Read transcript. Declare its input, output and version before publishing. A published version cannot be edited."
+        "text": "A capability is one specific function you let another application call, for example Look up a contact. Declare its input, output and version before publishing. A published version cannot be edited."
       },
       {
         "kind": "heading",
@@ -302,7 +302,7 @@ const enDocsSections: typeof vi.docs.sections = {
     "blocks": [
       {
         "kind": "paragraph",
-        "text": "Examples include Read transcript or Look up exam schedule. The provider publishes a capability; other applications see only what is published, not the whole database."
+        "text": "Examples include Look up a contact or Check calendar availability. The provider publishes a capability; other applications see only what is published, not the whole database."
       },
       {
         "kind": "list",
@@ -716,7 +716,7 @@ export const en: typeof vi = {
     },
     "workflows": {
       "label": "Workflows",
-      "desc": "Processing steps and cases in progress."
+      "desc": "Workflow definitions and executions."
     },
     "users": {
       "label": "Users",
@@ -735,7 +735,7 @@ export const en: typeof vi = {
       "desc": "Every important action, sealed in a hash chain."
     },
     "consents": {
-      "label": "Citizen consents",
+      "label": "User consents",
       "desc": "Who allows which application to use their data."
     },
     "emergency": {
@@ -971,7 +971,7 @@ export const en: typeof vi = {
     "applicationsSection": "APPLICATIONS",
     "platform": "CORE SERVICES",
     "resources": "Data & Resource Sharing",
-    "workflows": "Business workflows",
+    "workflows": "Workflows",
     "developers": "DEVELOPERS",
     "apiExplorer": "API Explorer & Examples",
     "gettingStarted": "Getting Started",
@@ -997,11 +997,11 @@ export const en: typeof vi = {
     "effectiveGrantsHint": "application-to-application grants still valid",
     "pendingStat": "Awaiting approval",
     "pendingStatHint": "requests waiting for a decision",
-    "pendingCasesTitle": "Cases in progress",
-    "pendingCasesDesc": "{n} cases waiting for approval at their current step.",
-    "pendingCasesLoading": "Loading the number of cases in progress…",
-    "pendingCasesError": "Could not load the number of cases in progress.",
-    "viewPendingCases": "View waiting cases",
+    "pendingCasesTitle": "Running executions",
+    "pendingCasesDesc": "{n} executions not yet finished (counted up to 100). Applications handle the steps.",
+    "pendingCasesLoading": "Loading the number of running executions…",
+    "pendingCasesError": "Could not load the number of running executions.",
+    "viewPendingCases": "View running executions",
     "calls": "Capability calls",
     "totalCalls": "Total requests",
     "successRate": "Success rate",
@@ -1162,7 +1162,7 @@ export const en: typeof vi = {
     "workflowRunning": "Running",
     "workflowCompleted": "Completed",
     "workflowCancelled": "Cancelled",
-    "workflowEmpty": "No workflow executions yet. Cases in progress appear here when a workflow starts.",
+    "workflowEmpty": "No executions yet. Executions appear when an application starts a workflow.",
     "workflowAria": "Bar chart of workflows by status",
     "workflowTableCaption": "Workflows by status table",
     "storageTitle": "File storage & scan results",
@@ -1395,8 +1395,8 @@ export const en: typeof vi = {
       },
       "files": {
         "name": "File storage",
-        "short": "Stores records and documents; scans for viruses before accepting them.",
-        "what": "Stores records and documents for applications. Files are scanned for viruses automatically before they are accepted; infected files are blocked into quarantine.",
+        "short": "Stores files and documents; scans for viruses before accepting them.",
+        "what": "Stores files and documents for applications. Files are scanned for viruses automatically before they are accepted; infected files are blocked into quarantine.",
         "care": "If a file will not upload, check its size and try again. Blocked files appear on the Blocked files page.",
         "stats": [
           {
@@ -1414,17 +1414,17 @@ export const en: typeof vi = {
         ]
       },
       "workflows": {
-        "name": "Business workflows",
-        "short": "Runs each record's chain of processing steps in the right order.",
-        "what": "Runs each record's chain of processing steps in the right order. Every run is a record being processed and can pause at a step that needs a person.",
-        "care": "If a record is stuck, open Business workflows to complete the waiting step or cancel it.",
+        "name": "Workflows",
+        "short": "BPMN workflow engine for applications: stores definitions, runs steps in order, prevents duplicate runs.",
+        "what": "BPMN workflow engine for applications: stores definitions, runs steps in order, prevents duplicate runs. Applications handle each step.",
+        "care": "Stuck executions are handled in the application that started them; the Workflows page only shows status.",
         "stats": [
           {
-            "label": "Workflow templates",
+            "label": "Workflow definitions",
             "value": "2"
           },
           {
-            "label": "Records in progress",
+            "label": "Running executions",
             "value": "6"
           },
           {
@@ -1549,8 +1549,8 @@ export const en: typeof vi = {
       },
       "workflow": {
         "name": "Workflow engine",
-        "provider": "business workflow engine REST 8.0.0 OSS",
-        "description": "Runs multi-person steps in order and records each request so a retry never runs a step twice.",
+        "provider": "Open-source BPMN workflow engine",
+        "description": "Runs workflow steps in order and records each request so a retry never runs a step twice.",
         "port": "Internal (8080)",
         "route": "/v1/workflows/definitions",
         "limitation": "Definitions are kept separate for each organization; the Foundation contract currently completes one active user task at a time."
@@ -1757,7 +1757,7 @@ export const en: typeof vi = {
     "actionReactivate": "Reactivate Application",
     "actionRevoke": "Revoke Permanently",
     "actionReason": "Reason for State Transition",
-    "actionReasonPlaceholder": "Enter operational or compliance reason...",
+    "actionReasonPlaceholder": "Enter the reason for this decision…",
     "createApprovalTitle": "Create Approval Decision (POST /v1/approvals)",
     "decisionApprove": "Approve Proposal",
     "decisionDeny": "Deny Proposal",
@@ -1845,13 +1845,7 @@ export const en: typeof vi = {
     "loadErrorTitle": "Could not load the data overview",
     "loadErrorDesc": "The system did not return data totals right now. Try again in a moment.",
     "permissionDeniedTitle": "Data overview permission required",
-    "permissionDeniedDesc": "This account needs audit.read to view aggregate application data.",
-    "collectionNames": {
-      "nguoi-nop": "Submitters",
-      "ho-so": "Records",
-      "yeu-cau": "Requests",
-      "chung-tu": "Documents"
-    }
+    "permissionDeniedDesc": "This account needs audit.read to view aggregate application data."
   },
   "files": {
     "title": "File store",
@@ -2027,14 +2021,14 @@ export const en: typeof vi = {
     "writerRequired": "The core-writer permission is required to manage shares."
   },
   "workflows": {
-    "title": "Business workflows",
-    "subtitle": "Workflow overview and case status. Administrators only observe; they never intervene in a processing step.",
-    "readOnlyNote": "Administrators only observe; cases are processed inside each unit's application.",
+    "title": "Workflows",
+    "subtitle": "Definitions and executions overview. Administrators only view; applications handle the steps.",
+    "readOnlyNote": "Administrators only view; executions are handled in the application that started them.",
     "statDefinitions": "Workflows",
-    "statRunning": "Waiting",
-    "statCompleted": "Successful",
-    "statCancelled": "Failed",
-    "summaryTitle": "Workflows and success rate",
+    "statRunning": "Running",
+    "statCompleted": "Completed",
+    "statCancelled": "Cancelled",
+    "summaryTitle": "Workflows and completion rate",
     "summaryDesc": "Select a row to see its steps and responsible units.",
     "summaryEmptyTitle": "No workflows yet",
     "summaryEmptyDesc": "Workflows are installed by an operator. There are none to show right now.",
@@ -2042,37 +2036,37 @@ export const en: typeof vi = {
     "summaryErrorDesc": "The system did not return workflow figures right now. Try again in a moment.",
     "colWorkflow": "Workflow",
     "colProduct": "Owning product",
-    "colRunning": "Waiting",
-    "colCompleted": "Successful",
-    "colCancelled": "Failed",
-    "colSuccessRate": "Success rate",
+    "colRunning": "Running",
+    "colCompleted": "Completed",
+    "colCancelled": "Cancelled",
+    "colSuccessRate": "Completion rate",
     "productNone": "Not identified",
     "successRateValue": "{rate}%",
-    "successRateAria": "Success rate of {name}: {rate}%",
+    "successRateAria": "Completion rate of {name}: {rate}%",
     "stepsTitle": "How the workflow works",
-    "stepsDesc": "Steps in order with the responsible unit. Per-case progress is not shown.",
+    "stepsDesc": "Steps in order with the responsible unit. Per-execution progress is not shown.",
     "stepsEmpty": "The system does not provide the steps for this workflow yet.",
     "stepNumber": "Step {n}",
     "stepOwnerUnknown": "Responsible unit not identified",
-    "casesTitle": "Cases",
-    "casesDesc": "Cases by status, with their start and end times.",
-    "casesEmptyTitle": "No cases yet",
-    "casesEmptyDesc": "Cases sent by each unit's application appear here when they are processed.",
-    "filterLabel": "Filter cases by status",
-    "filterRunning": "Waiting",
-    "filterCompleted": "Successful",
-    "filterCancelled": "Failed",
-    "caseCount": "{n} cases",
-    "filterEmptyDesc": "No cases have this status yet. Choose another status to see the remaining cases.",
-    "loadErrorTitle": "Could not load the case list",
-    "loadErrorDesc": "The system did not return the case list right now. Try again in a moment.",
-    "colCaseId": "Case ID",
+    "casesTitle": "Executions",
+    "casesDesc": "Executions by status, with their start and end times.",
+    "casesEmptyTitle": "No executions yet",
+    "casesEmptyDesc": "Executions appear here when an application starts a workflow.",
+    "filterLabel": "Filter executions by status",
+    "filterRunning": "Running",
+    "filterCompleted": "Completed",
+    "filterCancelled": "Cancelled",
+    "caseCount": "{n} executions",
+    "filterEmptyDesc": "No executions have this status yet. Choose another status to see the remaining executions.",
+    "loadErrorTitle": "Could not load the execution list",
+    "loadErrorDesc": "The system did not return the execution list right now. Try again in a moment.",
+    "colCaseId": "Execution ID",
     "colStatus": "Status",
     "colStarted": "Started",
     "colEnded": "Ended",
-    "statusRunning": "Waiting",
+    "statusRunning": "Running",
     "statusCompleted": "Completed",
-    "statusCancelled": "Failed / stopped",
+    "statusCancelled": "Cancelled",
     "unknownTime": "Not available",
     "noEndTime": "—",
     "prevPage": "Previous",
@@ -2081,7 +2075,7 @@ export const en: typeof vi = {
     "nameMap": {
       "junctura_checkpoint": "Technical check"
     },
-    "unknownDefinition": "Business workflow",
+    "unknownDefinition": "Unnamed workflow",
     "diagrams": {
       "complete": "Complete",
       "roles": {
@@ -2171,9 +2165,9 @@ export const en: typeof vi = {
     "tableCaption": "Audit event list"
   },
   "consents": {
-    "title": "Citizen consents",
-    "subtitle": "When a call concerns a person, that person must consent first. Citizens grant and withdraw their own consent.",
-    "readOnlyNote": "Administrators can only view; withdrawing consent is done by the citizen in the application.",
+    "title": "User consents",
+    "subtitle": "When a call concerns a person, that person must consent first. Users grant and withdraw their own consent.",
+    "readOnlyNote": "Administrators can only view; withdrawing consent is done by the user in the application.",
     "searchPlaceholder": "Search by person, application or data scope…",
     "activeCount": "Active consents",
     "revokedCount": "Withdrawn",
@@ -2181,7 +2175,7 @@ export const en: typeof vi = {
     "blockedCount": "Calls blocked for missing consent",
     "blockedNote": "Last 7 days",
     "cardCount": "{n} consents",
-    "personLabel": "Citizen",
+    "personLabel": "User",
     "scopeLabel": "Data scope",
     "purposeLabel": "Purpose",
     "expiresLabel": "Valid until",
@@ -2193,11 +2187,11 @@ export const en: typeof vi = {
     "revokeConfirm": "Withdraw now",
     "revokedToast": "Withdrew consent for {person}.",
     "emptyTitle": "No consents yet",
-    "emptyDesc": "Citizen consents let a person allow an application to use their data within a defined scope and time limit. There are none yet; consents appear here when a citizen agrees.",
+    "emptyDesc": "User consents let a person allow an application to use their data within a defined scope and time limit. There are none yet; consents appear here when a user agrees.",
     "noMatches": "No consents match the filters.",
     "noMatchesDesc": "Try another keyword or clear the filter to see every consent.",
-    "privacyNote": "Citizen identities are stored only as hashes. Citizens see “who viewed my data” through their own application.",
-    "permissionHint": "The audit.read permission is required to view and withdraw citizen consents."
+    "privacyNote": "User identities are stored only as hashes. Users see “who viewed my data” through their own application.",
+    "permissionHint": "The audit.read permission is required to view user consents."
   },
   "emergency": {
     "title": "Emergency access",
@@ -2517,7 +2511,7 @@ export const en: typeof vi = {
     "nameLabel": "Role name",
     "descriptionLabel": "Description",
     "permissionsLabel": "Permissions",
-    "namePlaceholder": "Example: Academic operations manager",
+    "namePlaceholder": "Example: Application reviewer",
     "descriptionPlaceholder": "What is this role for?",
     "submit": "Create role",
     "nameRequired": "Enter a role name.",

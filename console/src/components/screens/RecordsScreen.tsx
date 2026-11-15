@@ -146,17 +146,7 @@ export const RecordsScreen: React.FC = () => {
     )
   );
 
-  const collectionLabel = (name: string): string => {
-    const names = r.collectionNames as Record<string, string>;
-    return (
-      names[name] ??
-      name
-        .split(/[-_]/)
-        .filter(Boolean)
-        .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-        .join(" ")
-    );
-  };
+  const collectionLabel = (name: string): string => name;
 
   return (
     <div className="space-y-6">

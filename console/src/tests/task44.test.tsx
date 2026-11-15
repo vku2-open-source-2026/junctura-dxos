@@ -111,7 +111,7 @@ function execution(
     status,
     startedAt: "2026-11-10T05:16:57.508Z",
     updatedAt: "2026-11-10T06:16:57.508Z",
-    title: "Hồ sơ nội bộ",
+    title: "Tiêu đề nội bộ",
     currentStep:
       status === "running"
         ? {
@@ -270,7 +270,7 @@ describe("Task 44 — read-only workflow dashboard", () => {
 
     expect(
       screen.queryByRole("button", {
-        name: /Chạy thử|Hoàn thành bước này|Dừng hồ sơ|Duyệt/,
+        name: /Chạy thử|Hoàn thành bước này|Dừng hồ sơ|Hủy lượt chạy|Duyệt/,
       })
     ).toBeNull();
 
@@ -281,7 +281,7 @@ describe("Task 44 — read-only workflow dashboard", () => {
     expect(within(casesTable).queryByText("case-completed")).toBeNull();
     expect(screen.queryByText("Bước một")).toBeNull();
     expect(screen.queryByText("Chuyên viên A")).toBeNull();
-    expect(screen.queryByText("Hồ sơ nội bộ")).toBeNull();
+    expect(screen.queryByText("Tiêu đề nội bộ")).toBeNull();
 
     fireEvent.click(
       screen.getByRole("tab", {
