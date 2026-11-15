@@ -172,6 +172,14 @@ npm run console:test
 npm run console:build
 ```
 
+`npm run check:neutral` (also run by `npm run check`) scans tracked text files in
+`src/`, `infra/`, `scripts/`, `sdk/`, `console/src/`, `examples/`, `docs/contracts/`,
+the root Compose files, both Dockerfiles and `.env.example` for sector vocabulary,
+and rejects business BPMN outside approved locations. Tests and temporary
+`examples/workflows/` samples are excluded from vocabulary scanning. Exceptions
+in `scripts/domain-neutral-allowlist.json` require an exact path, term and reason;
+unused entries fail the check.
+
 Real-service checks (Docker Engine with Linux containers required; run on a
 disposable test stack and never delete persistent volumes):
 

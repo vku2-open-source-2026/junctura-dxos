@@ -11,6 +11,7 @@ path = [
   "NOTICE",
   ".node-version",
   "package.json",
+  "scripts/domain-neutral-allowlist.json",
   "sdk/node/package.json",
   "console/package.json",
   "console/package-lock.json",

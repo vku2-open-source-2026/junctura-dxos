@@ -12,6 +12,7 @@
     "start": "node --env-file-if-exists=.env src/server.mjs",
     "check": "node scripts/check.mjs",
     "check:boundaries": "node scripts/check-boundaries.mjs",
+    "check:neutral": "node scripts/check-domain-neutral.mjs",
     "check:contracts": "python -B scripts/check-contracts.py",
     "check:reuse": "node scripts/check-reuse.mjs",
     "check:docs": "node scripts/check-docs.mjs",
