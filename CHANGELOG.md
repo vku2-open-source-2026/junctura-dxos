@@ -8,6 +8,20 @@ All notable changes to Junctura are recorded here. Versions follow
 
 ## Unreleased
 
+- **Layer 1 domain-neutral and accurately worded (issue #38):** the Console
+  shows collection names exactly as applications supply them (no hard-coded
+  business collection labels); Console wording matches its scope — it views
+  workflows and decides platform access only, runs are "lượt chạy"/executions,
+  statuses follow the API (running, completed, cancelled), consent screens
+  speak of users. The trust demo uses neutral organisation-wide apps (Danh bạ,
+  Văn bản, Lịch họp, Thông báo); examples in README, SDK, contracts and
+  integration fixtures are neutral; the workflow executions OpenAPI text
+  matches #35. `npm run check:neutral` (part of `npm run check`) blocks sector
+  vocabulary and business BPMN in Layer 1, and CI verifies the generated
+  Console API reference. Build requirements name Docker Engine; Docker Desktop
+  stays optional. Architecture docs describe the three layers and the two kinds
+  of approval (platform access in Layer 1, business decisions in Layers 2/3).
+
 - **Breaking — application-supplied business workflows (issue #35):** Core no
   longer ships or deploys business BPMN by default. Set
   `WORKFLOW_DEFINITIONS_DIR` to an operator-provided application directory;

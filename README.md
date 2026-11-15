@@ -69,11 +69,16 @@ Mỗi ứng dụng vẫn do đơn vị của mình phát triển và sở hữu;
 
 ```mermaid
 flowchart TB
-  subgraph APPS["Ứng dụng nghiệp vụ (Tầng 2)"]
-    A1["Ứng dụng A"]
-    A2["Ứng dụng B"]
-    A3["Ứng dụng tổng hợp"]
+  subgraph L3["Tầng 3 · ứng dụng nghiệp vụ (cắm-rút)"]
+    B1["Ứng dụng nghiệp vụ A"]
+    B2["Ứng dụng nghiệp vụ B"]
   end
+
+  subgraph L2["Tầng 2 · không gian năng lực dùng chung"]
+    W1["Junctura Workspace<br/>quy trình · kết nối · cá nhân"]
+  end
+
+  OPS["Console quản trị<br/>chỉ xem · duyệt quyền truy cập"]
 
   GW["Cổng API · Nginx<br/>xác thực · giới hạn tần suất · request-id"]
 
@@ -94,10 +99,17 @@ flowchart TB
     end
   end
 
-  A1 & A2 & A3 --> GW --> CAP --> FND
+  B1 & B2 --> GW
+  W1 --> GW
+  OPS --> GW
+  GW --> CAP --> FND
 ```
 
 Chỉ cổng API mở ra ngoài; mọi dịch vụ khác nằm trong mạng nội bộ. Core chạy không quyền root trên hệ thống tệp chỉ đọc.
+
+**Tầng 1 không chứa nghiệp vụ.** Lõi chỉ cung cấp năng lực dùng chung qua API. Quy trình, tên đơn vị, tên bộ dữ liệu và chức năng nghiệp vụ do ứng dụng Tầng 2/3 cung cấp khi chạy, nên tầng trên đổi nghiệp vụ mà không phải sửa lõi; `npm run check:neutral` chặn từ vựng nghiệp vụ lọt vào lõi.
+
+**Console là trang quản trị của lõi**, giống Supabase Studio hay Directus Data Studio: xem trạng thái nền tảng và duyệt **quyền truy cập** (đăng ký ứng dụng, công bố chức năng, chia sẻ, hậu kiểm truy cập khẩn cấp). Console không chạy, hoàn thành, hủy hay duyệt **nghiệp vụ**; việc đó thuộc ứng dụng Tầng 2/3. Lõi chạy đầy đủ khi tắt Console. Chi tiết: [Kiến trúc](docs/ARCHITECTURE.md).
 
 ### Một lần chia sẻ năng lực diễn ra thế nào
 

@@ -30,9 +30,26 @@ Official interpretation is consolidated in [traceability](architecture/OLP_REQUI
 
 Required Core capabilities: Identity/SSO; API Gateway; structured data; unstructured/object data; workflow engine. All must be reusable independently of a single demo application's business rules.
 
+Layer 1 is domain-neutral: Core code, the Console and Core examples carry no business vocabulary, workflow, unit, collection or field of any sector. Applications supply that knowledge as data at run time (BPMN definitions with `junctura:owner`/`junctura:group` metadata, collection names, capability manifests), so an upper layer can change its business without a Core change. `npm run check:neutral` enforces this in CI.
+
+Two kinds of approval are kept apart:
+
+| Approval | Examples | Layer |
+| --- | --- | --- |
+| Platform access | Register an application, publish a capability, share or revoke access, review emergency access | Layer 1 (identity, security and zero-trust duties) |
+| Business decision | Approve a request, verify a document, complete a workflow step | Layer 2/3 applications; Core only provides the workflow engine |
+
+The Junctura Console is the operator interface of Layer 1, comparable to Supabase Studio or the Directus Data Studio. It views platform state and decides platform access only; it never starts, completes, cancels or approves business work. Core runs fully without it (Compose profile `console`).
+
 ## Layer 2 — Applications
 
 At least one user-facing GUI application must exercise Core APIs in a real end-to-end scenario. Technical vendor administration consoles do not substitute for this application.
+
+Layer 2 provides shared, domain-neutral digital capability spaces on top of Core: [junctura-workspace](https://github.com/vku2-open-source-2026/junctura-workspace) (workflow inbox, capability catalog and access requests, personal consent view) and the shared health contracts and UI kit in [junctura-health](https://github.com/vku2-open-source-2026/junctura-health).
+
+## Layer 3 — Business applications
+
+Sector applications plug in and out on top of Layers 1 and 2 without changing them: Clinic, Pharmacy, Hospital, Insurance and MyHealth in the `vku2-open-source-2026` organization. They own their business rules, data and screens, and reach Core only through its public APIs.
 
 ## Platform contracts
 
@@ -79,8 +96,10 @@ upload contract; POST creates a new object.
 Flowable REST is the private BPMN engine. Core checks the tenant's definition
 and execution ownership; an RLS-protected SQL ledger reserves idempotency keys
 before starting work and reconciles ambiguous outcomes against engine history.
-The one-shot initializer provisions only an original technical checkpoint
-fixture. No Layer-2 business GUI/workflow or AI component is implemented. The
+The one-shot initializer provisions the technical checkpoint fixture plus any
+business definitions an operator supplies through `WORKFLOW_DEFINITIONS_DIR`,
+after a strict safety policy ([workflow deployment](WORKFLOW.md#business-workflow-definitions-supplied-by-applications)).
+Core ships no business workflow and no AI component. The
 independent server-side SDK uses public APIs only; see [onboarding](GETTING_STARTED.md).
 The optional Junctura Console is a management client with the limitations recorded
 in the catalog; it is not a separate authorization server or hosting control API.

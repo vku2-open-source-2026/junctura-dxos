@@ -4,6 +4,7 @@
 # Official requirements and Junctura traceability
 
 > Reviewed: 2026-10-26 | Branch: main | Audit baseline: `7fdd7fc381bdd29d81d56fb08a764efff8c41582`
+> Status refresh: 2026-11-15 (rules and problem re-read; rows M1, M7, R3, R5, R6 and the layer note updated).
 
 ## Authority and classification
 
@@ -22,13 +23,13 @@ These classifications follow the [problem's own sections](https://vfossa.vn/tin-
 
 | ID / official locator | Requirement | Junctura evidence/status | Remaining acceptance |
 | --- | --- | --- | --- |
-| M1 / problem §3 | Headless PaaS | VERIFIED Foundation API/providers; optional Console is a client. | Keep APIs operational without UI; no business rules in adapters. |
+| M1 / problem §3 | Headless PaaS | VERIFIED Foundation API/providers; optional Console is an operator client that decides platform access only. Domain-neutral: business workflows are supplied by applications (#35), Console has no hard-coded business names (#38), `check:neutral` in CI. | Keep APIs operational without UI; no business rules in adapters or Console. |
 | M2 / problem §3 | Identity/SSO | VERIFIED bounded tests: Keycloak/Core. | Maintain PKCE/logout/denial regression; production identity controls separate. |
 | M3 / problem §3 | API Gateway | VERIFIED bounded tests: Nginx/Core. | Internet deployment/TLS/admin-route exposure requires operational review. |
 | M4 / problem §3 | Structured data | VERIFIED tenant/app RLS and API. | Preserve direct service denial and recovery coverage. |
 | M5 / problem §3 | Unstructured data | VERIFIED bytes/ownership/version pointer behavior. | Coordinated full-store recovery and quarantine remain gaps. |
 | M6 / problem §3 | Workflow | VERIFIED tenant lifecycle/ledger/history. | Avoid app-private payloads; no composition claim. |
-| M7 / problem §3 | Layer-2 GUI | DEFERRED, no independent business product found. | Deliver separately; business user completes a real Core-backed scenario. Console/technical fixture is insufficient. |
+| M7 / problem §3 | Layer-2 GUI | IN PROGRESS in separate repositories: junctura-workspace (Layer 2) and the health applications (Layer 3: Clinic, Pharmacy, Hospital, Insurance). | A business user completes a real Core-backed scenario. Console/technical fixture is insufficient. |
 
 ## Seven broader Layer-1 groups: coverage, not seven installed products
 
@@ -72,10 +73,10 @@ The following summarize [rules/scoring §§participation, schedule, criteria I�
 | --- | --- | --- |
 | R1 / mandatory gate | OSI license, openly accessible source. | Apache-2.0 LICENSE/NOTICE; public GitHub reachable. Complete bundled/transitive rights still need release audit. |
 | R2 / I.1–I.2 | Used public VCS; file notices/license compatibility. | Commits/CI/SPDX present. Console lockfile/assets require complete review; syntax/header checks are narrower. |
-| R3 / I.3 | Versioned release before submission; archive rules. | No tags/GitHub releases found at audit. Prepare source release only when separately authorized. |
+| R3 / I.3 | Versioned release before submission; archive rules. | `v0.1.0` published as tar.gz with SHA-256 (2026-11-04). Next release must be published before 2026-12-06 and README download links must match it. |
 | R4 / I.4–I.5 | Source build/configuration and dependency disclosure. | Foundation instructions/pins exist; Console image ignores lockfile and is not verified here. Clean environment reproducibility remains release gate. |
-| R5 / I.6 | README, change history, issue tracking, usable docs. | README/issues/technical docs present; dedicated changelog absent. Review release-facing instructions. |
-| R6 / II | Demonstration and product/community quality. | Foundation technical scenario exists; independent Layer-2 demonstration absent. |
+| R5 / I.6 | README, change history, issue tracking, usable docs. | README, CHANGELOG, issue templates and technical docs present. Build requirements name only open-source tools (Docker Engine). |
+| R6 / II | Demonstration and product/community quality. | Foundation technical scenario exists; Layer-2/3 demonstration is being built in separate repositories. |
 | R7 / participation | University registration; ≤3 students/team, lecturer; ≤2 teams/school. | Team eligibility/registration UNVERIFIED; team coordinator owns evidence. |
 
 Rules allocate 50 points to project practices and 50 to product presentation.
