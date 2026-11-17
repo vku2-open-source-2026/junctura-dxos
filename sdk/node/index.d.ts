@@ -15,6 +15,7 @@ export function createJuncturaClient(options: { baseUrl: string; clientId: strin
   identity(): Promise<{ subject: string; tenantId: string; roles: string[]; [key: string]: unknown }>;
   createRecord(collection: string, data: Json): Promise<{ id: string; data: Json; [key: string]: unknown }>;
   getRecord(collection: string, id: string): Promise<{ id: string; data: Json; [key: string]: unknown }>;
+  listRecords(collection: string, query?: { limit?: number; order?: 'asc' | 'desc'; cursor?: string }): Promise<{ items: { id: string; collection: string; data: Json; created_at: string }[]; nextCursor: string | null }>;
   putObject(id: string, bytes: BodyInit): Promise<unknown>;
   getObject(id: string): Promise<ArrayBuffer>;
   workflowDefinitions(): Promise<unknown>;

@@ -38,6 +38,27 @@ test("SDK forbids remote cleartext and paths escaping Gateway APIs before sendin
   }
 });
 
+test("SDK lists records with optional paging parameters and returns items and nextCursor unchanged", async () => {
+  const calls = [];
+  const page = { items: [{ id: "00000000-0000-4000-8000-000000000001", collection: "entries", data: { index: 1 }, created_at: "2026-01-01T00:00:00.123456+00:00" }], nextCursor: "opaque_next-cursor" };
+  const client = createJuncturaClient({ ...options, fetcher: async (url, init) => {
+    if (url.pathname.includes("/token")) return auth();
+    assert.equal(init.method, "GET");
+    calls.push({ path: url.pathname, query: [...url.searchParams] });
+    return json(calls.length === 3 ? { items: [], nextCursor: null } : page);
+  } });
+  assert.deepEqual(await client.listRecords("entries"), page);
+  assert.deepEqual(await client.listRecords("entries", { limit: 2, order: "desc", cursor: "opaque+/=?&" }), page);
+  assert.deepEqual(await client.listRecords("entries", { limit: 2, order: "desc", cursor: page.nextCursor }), { items: [], nextCursor: null });
+  await client.listRecords("entries/other", {});
+  assert.deepEqual(calls, [
+    { path: "/v2/data/entries", query: [] },
+    { path: "/v2/data/entries", query: [["limit", "2"], ["order", "desc"], ["cursor", "opaque+/=?&"]] },
+    { path: "/v2/data/entries", query: [["limit", "2"], ["order", "desc"], ["cursor", page.nextCursor]] },
+    { path: "/v2/data/entries%2Fother", query: [] },
+  ]);
+});
+
 test("SDK never retries ambiguous mutation failures; errors omit bodies and credentials", async () => {
   let mutations = 0;
   const client = createJuncturaClient({ ...options, fetcher: async (url) => {

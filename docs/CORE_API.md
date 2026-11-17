@@ -28,7 +28,8 @@ Authorization boundaries apply independently of schema validation:
   (empty by default outside Compose). They never read v2 tables or bytes; migrate deliberately without guessed ownership or fallback.
 - Workflows and their variables remain tenant-scoped; do not put application-private content in variables.
 
-Record pagination accepts only `limit` 1–100 (default 100), without cursor/offset; `/v1/applications` has no GET operation.
+Record lists accept `limit` 1–100 (default 100), `order=asc|desc` (default `asc`) and an opaque `cursor`;
+`/v1/applications` has no GET operation.
 Workflow definition listing is capped at 100 without public pagination. Foundation JSON writes are limited to 64 KiB;
 object uploads to 1 byte–5 MiB; Nginx separately bounds request bodies at 10 MiB. Smaller limits can apply to extensions.
 Core errors use `{error: code}`; control-plane handlers also include `requestId` and set `X-Request-Id`.
@@ -144,7 +145,7 @@ and upstream send/read to 15 seconds. Upstream URLs are fixed configuration. Aut
 
 | Route | Methods | Contract |
 | --- | --- | --- |
-| `/v1/data/{collection}` | GET | `{items:[...]}`; optional `limit` 1–100, default 100 |
+| `/v1/data/{collection}` | GET | `{items:[...],nextCursor}`; optional `limit` 1–100 (default 100), `order` (`asc` or `desc`, default `asc`), `cursor` |
 | `/v1/data/{collection}` | POST | `{data:{...}}`; `201` with generated UUID |
 | `/v1/data/{collection}/{id}` | GET, PATCH, DELETE | Read, replace `data`, or delete a tenant record; inaccessible IDs return `404` |
 
@@ -155,6 +156,14 @@ All access requires reader; mutations require writer. Responses expose only ID, 
 V2 has the same methods/envelopes under `/v2/data`, with server-resolved owner application, owner-only writes and
 exact resource read shares. Active registration/backend binding and live app state are checked; see [SECURITY.md](SECURITY.md).
 V1 remains tenant storage behind the explicit legacy allowlist; no ownership migration is automatic.
+
+Both list routes order by `(created_at, id)` in the requested direction. Pass a non-null `nextCursor` as `cursor`
+with the same `order` to read the next page; `nextCursor: null` means no further row was found. Cursor timestamps
+retain the database's full precision. Cursors are opaque base64url strings of at most 512 characters.
+Unknown or repeated list keys and invalid `limit`/`order` return `400 invalid_query`; malformed cursors and an
+order mismatch return `400 invalid_cursor`. Item GET accepts only `limit`, validates its first value (1–100,
+default 100) and returns one record even if a larger limit is supplied. It continues to accept repeated `limit`
+keys using the first value. `order` and `cursor` on item GET, and all query keys on writes, return `400 invalid_query`.
 
 Core signs 30-second tenant assertions for PostgREST (`aud=junctura-data`, role `junctura_api` for legacy records;
 `junctura_resource_api` for v2). Caller tokens are not database credentials. PostgreSQL FORCE ROW LEVEL SECURITY

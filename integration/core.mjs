@@ -163,6 +163,35 @@ test("structured data CRUD enforces roles, input limits and tenant isolation in 
   assert.equal((await api(item, tokenA)).status, 404);
 });
 
+test("structured data pages three records with limit two in ascending and descending order", async () => {
+  const path = `/v1/data/paging_${randomBytes(6).toString("hex")}`;
+  const records = [];
+  try {
+    for (let index = 0; index < 3; index += 1) {
+      const response = await api(path, tokenA, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ data: { index } }) });
+      assert.equal(response.status, 201);
+      records.push(await response.json());
+    }
+    for (const order of ["asc", "desc"]) {
+      const firstResponse = await api(`${path}?limit=2&order=${order}`, tokenA);
+      assert.equal(firstResponse.status, 200);
+      const first = await firstResponse.json();
+      assert.equal(first.items.length, 2);
+      assert.equal(typeof first.nextCursor, "string");
+      assert.deepEqual(JSON.parse(Buffer.from(first.nextCursor, "base64url")), { t: first.items[1].created_at, i: first.items[1].id, o: order });
+      const next = await api(`${path}?${new URLSearchParams({ limit: "2", order, cursor: first.nextCursor })}`, tokenA);
+      assert.equal(next.status, 200, "PostgREST accepts the timestamp cursor filter");
+      const second = await next.json();
+      assert.equal(second.items.length, 1);
+      assert.equal(second.nextCursor, null);
+      const expected = [...records].sort((left, right) => (left.created_at < right.created_at ? -1 : left.created_at > right.created_at ? 1 : left.id < right.id ? -1 : left.id > right.id ? 1 : 0) * (order === "asc" ? 1 : -1));
+      assert.deepEqual([...first.items, ...second.items], expected);
+    }
+  } finally {
+    for (const record of records) assert.equal((await api(`${path}/${record.id}`, tokenA, { method: "DELETE" })).status, 204);
+  }
+});
+
 test("object storage round trips opaque bytes and rejects cross-tenant access and unsafe uploads", async () => {
   const bytes = Buffer.from([0, 255, 1, 2, 60, 62, 128, 42]);
   const upload = { method: "POST", headers: { "Content-Type": "application/octet-stream" }, body: bytes };

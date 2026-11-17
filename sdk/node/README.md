@@ -60,7 +60,8 @@ const { purpose, dataSubject, emergency } = redeemed.context;
 | Method | Purpose |
 | --- | --- |
 | `identity()` | The application's verified identity |
-| `createRecord(collection, data)`, `getRecord(collection, id)` | Tenant records |
+| `createRecord(collection, data)`, `getRecord(collection, id)` | Application records |
+| `listRecords(collection, { limit, order, cursor })` | Application records as `{ items, nextCursor }`; limit 1–100 (default 100), order `asc` (default) or `desc`; pass `nextCursor` with the same order until null |
 | `putObject(id, bytes)`, `getObject(id)` | Malware-scanned object storage |
 | `workflowDefinitions()`, `startWorkflow(id, input, key?)` | BPMN workflows |
 | `discover({ limit, cursor })` | Capabilities this application may call |
