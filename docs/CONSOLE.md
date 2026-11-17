@@ -84,7 +84,7 @@ Reads below are `GET` unless stated otherwise; paths are Gateway paths before th
 | Landing (`welcome`) | Static content | Open sign-in. |
 | Sign-in (`login`) | `/login-hints.json`; OIDC endpoints described below, followed by `/v1/identity` | Password sign-in or PKCE SSO; retry identity verification. |
 
-Application decisions use `POST /v1/approvals`, then `POST /v1/applications/{id}/approve` or `/state`; revocation uses `/state`. Sharing approval first reads `GET /v1/trust/grants/{id}`, creates an approval, then calls `POST /v1/trust/grants/{id}/activate`. Sharing rejection/revocation uses `POST /v1/trust/grants/{id}/revoke`. Revision-bound writes send `If-Match`; packaged grant-approval gaps are listed under [Limitations](#limitations).
+Application decisions use `POST /v1/approvals`, then `POST /v1/applications/{id}/approve` or `/state`; revocation uses `/state`. Sharing approval first reads `GET /v1/trust/grants/{id}`, creates an approval, then calls `POST /v1/trust/grants/{id}/activate`. Sharing rejection/revocation uses `POST /v1/trust/grants/{id}/revoke`. Revision-bound writes send `If-Match`.
 
 ## Security
 
@@ -113,9 +113,13 @@ docker compose --profile console stop console
 
 Vite serves `http://localhost:3000/` and proxies `/api` to `http://127.0.0.1:8080`, stripping `/api`; it also proxies `/identity` to that Gateway. The packaged Console binds `http://127.0.0.1:3000/` (`CONSOLE_PORT` overrides the host port) and proxies to `gateway:8080` on the Compose `edge` network. Core can run alone with `docker compose up -d`; Console is an optional profile. Image builds require the repository-root context for license notices.
 
+### Signing in with the packaged Console
+
+The packaged image proxies only `/api/*` to the Gateway and has no `/identity/` location. With the default relative `/api` base, the OIDC endpoints are requested at `/identity/realms/junctura/protocol/openid-connect/{auth,token,logout}` on the Console origin, so the image alone cannot complete sign-in. In Compose, the Gateway ([infra/nginx/default.conf](../infra/nginx/default.conf)) serves `/identity/` on port 8080 and the Console publishes its own port 3000. To sign in through the packaged Console, place one reverse proxy origin in front that routes `/identity/` to the Gateway and all other paths to the Console, as in the public demo configuration in [Operations](OPERATIONS.md). The Vite development server ([vite.config.ts](../console/vite.config.ts)) proxies both `/identity` and `/api` to `http://127.0.0.1:8080`.
+
 ## Packaged proxy contract
 
-The table mirrors every API location in [default.conf](../console/nginx/default.conf), with `/api` stripped from forwarded paths. `{id}` means a lowercase UUID; `{executionId}` matches `[A-Za-z0-9:_-]{1,128}`. An allowed route does not imply a Console control: the UI never performs business workflow writes.
+The table mirrors every API location in [default.conf](../console/nginx/default.conf), with `/api` stripped from forwarded paths. `{id}` means a lowercase UUID; `{executionId}` matches `[A-Za-z0-9:_-]{1,128}`. An allowed route does not imply a Console control: the Console only reads workflows and never performs business workflow writes.
 
 | Gateway path | Allowed methods |
 | --- | --- |
@@ -137,15 +141,15 @@ The table mirrors every API location in [default.conf](../console/nginx/default.
 | `/v1/directory/principals` | GET |
 | `/v1/directory/organizations` | GET |
 | `/v1/trust/graph` | GET |
-| `/v1/trust/grants/{id}/revoke` | POST |
+| `/v1/trust/grants/{id}` | GET |
+| `/v1/trust/grants/{id}/activate`, `/v1/trust/grants/{id}/revoke` | POST |
 | `/v1/workflows/definitions` | GET |
-| `/v1/workflows/executions` | GET, POST |
+| `/v1/workflows/executions` | GET |
 | `/v1/workflows/summary` | GET |
 | `/v1/storage/summary` | GET |
 | `/v1/storage/files` | GET |
 | `/v1/storage/collections` | GET |
-| `/v1/workflows/executions/{executionId}/complete` | POST |
-| `/v1/workflows/executions/{executionId}` | GET, DELETE |
+| `/v1/workflows/executions/{executionId}` | GET |
 | `/api` (not forwarded) | None: 404 |
 | All other `/api/*` paths (not forwarded) | None: 404 |
 
@@ -163,8 +167,6 @@ The table mirrors every API location in [default.conf](../console/nginx/default.
 
 ## Limitations
 
-- The client calls `GET /v1/trust/grants/{id}` and `POST /v1/trust/grants/{id}/activate`, but neither is in the packaged Nginx allowlist: **in the packaged image this call returns 404** for each route. Grant approval in Sharing/Queue therefore cannot complete through the default packaged proxy.
-- Packaged Nginx has no `/identity/` proxy. With the default relative `/api` base, sign-in targets that path on the Console origin, so the image alone cannot complete sign-in; a reverse proxy must route `/identity/` to the Gateway, as in the public demo setup in [Operations](OPERATIONS.md). Vite supplies this route during development.
 - Lists are bounded: capabilities, audit events and workflow executions load at most 100 entries here. Audit does not follow `nextCursor`; workflow pagination only covers loaded entries, and the Overview running count is capped by its fetched list.
 - Function status repeats aggregate `/health` and `/ready`, without per-provider telemetry or host CPU/RAM. There are no application-hosting/deployment controls, user/organization mutation screens, capability publication controls or emergency-review actions. Secrets browsing is absent because no read-only listing contract exists; see [removed screens](../console/REMOVED-UNTIL-API.md).
 - API reference examples can cover routes outside the packaged allowlist. Google Fonts requires network access; offline use falls back to system fonts. No service worker, managed TLS/domain setup or complete accessibility certification is supplied.

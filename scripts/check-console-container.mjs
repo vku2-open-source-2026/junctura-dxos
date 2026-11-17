@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
+import { readFileSync } from "node:fs";
 import http from "node:http";
 import net from "node:net";
 import path from "node:path";
@@ -17,7 +18,60 @@ const consoleName = `junctura-console-${suffix}`;
 const fixturePath = path.join(root, "tests", "console-proxy-fixture.mjs");
 const uuid = "c3d4e5f6-7a8b-4c9d-0e1f-2a3b4c5d6e7f";
 const executionId = "junctura_checkpoint:1:test";
-const idempotencyKey = "11111111-2222-4333-8444-555555555555";
+const apiClientPath = path.join(root, "console", "src", "services", "apiClient.ts");
+const nginxConfPath = path.join(root, "console", "nginx", "default.conf");
+
+function loadProxyAllowlist() {
+  const source = readFileSync(nginxConfPath, "utf8");
+  const exact = new Set();
+  const patterns = [];
+  for (const line of source.split("\n")) {
+    const exactMatch = line.match(/^\s*location\s*=\s*(\S+)\s*\{/);
+    if (exactMatch) {
+      exact.add(exactMatch[1]);
+      continue;
+    }
+    const regexMatch = line.match(/^\s*location\s*~\*?\s*"([^"]+)"\s*\{/);
+    if (regexMatch) patterns.push(new RegExp(regexMatch[1]));
+  }
+  return { exact, patterns };
+}
+
+function sendPathCandidates(rawPath) {
+  const withoutQuery = rawPath.split("?")[0];
+  const candidates = new Set();
+  for (const replacement of [uuid, ""]) {
+    let candidate = withoutQuery.replace(/\$\{[^}]*\}/g, replacement);
+    if (!candidate.startsWith("/api")) candidate = `/api${candidate}`;
+    candidates.add(candidate);
+  }
+  return [...candidates];
+}
+
+function checkProxyAllowlist() {
+  const { exact, patterns } = loadProxyAllowlist();
+  const source = readFileSync(apiClientPath, "utf8");
+  const sendPattern =
+    /this\.send\(\s*(`(?:[^`\\]|\\.)*`|"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*')/g;
+  const unmatched = [];
+  let total = 0;
+  for (const match of source.matchAll(sendPattern)) {
+    total += 1;
+    const rawPath = match[1].slice(1, -1);
+    const allowed = sendPathCandidates(rawPath).some(
+      (candidate) =>
+        exact.has(candidate) || patterns.some((pattern) => pattern.test(candidate)),
+    );
+    if (!allowed) unmatched.push(rawPath);
+  }
+  assert.ok(total > 0, "apiClient this.send paths discovered");
+  assert.deepEqual(
+    unmatched,
+    [],
+    `apiClient routes without a packaged Nginx location:\n${unmatched.join("\n")}`,
+  );
+  return total;
+}
 
 function dockerOutput(args) {
   const result = spawnSync("docker", args, { cwd: root, encoding: "utf8" });
@@ -118,6 +172,9 @@ function expectStatus(response, status, label) {
 const nonHtml = (response) => assert.doesNotMatch(response.text, /<div id="root"><\/div>/);
 
 async function main() {
+  const routes = checkProxyAllowlist();
+  console.log(`apiClient proxy allowlist check: ${routes} routes mapped`);
+
   dockerInherit(["network", "create", network]);
   dockerInherit(["build", "--no-cache", "--tag", image, "--file", "console/Dockerfile", "."]);
 
@@ -286,6 +343,24 @@ async function main() {
     body: JSON.stringify({ reason: "synthetic" }),
   });
   expectStatus(grantRevoke, 200, "grant revocation");
+  const grantLookup = await request(consolePort, `/api/v1/trust/grants/${uuid}`, {
+    headers: { Authorization: "Bearer synthetic-token" },
+  });
+  expectStatus(grantLookup, 200, "grant lookup");
+  const grantActivate = await request(
+    consolePort,
+    `/api/v1/trust/grants/${uuid}/activate`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "If-Match": '"synthetic-etag"',
+        Authorization: "Bearer synthetic-token",
+      },
+      body: JSON.stringify({ approvalId: uuid }),
+    },
+  );
+  expectStatus(grantActivate, 200, "grant activation");
   const approve = await request(consolePort, `/api/v1/applications/${uuid}/approve`, {
     method: "POST",
     headers: {
@@ -306,16 +381,6 @@ async function main() {
 
   const definitions = await request(consolePort, "/api/v1/workflows/definitions");
   expectStatus(definitions, 200, "workflow definitions");
-  const start = await request(consolePort, "/api/v1/workflows/executions", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "Idempotency-Key": idempotencyKey,
-    },
-    body: JSON.stringify({ definitionId: executionId }),
-  });
-  expectStatus(start, 200, "workflow start");
-  assert.equal(JSON.parse(start.text).idempotencyKey, idempotencyKey);
   const execution = await request(
     consolePort,
     `/api/v1/workflows/executions/${executionId}`,
@@ -326,16 +391,18 @@ async function main() {
     `/api/v1/workflows/executions/${encodeURIComponent(executionId)}`,
   );
   expectStatus(encodedExecution, 200, "encoded workflow execution");
-  const complete = await request(
-    consolePort,
-    `/api/v1/workflows/executions/${executionId}/complete`,
-    { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" },
-  );
-  expectStatus(complete, 200, "workflow complete");
-  const cancel = await request(consolePort, `/api/v1/workflows/executions/${executionId}`, {
-    method: "DELETE",
-  });
-  expectStatus(cancel, 204, "workflow cancel");
+
+  for (const [label, requestPath, method, status] of [
+    ["workflow start blocked", "/api/v1/workflows/executions", "POST", 405],
+    ["workflow cancel blocked", `/api/v1/workflows/executions/${executionId}`, "DELETE", 405],
+    ["workflow execution write blocked", `/api/v1/workflows/executions/${executionId}`, "POST", 405],
+    ["workflow complete unproxied", `/api/v1/workflows/executions/${executionId}/complete`, "POST", 404],
+    ["workflow complete read unproxied", `/api/v1/workflows/executions/${executionId}/complete`, "GET", 404],
+  ]) {
+    const response = await request(consolePort, requestPath, { method });
+    expectStatus(response, status, label);
+    nonHtml(response);
+  }
 
   for (const [label, requestPath, status] of [
     ["unproxied v2 data", "/api/v2/data/widgets", 404],
@@ -345,8 +412,6 @@ async function main() {
     ["trailing slash bypass", "/api/v1/identity/", 404],
     ["invalid application id", "/api/v1/applications/not-a-uuid", 404],
     ["application suffix bypass", `/api/v1/applications/${uuid}/approve/`, 404],
-    ["unproxied grant lookup", `/api/v1/trust/grants/${uuid}`, 404],
-    ["unproxied grant activation", `/api/v1/trust/grants/${uuid}/activate`, 404],
     ["invalid grant id", "/api/v1/trust/grants/not-a-uuid/revoke", 404],
     ["trust graph suffix bypass", "/api/v1/trust/graph/", 404],
     ["api root", "/api", 404],
@@ -389,18 +454,19 @@ async function main() {
     "grant revoke method",
   );
   expectStatus(
-    await request(consolePort, `/api/v1/workflows/executions/${executionId}/complete`, {
-      method: "GET",
-    }),
+    await request(consolePort, `/api/v1/trust/grants/${uuid}/activate`),
     405,
-    "complete method",
+    "grant activate method",
   );
   expectStatus(
-    await request(consolePort, `/api/v1/workflows/executions/${executionId}`, {
-      method: "POST",
-    }),
+    await request(consolePort, `/api/v1/trust/grants/${uuid}`, { method: "POST" }),
     405,
-    "execution method",
+    "grant lookup POST method",
+  );
+  expectStatus(
+    await request(consolePort, `/api/v1/trust/grants/${uuid}`, { method: "DELETE" }),
+    405,
+    "grant lookup DELETE method",
   );
 
   const upstreamError = await request(consolePort, "/api/v1/identity?status=503", {
@@ -455,10 +521,6 @@ async function main() {
   assert.ok(
     fixtureLog.some((entry) => entry.ifMatch === '"synthetic-etag"'),
     "If-Match reached the upstream",
-  );
-  assert.ok(
-    fixtureLog.some((entry) => entry.idempotencyKey === idempotencyKey),
-    "Idempotency-Key reached the upstream",
   );
 
   dockerOutput(["rm", "-f", fixtureName]);
