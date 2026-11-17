@@ -103,6 +103,13 @@ export function createJuncturaClient({ baseUrl, clientId, clientSecret, timeoutM
     async identity() { return (await request("/v1/identity")).json(); },
     async createRecord(collection, data) { return (await request(`/v2/data/${segment(collection)}`, { method: "POST", json: { data } })).json(); },
     async getRecord(collection, id) { return (await request(`/v2/data/${segment(collection)}/${segment(id)}`)).json(); },
+    async listRecords(collection, { limit, order, cursor } = {}) {
+      const query = new URLSearchParams();
+      if (limit !== undefined) query.set("limit", String(limit));
+      if (order !== undefined) query.set("order", order);
+      if (cursor !== undefined) query.set("cursor", cursor);
+      return (await request(`/v2/data/${segment(collection)}${query.size ? `?${query}` : ""}`)).json();
+    },
     async putObject(id, bytes) { return (await request(`/v2/objects/${segment(id)}`, { method: "PUT", body: bytes, contentType: "application/octet-stream" })).json(); },
     async getObject(id) { return (await request(`/v2/objects/${segment(id)}`)).arrayBuffer(); },
     async workflowDefinitions() { return (await request("/v1/workflows/definitions")).json(); },

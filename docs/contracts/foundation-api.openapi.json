@@ -230,7 +230,7 @@
       "get": {
         "operationId": "v1ListRecords",
         "summary": "V1 list records",
-        "description": "Deprecated tenant-wide namespace restricted to operator LEGACY_RESOURCE_CLIENTS. Native default empty; local Compose allows tenant-a, tenant-b, reader. Separate legacy records/bytes; no automatic ownership migration or v2 fallback. PATCH replaces the complete data object. POST has no automatic retry guarantee.",
+        "description": "Deprecated tenant-wide namespace restricted to operator LEGACY_RESOURCE_CLIENTS. Native default empty; local Compose allows tenant-a, tenant-b, reader. Separate legacy records/bytes; no automatic ownership migration or v2 fallback. PATCH replaces the complete data object. POST has no automatic retry guarantee. Lists use keyset pagination by (created_at, id), default ascending. Only limit, order and cursor are accepted, once each; unknown/repeated keys or invalid limit/order return 400 invalid_query. Pass nextCursor with the same order to continue; malformed cursors or an order mismatch return 400 invalid_cursor. nextCursor is null when no further row was found.",
         "tags": [
           "legacy-tenant"
         ],
@@ -295,6 +295,12 @@
           },
           {
             "$ref": "#/components/parameters/Limit"
+          },
+          {
+            "$ref": "#/components/parameters/RecordOrder"
+          },
+          {
+            "$ref": "#/components/parameters/RecordCursor"
           }
         ],
         "deprecated": true,
@@ -975,7 +981,7 @@
       "get": {
         "operationId": "v2ListRecords",
         "summary": "V2 list records",
-        "description": "Active registered backend resolved from verified tenant/issuer/client_id and exact operator-enrolled resource_subject. Owner-only mutations; individually shared reads. Suspension/revocation and disabled enrollment block access. PATCH replaces the complete data object. POST has no automatic retry guarantee.",
+        "description": "Active registered backend resolved from verified tenant/issuer/client_id and exact operator-enrolled resource_subject. Owner-only mutations; individually shared reads. Suspension/revocation and disabled enrollment block access. PATCH replaces the complete data object. POST has no automatic retry guarantee. Lists use keyset pagination by (created_at, id), default ascending. Only limit, order and cursor are accepted, once each; unknown/repeated keys or invalid limit/order return 400 invalid_query. Pass nextCursor with the same order to continue; malformed cursors or an order mismatch return 400 invalid_cursor. nextCursor is null when no further row was found.",
         "tags": [
           "app-resource"
         ],
@@ -1040,6 +1046,12 @@
           },
           {
             "$ref": "#/components/parameters/Limit"
+          },
+          {
+            "$ref": "#/components/parameters/RecordOrder"
+          },
+          {
+            "$ref": "#/components/parameters/RecordCursor"
           }
         ],
         "x-junctura-test-suite": "applications"
@@ -3776,7 +3788,7 @@
           "maximum": 100,
           "default": 100
         },
-        "description": "No cursor/offset. Item GET validates this value but returns at most one row. Repeated limit uses its first value."
+        "description": "Page size for record lists. Unknown or repeated list query keys return 400 invalid_query. Item GET validates the first limit value but returns at most one row; repeated limit uses its first value."
       },
       "IfMatch": {
         "name": "If-Match",
@@ -3795,6 +3807,32 @@
           "$ref": "#/components/schemas/Uuid"
         },
         "description": "Tenant-scoped workflow key; identical definition/input returns existing execution, changed logical input conflicts."
+      },
+      "RecordOrder": {
+        "name": "order",
+        "in": "query",
+        "required": false,
+        "schema": {
+          "type": "string",
+          "enum": [
+            "asc",
+            "desc"
+          ],
+          "default": "asc"
+        },
+        "description": "Order by created_at and then id in this direction. Use the same order on every page. Invalid values return 400 invalid_query."
+      },
+      "RecordCursor": {
+        "name": "cursor",
+        "in": "query",
+        "required": false,
+        "schema": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512,
+          "pattern": "^[A-Za-z0-9_-]+$"
+        },
+        "description": "Opaque nextCursor from the previous page. Malformed cursors or a cursor order different from the requested order return 400 invalid_cursor."
       }
     },
     "headers": {
@@ -4245,10 +4283,21 @@
               "$ref": "#/components/schemas/Record"
             },
             "maxItems": 100
+          },
+          "nextCursor": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "minLength": 1,
+            "maxLength": 512,
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "description": "Opaque cursor for the next page in the requested order, or null when no further row was found."
           }
         },
         "required": [
-          "items"
+          "items",
+          "nextCursor"
         ],
         "additionalProperties": false
       },
