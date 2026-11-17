@@ -104,7 +104,7 @@ Methods are included with each family; action suffixes are described in the link
 | `/v1/me/data-access` (GET) | Capability calls naming the caller as data subject | Verified subject/client; own tenant/issuer/subject only | [SECURITY.md](SECURITY.md) |
 | `/v1/emergency-accesses` (GET), `/{executionId}/review` (POST) | Review emergency invocations | Management `trust.approve`; writer for review | [SECURITY.md](SECURITY.md) |
 | `/v1/audit-events` (GET), `/v1/audit-events/verify` (POST) | Protected event query and chain verification | Management `audit.read`; no writer requirement | Internal protected audit contract below; [SECURITY.md](SECURITY.md) |
-| `/v1/metrics/traffic`, `/requests`, `/features` (GET) | Process-local traffic observations | Verified client ID; handler does not enforce `audit.read` | Traffic metrics below |
+| `/v1/metrics/traffic`, `/requests`, `/features` (GET) | Per-tenant, process-local traffic observations | Management `audit.read`; verified client ID | Traffic metrics below |
 | `/v1/directory/principals`, `/organizations` (GET) | Tenant principal/application directory | Management `audit.read` | Tenant directory below |
 | `/v1/storage/summary`, `/files`, `/collections` (GET) | Storage aggregates and reduced metadata | Management `audit.read` | Storage summary and workflow history below |
 
@@ -294,14 +294,14 @@ Without a valid reference, use only the name; without a name, `null`. No other i
 
 | Route | Methods | Contract |
 | --- | --- | --- |
-| `/v1/metrics/traffic` | GET | `minutes` default 60, range 1–1440; `{from,to,intervalSeconds,buckets:[{at,requests,errors4xx,errors5xx,avgLatencyMs,maxLatencyMs}],totals}` |
-| `/v1/metrics/requests` | GET | `limit` default 20, range 1–100; newest first `{items:[{at,method,path,status,durationMs}]}` |
-| `/v1/metrics/features` | GET | Same `minutes` bounds; `{from,to,features:[{feature,requests,errors4xx,errors5xx,avgLatencyMs,maxLatencyMs,series:[{at,requests}]}]}`, descending request count |
+| `/v1/metrics/traffic` | GET | Per-tenant; requires `audit.read`. `minutes` default 60, range 1–1440; `{from,to,intervalSeconds,buckets:[{at,requests,errors4xx,errors5xx,avgLatencyMs,maxLatencyMs}],totals}` |
+| `/v1/metrics/requests` | GET | Per-tenant; requires `audit.read`. `limit` default 20, range 1–100; newest first `{items:[{at,method,path,status,durationMs}]}` |
+| `/v1/metrics/features` | GET | Per-tenant; requires `audit.read`. Same `minutes` bounds; `{from,to,features:[{feature,requests,errors4xx,errors5xx,avgLatencyMs,maxLatencyMs,series:[{at,requests}]}]}`, descending request count |
 
-Counters record Core responses as they finish, per process, resetting at restart without persistence or cluster aggregation. Metric reads also count. Requests rejected at the gateway and `/health` handled outside the router are not counted.
-All three require a verified client ID after OIDC validation; the handler performs no management enrollment or `audit.read` check.
+Counters record Core responses as they finish for the tenant verified by authorization, per process, resetting at restart without persistence or cluster aggregation. Authorized metric reads also count. Requests without a verified tenant, gateway rejections, `/health`, `/ready` and `401` responses are not counted.
+All three require a verified client ID after OIDC validation and management `audit.read` in the caller's tenant/issuer, checked through `core.workflow_audit_access` using the private `junctura_workflow_audit_api` role. Missing permission returns `403 metrics_permission_required`; no client ID returns `403 verified_client_required`; missing data configuration or database failure returns `503 metrics_unavailable`.
 Unknown/repeated/noninteger/out-of-range parameters return `400`; other methods return `405` with `Allow: GET`; responses use `no-store`.
-Minute buckets are chronological, including zero minutes; totals cover the returned window. The recent log holds 200 entries. Only normalized paths are retained: no query/fragment, headers, bodies or identity claims; UUID/numeric/token-like segments are replaced.
+Minute buckets are chronological, including zero minutes; totals cover the returned window. Each tenant's recent log holds 200 entries. At most 256 tenant stores are retained; adding another drops the least recently written store. Only normalized paths are retained: no query/fragment, headers, bodies or identity claims; UUID/numeric/token-like segments are replaced.
 Features use fixed whole-segment prefixes: data, files, workflows, approvals, sharing (trust/shares), capabilities
 (registry/executions/compositions), applications, consents (including access/emergency), secrets and audit.
 Directory, identity, metrics and unrecognized paths map to `other`; only observed features appear. See

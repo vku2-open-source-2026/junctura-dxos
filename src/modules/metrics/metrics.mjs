@@ -3,6 +3,7 @@
 // In-memory traffic counters for the operator overview. Every value comes from
 // requests that actually reached Core; nothing is sampled, estimated or seeded.
 // The data is per-process and deliberately disappears when Core restarts.
+import { applicationToken } from "../applications/applications.mjs";
 import { HttpError, json } from "../../platform/http/http.mjs";
 
 export const METRICS_TRAFFIC_PATH = "/v1/metrics/traffic";
@@ -11,8 +12,10 @@ export const METRICS_FEATURES_PATH = "/v1/metrics/features";
 
 const MINUTE_MS = 60_000;
 const MAX_MINUTES = 24 * 60;
+const MAX_TENANTS = 256;
 const RECENT_CAPACITY = 200;
 const MAX_PATH_LENGTH = 512;
+const TENANT_PATTERN = /^[a-z][a-z0-9-]{0,62}$/;
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const NUMERIC_ID_PATTERN = /^[0-9]+$/;
 const TOKEN_PATTERN = /^[A-Za-z0-9_.~-]{32,}$/;
@@ -33,14 +36,14 @@ const FEATURE_PREFIXES = [
 ];
 const OTHER_FEATURE = "other";
 
-const buckets = new Array(MAX_MINUTES);
-let recent = [];
+// Map insertion order tracks the last write; reads never retain idle stores.
+const stores = new Map();
 
 function minuteOf(now) {
   return Math.floor(now / MINUTE_MS);
 }
 
-function bucketAt(minute) {
+function bucketAt(buckets, minute) {
   const index = ((minute % MAX_MINUTES) + MAX_MINUTES) % MAX_MINUTES;
   const existing = buckets[index];
   if (existing && existing.minute === minute) return existing;
@@ -108,13 +111,19 @@ function safeStatus(statusCode) {
   return Number.isInteger(statusCode) && statusCode >= 100 && statusCode <= 599 ? statusCode : 0;
 }
 
-export function recordRequest({ method, path, statusCode, durationMs, at = Date.now() } = {}) {
+export function recordRequest({ tenantId, method, path, statusCode, durationMs, at = Date.now() } = {}) {
+  if (typeof tenantId !== "string" || !TENANT_PATTERN.test(tenantId)) return;
   const now = Number.isFinite(at) ? at : Date.now();
   const status = safeStatus(statusCode);
   const duration = safeDuration(durationMs);
   const normalizedPath = normalizePath(path);
+  if (status === 401 || normalizedPath === "/health" || normalizedPath === "/ready") return;
+  const store = stores.get(tenantId) ?? { buckets: new Array(MAX_MINUTES), recent: [] };
+  stores.delete(tenantId);
+  stores.set(tenantId, store);
+  if (stores.size > MAX_TENANTS) stores.delete(stores.keys().next().value);
   const minute = minuteOf(now);
-  const bucket = bucketAt(minute);
+  const bucket = bucketAt(store.buckets, minute);
   bucket.requests += 1;
   if (status >= 400 && status < 500) bucket.errors4xx += 1;
   else if (status >= 500) bucket.errors5xx += 1;
@@ -126,21 +135,22 @@ export function recordRequest({ method, path, statusCode, durationMs, at = Date.
   else if (status >= 500) counter.errors5xx += 1;
   counter.latencyTotalMs += duration;
   counter.maxLatencyMs = Math.max(counter.maxLatencyMs, duration);
-  recent.push({
+  store.recent.push({
     at: new Date(now).toISOString(),
     method: safeMethod(method),
     path: normalizedPath,
     status,
     durationMs: duration,
   });
-  if (recent.length > RECENT_CAPACITY) recent = recent.slice(-RECENT_CAPACITY);
+  if (store.recent.length > RECENT_CAPACITY) store.recent = store.recent.slice(-RECENT_CAPACITY);
 }
 
 function clampInteger(value, fallback, minimum, maximum) {
   return Number.isInteger(value) ? Math.min(Math.max(value, minimum), maximum) : fallback;
 }
 
-export function trafficSeries({ minutes } = {}) {
+export function trafficSeries({ tenantId, minutes } = {}) {
+  const buckets = stores.get(tenantId)?.buckets ?? [];
   const count = clampInteger(minutes, 60, 1, MAX_MINUTES);
   const endMinute = minuteOf(Date.now());
   const startMinute = endMinute - count + 1;
@@ -168,7 +178,8 @@ export function trafficSeries({ minutes } = {}) {
   };
 }
 
-export function featureSeries({ minutes } = {}) {
+export function featureSeries({ tenantId, minutes } = {}) {
+  const buckets = stores.get(tenantId)?.buckets ?? [];
   const count = clampInteger(minutes, 60, 1, MAX_MINUTES);
   const endMinute = minuteOf(Date.now());
   const startMinute = endMinute - count + 1;
@@ -223,16 +234,15 @@ export function featureSeries({ minutes } = {}) {
   };
 }
 
-export function recentRequests({ limit } = {}) {
+export function recentRequests({ tenantId, limit } = {}) {
   const count = clampInteger(limit, 20, 1, 100);
+  const recent = stores.get(tenantId)?.recent ?? [];
   return recent.slice(-count).reverse().map((item) => ({ ...item }));
 }
 
 // Tests use this to isolate cases; production code never calls it.
 export function resetMetrics() {
-  buckets.length = 0;
-  buckets.length = MAX_MINUTES;
-  recent = [];
+  stores.clear();
 }
 
 export function isMetricsPath(path) {
@@ -257,6 +267,31 @@ function readQuery(url, rule) {
   return value;
 }
 
+async function requireMetricsAudit(identity, config) {
+  if (!config.dataUrl) throw new HttpError(503, "metrics_unavailable");
+  let response;
+  try {
+    response = await fetch(`${config.dataUrl}/rpc/workflow_audit_access`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${applicationToken(identity, config.dataSecret, "junctura_workflow_audit_api")}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ payload: {} }),
+      signal: AbortSignal.timeout(5000),
+      redirect: "error",
+    });
+  } catch { throw new HttpError(503, "metrics_unavailable"); }
+  if (response.status === 403) throw new HttpError(403, "metrics_permission_required");
+  if (!response.ok) throw new HttpError(503, "metrics_unavailable");
+  let result;
+  try { result = await response.json(); } catch { throw new HttpError(503, "metrics_unavailable"); }
+  if (result?.status === 403) throw new HttpError(403, "metrics_permission_required");
+  if (result?.error || result?.status !== 200 || result?.value?.allowed !== true) {
+    throw new HttpError(503, "metrics_unavailable");
+  }
+}
+
 export async function handleMetrics(request, response, identity, config, url) {
   if (!isMetricsPath(url.pathname)) throw new HttpError(404, "not_found");
   if (request.method !== "GET") {
@@ -266,8 +301,10 @@ export async function handleMetrics(request, response, identity, config, url) {
   if (!identity.clientId) throw new HttpError(403, "verified_client_required");
   const rule = QUERY_LIMITS[url.pathname];
   const value = readQuery(url, rule);
+  await requireMetricsAudit(identity, config);
+  const tenantId = identity.tenantId;
   response.setHeader("Cache-Control", "no-store");
-  if (url.pathname === METRICS_TRAFFIC_PATH) return json(response, 200, trafficSeries({ minutes: value }));
-  if (url.pathname === METRICS_FEATURES_PATH) return json(response, 200, featureSeries({ minutes: value }));
-  return json(response, 200, { items: recentRequests({ limit: value }) });
+  if (url.pathname === METRICS_TRAFFIC_PATH) return json(response, 200, trafficSeries({ tenantId, minutes: value }));
+  if (url.pathname === METRICS_FEATURES_PATH) return json(response, 200, featureSeries({ tenantId, minutes: value }));
+  return json(response, 200, { items: recentRequests({ tenantId, limit: value }) });
 }
