@@ -144,7 +144,7 @@ function principalsFixture() {
 describe("Task 34 — flat sidebar", () => {
   beforeEach(resetState);
 
-  it("shows exactly seven top-level items and two footer items", async () => {
+  it("shows exactly eight top-level items and two footer items", async () => {
     installApiFetch();
     renderAt("dashboard");
     await screen.findByRole("heading", {
@@ -161,6 +161,7 @@ describe("Task 34 — flat sidebar", () => {
       .map((button) => button.textContent?.trim());
     expect(labels).toEqual([
       viStrings.modules.dashboard.label,
+      viStrings.modules.ecosystem.label,
       viStrings.modules.queue.label,
       viStrings.modules.apps.label,
       viStrings.modules.caps.label,

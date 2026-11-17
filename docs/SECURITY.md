@@ -58,6 +58,37 @@ expiry; resource assertions carry writer status. PostgREST's `junctura_data` log
 assumes `NOLOGIN NOBYPASSRLS` API roles. Generic records cannot administer private authority;
 never expose assertions or signing secrets to clients/logs.
 
+## Demo and production environments
+
+`npm run env:provision` creates separate environment tenants. `demo` has one read-only
+principal `demo`, the only account written to public login hints (mode 0644); Core denies
+its registrations, approvals and revocations. `production` has `admin1`–`admin3` and the
+read-only judge `giamkhao`, none of which are ever published. `tenant-a`/`tenant-b` remain
+test/CI fixtures. Provisioning generates passwords at run time, never prints them, and
+stores all of them in `.junctura/demo-accounts.json` (mode 0600); the `demo` password is
+also public by design. It disables the legacy read-only account and removes moved accounts
+from the other tenant groups, including the fixtures.
+
+`giamkhao` holds only `audit.read` and a reader role. Provisioning compares the
+expiry date (default 2026-12-15, inclusive through that UTC day) with today and enables the
+account only while that date is not past; Keycloak does not store the date. Expiry is applied by the script, not by a
+scheduler: re-run `npm run env:provision -- --tenants production` on or after the date to
+disable it. `--disable-judge` disables the Keycloak user, ends its sessions and disables
+the Console principal immediately; only an explicit `--judge-expires <future-date>` re-enables it.
+
+## Application statistics
+
+`GET /v1/applications/stats` is read-only. Core authenticates with a short-lived internal
+assertion for the `NOLOGIN` role `junctura_application_stats_api` and calls
+`core.application_stats(jsonb)`. This `SECURITY DEFINER` function belongs to
+`junctura_app_owner`, has EXECUTE restricted to that role, and accepts only an empty
+payload. It validates the verified tenant, issuer, subject and client, then requires an
+enabled principal with `audit.read` in that tenant. Forced row-level security keeps reads
+tenant/issuer scoped. Responses contain counts, timestamps, application IDs, display names
+and states only, never record content, collection names, object keys, file names, capability
+manifests, grant proposals, subjects or audit reasons. Responses are `no-store`; malformed
+aggregates or dependency failures return `503 application_stats_unavailable`.
+
 ## Resource authorization
 
 V2 resolves the application from `(tenant, issuer, oauth_client_id)` and the exact

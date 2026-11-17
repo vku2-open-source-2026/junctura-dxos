@@ -64,6 +64,7 @@ describe("Task 25 — flat sidebar", () => {
     await openScreen("dashboard", viStrings.dashboard.title);
     expect(sidebarLabels()).toEqual([
       viStrings.modules.dashboard.label,
+      viStrings.modules.ecosystem.label,
       viStrings.modules.queue.label,
       viStrings.modules.apps.label,
       viStrings.modules.caps.label,
@@ -101,6 +102,7 @@ describe("Task 25 — flat sidebar", () => {
     );
     for (const label of [
       viStrings.modules.dashboard.label,
+      viStrings.modules.ecosystem.label,
       viStrings.modules.queue.label,
       viStrings.modules.apps.label,
       viStrings.modules.caps.label,

@@ -1202,6 +1202,40 @@
     "successHasBody": true
   },
   {
+    "path": "/v1/applications/stats",
+    "method": "GET",
+    "operationId": "getApplicationStats",
+    "summary": "Read application statistics",
+    "description": "Requires a normal bearer token with verified client_id and an enabled audit.read principal. All aggregates are scoped to the caller tenant and issuer. Returns counts and timestamps, application IDs, display names and states only; record content, collection names, object keys, file names, capability manifests, grant proposals, subjects and audit reasons are never returned. File aggregates use /junctura-app/<tenant>/<applicationId>; files is null when objects storage is unconfigured. Responses use Cache-Control: no-store.",
+    "tags": [
+      "application-admin"
+    ],
+    "security": [
+      {
+        "coreBearer": []
+      }
+    ],
+    "responses": [
+      "200",
+      "400",
+      "401",
+      "403",
+      "405",
+      "429",
+      "502",
+      "503",
+      "504"
+    ],
+    "hasRequestBody": false,
+    "requestContentTypes": [],
+    "pathParameters": [],
+    "queryParameters": [],
+    "headerParameters": [],
+    "successStatus": "200",
+    "successContentType": "application/json",
+    "successHasBody": true
+  },
+  {
     "path": "/v1/applications/{appId}",
     "method": "GET",
     "operationId": "getApplication",

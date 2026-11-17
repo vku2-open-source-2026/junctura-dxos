@@ -46,6 +46,14 @@ export function parseArgs(argv) {
   return options;
 }
 
+export function clientIdFor(tenant, name) {
+  return tenant === "tenant-a" ? `app-${name}` : `app-${tenant}-${name}`;
+}
+
+export function envFileFor(tenant, name) {
+  return tenant === "tenant-a" ? `.env.app.${name}.local` : `.env.app.${tenant}.${name}.local`;
+}
+
 export function manifestFor(template, appId, capability) {
   const path = `/capabilities/${capability.name}`;
   return { ...structuredClone(template), capabilityId: `urn:junctura:capability:${appId}:${capability.name}`, providerAppId: appId,
@@ -61,20 +69,9 @@ export function existingGrant(edges, grant, ids, capabilityId) {
     e.capabilityId === capabilityId && e.version === "1.0.0" && wanted.includes(e.state));
 }
 
-async function main() {
-  const options = parseArgs(process.argv.slice(2));
-  const stack = await connectDemoStack({ tenant: options.tenant });
+export async function seedTrust(stack, { tenant = stack.tenant } = {}) {
+  if (!/^[a-z][a-z0-9-]{0,62}$/.test(tenant ?? "") || tenant !== stack.tenant) throw new Error("Invalid seed tenant for this stack");
   const { api, must, sql } = stack;
-  await stack.ensureManagementClient();
-
-  if (options.command === "token") {
-    const approver = await stack.human("approver", APPROVER_PERMISSIONS);
-    console.log("Token người duyệt (hết hạn sau vài phút, chỉ dùng cho demo local).");
-    console.log("Console → Cài đặt hệ thống: bật LIVE, dán token, rồi mở Chia sẻ năng lực hoặc Bảo mật & Hoạt động.\n");
-    console.log(approver.token);
-    return;
-  }
-
   step("Demo owner and independent approver");
   const owner = await stack.human("owner", OWNER_PERMISSIONS);
   const approver = await stack.human("approver", APPROVER_PERMISSIONS);
@@ -82,10 +79,10 @@ async function main() {
   const ids = {};
   const subjects = {};
   for (const demo of DEMO_APPS) {
-    const clientId = `app-${demo.name}`;
+    const clientId = clientIdFor(tenant, demo.name);
     const row = await sql(`SELECT a.app_id||'|'||a.state||'|'||coalesce(e.resource_subject,'') FROM app_private.applications a
       JOIN app_private.enrollments e ON (e.tenant_id,e.issuer,e.oauth_client_id)=(a.tenant_id,a.issuer,a.oauth_client_id)
-      WHERE a.tenant_id=${q(options.tenant)} AND a.issuer=${q(stack.issuer)} AND a.oauth_client_id=${q(clientId)};`);
+      WHERE a.tenant_id=${q(tenant)} AND a.issuer=${q(stack.issuer)} AND a.oauth_client_id=${q(clientId)};`);
     if (row) {
       const [appId, state, subject] = row.split("|");
       if (state !== "active") throw new Error(`${clientId} exists but is ${state}; reactivate it or use another tenant`);
@@ -93,11 +90,11 @@ async function main() {
       step(`${demo.displayName} already enrolled`);
       continue;
     }
-    const output = resolve(`.env.app.${demo.name}.local`);
+    const output = resolve(envFileFor(tenant, demo.name));
     if (existsSync(output)) throw new Error(`${output} exists but ${clientId} is not registered; remove the stale file first`);
     const { app, clientSecret, subject } = await enrollApplication(stack,
       { clientId, origin: `https://${clientId}.junctura.local`, displayName: demo.displayName }, owner, approver);
-    writeFileSync(output, renderEnv({ baseUrl: stack.base, tenant: options.tenant, appId: app.appId, clientId, clientSecret }), { flag: "wx", mode: 0o600 });
+    writeFileSync(output, renderEnv({ baseUrl: stack.base, tenant, appId: app.appId, clientId, clientSecret }), { flag: "wx", mode: 0o600 });
     ids[demo.name] = app.appId; subjects[demo.name] = subject;
   }
 
@@ -154,8 +151,23 @@ async function main() {
     }
   }
 
+  return { ids, subjects, owner, approver, published };
+}
+
+async function main() {
+  const options = parseArgs(process.argv.slice(2));
+  const stack = await connectDemoStack({ tenant: options.tenant });
+  await stack.ensureManagementClient();
+  if (options.command === "token") {
+    const approver = await stack.human("approver", APPROVER_PERMISSIONS);
+    console.log("Token người duyệt (hết hạn sau vài phút, chỉ dùng cho demo local).");
+    console.log("Console → Cài đặt hệ thống: bật LIVE, dán token, rồi mở Chia sẻ năng lực hoặc Bảo mật & Hoạt động.\n");
+    console.log(approver.token);
+    return;
+  }
+  await seedTrust(stack, { tenant: options.tenant });
   console.log(`\n✔ Dữ liệu sơ đồ tin cậy đã sẵn sàng cho ${options.tenant}.`);
-  console.log("  Lấy token cho Console: npm run trust:demo -- token");
+  console.log(`  Lấy token cho Console: npm run trust:demo -- token${options.tenant === "tenant-a" ? "" : ` --tenant ${options.tenant}`}`);
   console.log("  Console → Cài đặt hệ thống: bật LIVE, dán token → Chia sẻ năng lực.");
 }
 

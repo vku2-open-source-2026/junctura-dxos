@@ -154,7 +154,7 @@ checks also require host OpenSSL. Run sequentially on a disposable test stack:
 ```sh
 npm run setup
 docker compose config --quiet
-docker compose up --build --detach --wait --wait-timeout 900
+npm run local:demo
 npm run healthcheck
 npm run test:console-container
 npm run test:integration
@@ -182,7 +182,7 @@ See [CI](../.github/workflows/ci.yml).
 
 Run [infra/postgres/migrate.sh](../infra/postgres/migrate.sh) with `docker compose run --rm data-migrate`;
 Compose gates `data` and then Core on success. Number after the highest `infra/postgres/NNN-*.sql`:
-currently `026`, so next is `027`. Mount new files in `compose.yaml`'s `data-migrate` service.
+currently `027`, so next is `028`. Mount new files in `compose.yaml`'s `data-migrate` service.
 **All applied files are immutable**: preserve their exact bytes and add forward migrations.
 
 SHA-256 enters `core.schema_migration_checksums` in the applying transaction
@@ -248,12 +248,27 @@ The runner strips CRLF delimiters for execution but hashes original bytes;
 | 024 | Directory relations limited to active, unexpired grants. |
 | 025 | Read-only storage aggregates and workflow audit-access gate. |
 | 026 | Read-only collection field/type inference from at most the 200 newest records, without values. |
+| 027 | Read-only application statistics through a `SECURITY DEFINER` function and private role. |
 
 ## Demo data and developer journey
 
 Layer 1 ships no domain scenario; a Layer-2 repository (for example junctura-workspace)
 registers its own applications, capabilities, grants and records through the public APIs.
-`npm run demo:provision` provisions demo administrators and read-only `viewer`: see [Operations](OPERATIONS.md).
+
+`npm run local:demo` runs `setup` when `.env` is missing, then `local:up`, `env:provision`,
+`demo:seed` and `demo:console`. `npm run env:provision` provisions tenant `demo` (read-only
+account `demo`, the only public login hint) and tenant `production` (`admin1`–`admin3` plus
+the read-only judge `giamkhao`); passwords are generated at run time and stored in
+`.junctura/demo-accounts.json` (mode 0600). Only the `demo` account is also written to the
+public login hints. See [Operations](OPERATIONS.md).
+
+`npm run demo:seed` writes simulated applications, capabilities, grants, records, notes and
+files through the real API. It defaults to `--tenant demo`, is idempotent, and refuses
+`production`, `tenant-a` and `tenant-b`; use it only for demo-style tenants.
+`tests/demo-seed.test.mjs` covers reserved tenants, idempotent writes, pagination, object
+scan failures and local-demo step planning; run `node --test tests/demo-seed.test.mjs`
+or `npm test`.
+
 For operator enrollment/`resource_subject` binding see [Capabilities](CAPABILITIES.md); for resource authorization see [Security](SECURITY.md).
 
 Run [examples/foundation-http.mjs](../examples/foundation-http.mjs) with an active enrolled backend and

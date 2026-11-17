@@ -195,15 +195,25 @@ The Vite development server proxies both `/identity` and `/api` instead. See the
 
 ## Public demo server
 
-Use a dedicated host with synthetic data, Node 24, Docker Compose, a domain and an HTTPS proxy:
+Use a dedicated host with synthetic data, Node 24, Docker Compose, a domain and an HTTPS proxy.
+Provisioning creates two environment tenants:
+
+- `demo`: one read-only account `demo` (`core-reader`, `audit.read`), the only account in
+  public login hints.
+- `production`: `admin1`–`admin3` and the read-only judge `giamkhao`; never published.
+
+`tenant-a`/`tenant-b` remain test/CI fixtures and are not environment tenants. Provisioning
+also disables the legacy read-only account and removes moved accounts from the other tenant
+groups, including `tenant-a` and `tenant-b`.
 
 | Recreated artifact | Recreated by |
 | --- | --- |
-| Keycloak `admin1`, `admin2`, `admin3`, read-only `viewer` | `npm run demo:provision` |
-| Console permissions in `app_private.principals` | `npm run demo:provision` |
-| `console/public/login-hints.json` (Git-ignored, mode `0644`, viewer only) | `npm run demo:provision` |
-| `.junctura/demo-accounts.json` (Git-ignored, mode `0600`, all demo passwords) | `npm run demo:provision` |
-| Applications, capabilities, grants and records of a scenario | the Layer-2 repository's own setup script |
+| Tenant `demo` account and tenant `production` accounts | `npm run env:provision` |
+| Console permissions in `app_private.principals` | `npm run env:provision` |
+| `console/public/login-hints.json` (Git-ignored, mode `0644`, `demo` only) | `npm run env:provision` when `demo` is selected |
+| `.junctura/demo-accounts.json` (Git-ignored, mode `0600`, all environment passwords) | `npm run env:provision` |
+| Simulated applications, capabilities, grants, records, notes and files | `npm run demo:seed` |
+| A Layer-2 scenario of its own | the Layer-2 repository's setup script |
 
 ```sh
 git clone https://github.com/vku2-open-source-2026/junctura-dxos.git
@@ -217,22 +227,32 @@ Before first startup, edit `.env` (ports must match the proxy below):
 PUBLIC_URL=https://demo.example
 PORT=8080
 CONSOLE_PORT=3000
+WORKFLOW_TENANTS=demo,production,tenant-a,tenant-b
 ```
 
 `PUBLIC_URL` is the public HTTPS origin, without a trailing slash or `/identity`;
-changing it does not migrate existing issuer-bound authority.
+changing it does not migrate existing issuer-bound authority. `WORKFLOW_TENANTS` now
+defaults to `demo,production,tenant-a,tenant-b`; adjust it if `workflow-init` should deploy
+business definitions to other tenants.
 
 ```sh
 npm run local:up
-npm run demo:provision
+npm run env:provision
+npm run demo:seed
 npm run demo:console
 curl -fsS https://demo.example/healthz
 curl -fsS -H 'Accept: application/json' https://demo.example/login-hints.json
 ```
 
-Open `https://demo.example/`. Public hints prefill `viewer` (`core-reader`, `audit.read`);
-Core denies its registrations, approvals and revocations. Type passwords from the private
-host file for `admin1`–`admin3`. Console tokens stay in tab memory; reload signs out.
+Open `https://demo.example/`. Public hints prefill `demo` (`core-reader`, `audit.read`);
+Core denies its registrations, approvals and revocations. Type passwords from
+`.junctura/demo-accounts.json` for `admin1`–`admin3` and `giamkhao`. Console tokens stay in
+tab memory; reload signs out.
+
+`demo:seed` writes simulated data through the real Gateway as the demo backend applications.
+It defaults to `--tenant demo`, is idempotent, and refuses `production`, `tenant-a` and
+`tenant-b`; use it only for demo-style tenants. Object uploads follow the normal quarantine,
+scan and commit flow, and a scanner failure stops the seed before metadata is written.
 
 Console proxies `/api` to Gateway, not `/identity/`. Add your TLS certificate/key to this public nginx proxy:
 
@@ -258,36 +278,55 @@ server {
 ```
 
 Provisioning defaults to `--admin-base http://127.0.0.1:${PORT:-8080}`, independently of `PUBLIC_URL`.
-For another location: `npm run demo:provision -- --admin-base http://<reachable-gateway>:<port>`.
+Use `--tenants demo,production` to select environments. For another location:
+`npm run env:provision -- --admin-base http://<reachable-gateway>:<port>`.
 The password form needs no PKCE redirect change; loopback-only SSO redirect URIs need public configuration.
 
-For updates, back up, update the checkout, run `local:up`, `demo:provision` and `demo:console`.
-Provisioning is idempotent and normally preserves passwords. To rotate all passwords/rebuild hints:
+### Judge account
+
+`giamkhao` is read-only in `production`. Provisioning compares the expiry date with today and
+enables the account only while the expiry date is today or later in UTC, inclusive. The default is
+2026-12-15; override it with `--judge-expires YYYY-MM-DD`. Keycloak does not keep the date (the pinned user
+profile drops the undeclared `access_expires_at` attribute), so only the enabled flag counts. The expiry is applied only when
+the script runs, so re-run `npm run env:provision -- --tenants production` on or after that
+date to disable the account. A locked or expired judge stays disabled on later runs; only an
+explicit `--judge-expires <future-date>` re-enables it.
+
+To lock the judge immediately, run `npm run env:provision -- --disable-judge`. It disables
+the Keycloak user, ends its sessions and disables the Console principal, then exits without
+provisioning other accounts. To issue a new window after locking, re-run provisioning with
+`--judge-expires <future-date>`.
+
+For updates, back up, update the checkout, run `local:up`, `env:provision`, `demo:seed` and
+`demo:console`. Provisioning is idempotent and normally preserves passwords from the private
+file. To rotate the selected tenants' passwords and rebuild hints:
 
 ```sh
-npm run demo:provision -- --reset-passwords
+npm run env:provision -- --reset-passwords
 npm run demo:console
 ```
 
 Only for a disposable demo reset: keep `.env`, run `docker compose --profile console down -v`,
-then `npm run local:up`, `npm run demo:provision`, `npm run demo:console` and the Layer-2 setup.
-This destroys all named volumes, including every database, objects and OpenBao state.
+then `npm run local:up`, `npm run env:provision`, `npm run demo:seed`, `npm run demo:console`
+and the Layer-2 setup. This destroys all named volumes, including every database, objects and
+OpenBao state.
 
 Demo security checklist:
 
-- Publish only `viewer`. Keep administrator passwords private and share out of band.
-- Rotate disclosed administrator passwords with `--reset-passwords` and rebuild; provisioning may reuse the private file.
-- Never use `--public-admins` on a public server; it republishes administrator hints.
+- Publish only `demo`. Keep `admin1`–`admin3` and `giamkhao` passwords private and share out of band.
+- Rotate disclosed production passwords with `--reset-passwords` and rebuild; provisioning may reuse the private file.
+- Lock the judge with `--disable-judge` when access should end; the expiry date alone does not revoke a running account.
 - Keep HTTPS and both proxy admin blocks. Password login sends credentials on each login.
 - Do not commit hints or `.junctura/`. After the event, rotate the actual Keycloak administrator
   password (editing `.env` is insufficient) and disable the `junctura-console` direct-access grant.
 
 | Problem | Check / action |
 | --- | --- |
-| No prefilled account | Rebuild Console after provisioning; fetch hints with `Accept: application/json`. |
+| No prefilled account | Rebuild Console after `env:provision`; fetch hints with `Accept: application/json`. |
 | `401` / `login_failed` | Route `/identity/` to Gateway; match `PUBLIC_URL` to the public origin. |
-| Users page says `missing` | Run `demo:provision` to upsert the four principals for the current issuer. |
-| Empty data pages | Run the Layer-2 scenario repository's setup against the running stack. |
+| Users page says `missing` | Run `env:provision` to upsert the environment principals for the current issuer. |
+| Empty data pages | Run `demo:seed`, or the Layer-2 scenario repository's setup, against the running stack. |
+| Judge still active after the expiry date | Re-run `env:provision -- --tenants production`, or use `--disable-judge`; expiry is applied only when the script runs. |
 | Wrong issuer after changing `PUBLIC_URL` | For disposable data only, reset as above and reprovision; preserve real data for a reviewed authority migration. |
 
 ## Deployment gate

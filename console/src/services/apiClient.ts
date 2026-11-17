@@ -6,6 +6,9 @@ import type {
   IdentityState,
   UserIdentity,
   Application,
+  ApplicationStats,
+  ApplicationStatsEntry,
+  ApplicationState,
   Approval,
   StorageSummary,
   StorageCollections,
@@ -72,6 +75,118 @@ function isUserIdentity(value: unknown): value is UserIdentity {
     Array.isArray(candidate.roles) &&
     candidate.roles.every((role) => typeof role === "string")
   );
+}
+
+const APPLICATION_STATES: ApplicationState[] = [
+  "pending",
+  "active",
+  "suspended",
+  "revoked",
+];
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+// Strict: a malformed stats payload is rejected as a whole so the Console
+// shows an error state instead of substituting zeros or a guessed state.
+function statNumber(value: unknown): number | null {
+  return typeof value === "number" && Number.isSafeInteger(value) && value >= 0
+    ? value
+    : null;
+}
+
+function statTime(value: unknown): string | null {
+  return typeof value === "string" && Number.isFinite(Date.parse(value))
+    ? value
+    : null;
+}
+
+function statCounts<K extends string>(
+  value: unknown,
+  keys: readonly K[]
+): Record<K, number> | null {
+  const record = asRecord(value);
+  if (!record) return null;
+  const result = {} as Record<K, number>;
+  for (const key of keys) {
+    const count = statNumber(record[key]);
+    if (count === null) return null;
+    result[key] = count;
+  }
+  return result;
+}
+
+function normalizeStatsEntry(value: unknown): ApplicationStatsEntry | null {
+  const app = asRecord(value);
+  if (!app || typeof app.id !== "string" || typeof app.name !== "string") {
+    return null;
+  }
+  if (
+    typeof app.state !== "string" ||
+    !(APPLICATION_STATES as string[]).includes(app.state)
+  ) {
+    return null;
+  }
+  const registeredAt = statTime(app.registeredAt);
+  const lastActivityAt =
+    app.lastActivityAt === null ? null : statTime(app.lastActivityAt);
+  const calls = asRecord(app.calls);
+  const outgoing = statCounts(calls?.outgoing, ["last24h", "last7d"] as const);
+  const incoming = statCounts(calls?.incoming, ["last24h", "last7d"] as const);
+  const capabilities = statCounts(app.capabilities, ["published"] as const);
+  const connections = statCounts(app.connections, ["given", "received"] as const);
+  const data = statCounts(app.data, ["collections", "records"] as const);
+  const files =
+    app.files === null ? null : statCounts(app.files, ["count", "bytes"] as const);
+  if (
+    !registeredAt ||
+    (app.lastActivityAt !== null && lastActivityAt === null) ||
+    !outgoing ||
+    !incoming ||
+    !capabilities ||
+    !connections ||
+    !data ||
+    (app.files !== null && files === null)
+  ) {
+    return null;
+  }
+  return {
+    id: app.id,
+    name: app.name,
+    state: app.state as ApplicationState,
+    registeredAt,
+    lastActivityAt,
+    calls: { outgoing, incoming },
+    capabilities,
+    connections,
+    data,
+    files,
+  };
+}
+
+function normalizeApplicationStats(value: unknown): ApplicationStats {
+  const response = asRecord(value);
+  const totals = statCounts(response?.totals, [
+    "applications",
+    "activeApplications",
+    "activeLast24h",
+    "activeLast7d",
+    "activeConnections",
+  ] as const);
+  const generatedAt = statTime(response?.generatedAt);
+  if (!response || !totals || !generatedAt || !Array.isArray(response.applications)) {
+    throw new ApiError(503, "application_stats_unavailable");
+  }
+  const applications: ApplicationStatsEntry[] = [];
+  for (const entry of response.applications) {
+    const normalized = normalizeStatsEntry(entry);
+    if (!normalized) throw new ApiError(503, "application_stats_unavailable");
+    applications.push(normalized);
+  }
+  return { generatedAt, totals, applications };
 }
 
 export class ApiError extends Error {
@@ -506,6 +621,15 @@ export class ApiClient {
       items?: WorkflowExecutionSummary[];
     };
     return Array.isArray(data.items) ? data.items : [];
+  }
+
+  public async getApplicationStats(): Promise<ApplicationStats> {
+    const res = await this.send("/v1/applications/stats", {
+      signal: AbortSignal.timeout(12000),
+    });
+    if (!res.ok) await this.fail(res, "application_stats_unavailable");
+    const data: unknown = await res.json().catch(() => null);
+    return normalizeApplicationStats(data);
   }
 
   public async getStorageSummary(): Promise<StorageSummary> {

@@ -84,7 +84,7 @@ export const PLATFORM_FUNCTIONS: Record<
     color:
       "bg-[#F7ECE8] text-[#8C5A4A] dark:bg-[#D8A581]/10 dark:text-[#E0BBAA]",
     tier: "extended",
-    screens: ["apps", "queue"],
+    screens: ["apps", "queue", "ecosystem"],
   },
   "capability-sharing": {
     id: "capability-sharing",

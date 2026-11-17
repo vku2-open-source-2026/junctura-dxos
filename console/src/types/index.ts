@@ -86,6 +86,38 @@ export interface Approval {
   createdAt: string;
 }
 
+export interface ApplicationStatsCalls {
+  outgoing: { last24h: number; last7d: number };
+  incoming: { last24h: number; last7d: number };
+}
+
+export interface ApplicationStatsEntry {
+  id: string;
+  name: string;
+  state: ApplicationState;
+  registeredAt: string;
+  lastActivityAt: string | null;
+  calls: ApplicationStatsCalls;
+  capabilities: { published: number };
+  connections: { given: number; received: number };
+  data: { collections: number; records: number };
+  files: { count: number; bytes: number } | null;
+}
+
+export interface ApplicationStatsTotals {
+  applications: number;
+  activeApplications: number;
+  activeLast24h: number;
+  activeLast7d: number;
+  activeConnections: number;
+}
+
+export interface ApplicationStats {
+  generatedAt: string;
+  totals: ApplicationStatsTotals;
+  applications: ApplicationStatsEntry[];
+}
+
 export interface StorageCollection {
   name: string;
   records: number;

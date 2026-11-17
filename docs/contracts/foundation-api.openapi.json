@@ -1958,6 +1958,142 @@
         "x-junctura-test-suite": "applications"
       }
     },
+    "/v1/applications/stats": {
+      "get": {
+        "operationId": "getApplicationStats",
+        "summary": "Read application statistics",
+        "description": "Requires a normal bearer token with verified client_id and an enabled audit.read principal. All aggregates are scoped to the caller tenant and issuer. Returns counts and timestamps, application IDs, display names and states only; record content, collection names, object keys, file names, capability manifests, grant proposals, subjects and audit reasons are never returned. File aggregates use /junctura-app/<tenant>/<applicationId>; files is null when objects storage is unconfigured. Responses use Cache-Control: no-store.",
+        "tags": [
+          "application-admin"
+        ],
+        "x-junctura-query-policy": "closed",
+        "x-junctura-source": "src/modules/applications/stats.mjs",
+        "security": [
+          {
+            "coreBearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Tenant- and issuer-scoped counts and timestamps; only application display names are disclosed.",
+            "headers": {
+              "Cache-Control": {
+                "$ref": "#/components/headers/CacheControl"
+              },
+              "X-Content-Type-Options": {
+                "$ref": "#/components/headers/NoSniff"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationStats"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "invalid_query: any query string, including an empty query delimiter, is rejected.",
+            "headers": {
+              "Cache-Control": {
+                "$ref": "#/components/headers/CacheControl"
+              },
+              "X-Content-Type-Options": {
+                "$ref": "#/components/headers/NoSniff"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationError"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "description": "stats_permission_required: caller must be an enabled audit.read principal in its own tenant, issuer, subject and management client. verified_client_required: verified client_id is missing. Standard bearer authorization failures also apply.",
+            "headers": {
+              "Cache-Control": {
+                "$ref": "#/components/headers/CacheControl"
+              },
+              "X-Content-Type-Options": {
+                "$ref": "#/components/headers/NoSniff"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationError"
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "method_not_allowed: only GET is supported.",
+            "headers": {
+              "Cache-Control": {
+                "$ref": "#/components/headers/CacheControl"
+              },
+              "X-Content-Type-Options": {
+                "$ref": "#/components/headers/NoSniff"
+              },
+              "Allow": {
+                "required": true,
+                "schema": {
+                  "type": "string",
+                  "const": "GET"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationError"
+                }
+              }
+            }
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "502": {
+            "$ref": "#/components/responses/BadGateway"
+          },
+          "503": {
+            "description": "application_stats_unavailable: data storage is unconfigured, a dependency is unavailable or an aggregate is malformed. Identity dependency failures also fail closed.",
+            "headers": {
+              "Cache-Control": {
+                "$ref": "#/components/headers/CacheControl"
+              },
+              "X-Content-Type-Options": {
+                "$ref": "#/components/headers/NoSniff"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationError"
+                }
+              }
+            }
+          },
+          "504": {
+            "$ref": "#/components/responses/GatewayTimeout"
+          }
+        },
+        "x-junctura-core-roles": [
+          "core-reader"
+        ],
+        "x-junctura-authority": "application-admin",
+        "x-junctura-required-permissions": [
+          "audit.read"
+        ],
+        "x-junctura-test-suite": "applications"
+      }
+    },
     "/v1/applications/{appId}": {
       "get": {
         "operationId": "getApplication",
@@ -4917,6 +5053,250 @@
         },
         "additionalProperties": true,
         "description": "Provider form; local public PKCE fixture uses client_id and refresh_token. Client authentication follows upstream policy."
+      },
+      "ApplicationStats": {
+        "type": "object",
+        "properties": {
+          "generatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "totals": {
+            "type": "object",
+            "properties": {
+              "applications": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991,
+                "description": "Applications in the caller tenant and issuer."
+              },
+              "activeApplications": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991,
+                "description": "Applications with state='active'."
+              },
+              "activeLast24h": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991,
+                "description": "Applications with lastActivityAt in the last 24 hours."
+              },
+              "activeLast7d": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991,
+                "description": "Applications with lastActivityAt in the last 7 days."
+              },
+              "activeConnections": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991,
+                "description": "Active grants with expires_at > now() in the caller tenant and issuer."
+              }
+            },
+            "required": [
+              "applications",
+              "activeApplications",
+              "activeLast24h",
+              "activeLast7d",
+              "activeConnections"
+            ],
+            "additionalProperties": false
+          },
+          "applications": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "$ref": "#/components/schemas/Uuid"
+                },
+                "name": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 200,
+                  "pattern": "^[^\\x00-\\x1f\\x7f]+$"
+                },
+                "state": {
+                  "type": "string",
+                  "enum": [
+                    "pending",
+                    "active",
+                    "suspended",
+                    "revoked"
+                  ]
+                },
+                "registeredAt": {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                "lastActivityAt": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "format": "date-time",
+                  "description": "Latest actor audit timestamp or consumer/provider execution creation timestamp; null if neither exists."
+                },
+                "calls": {
+                  "type": "object",
+                  "properties": {
+                    "outgoing": {
+                      "type": "object",
+                      "properties": {
+                        "last24h": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "last7d": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        }
+                      },
+                      "required": [
+                        "last24h",
+                        "last7d"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "incoming": {
+                      "type": "object",
+                      "properties": {
+                        "last24h": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "last7d": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        }
+                      },
+                      "required": [
+                        "last24h",
+                        "last7d"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "outgoing",
+                    "incoming"
+                  ],
+                  "additionalProperties": false,
+                  "description": "Executions created in the last 24 hours / 7 days, as consumer (outgoing) or provider (incoming)."
+                },
+                "capabilities": {
+                  "type": "object",
+                  "properties": {
+                    "published": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991,
+                      "description": "Published capability versions provided by this application."
+                    }
+                  },
+                  "required": [
+                    "published"
+                  ],
+                  "additionalProperties": false
+                },
+                "connections": {
+                  "type": "object",
+                  "properties": {
+                    "given": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991,
+                      "description": "Active unexpired grants as provider."
+                    },
+                    "received": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991,
+                      "description": "Active unexpired grants as consumer."
+                    }
+                  },
+                  "required": [
+                    "given",
+                    "received"
+                  ],
+                  "additionalProperties": false
+                },
+                "data": {
+                  "type": "object",
+                  "properties": {
+                    "collections": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991,
+                      "description": "Distinct collections owned by the application."
+                    },
+                    "records": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991,
+                      "description": "Records owned by the application."
+                    }
+                  },
+                  "required": [
+                    "collections",
+                    "records"
+                  ],
+                  "additionalProperties": false
+                },
+                "files": {
+                  "type": [
+                    "object",
+                    "null"
+                  ],
+                  "properties": {
+                    "count": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "bytes": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    }
+                  },
+                  "required": [
+                    "count",
+                    "bytes"
+                  ],
+                  "additionalProperties": false,
+                  "description": "Latest-version file count and bytes; null when objects storage is not configured."
+                }
+              },
+              "required": [
+                "id",
+                "name",
+                "state",
+                "registeredAt",
+                "lastActivityAt",
+                "calls",
+                "capabilities",
+                "connections",
+                "data",
+                "files"
+              ],
+              "additionalProperties": false
+            },
+            "description": "Applications in the caller tenant and issuer, ordered by display name then ID."
+          }
+        },
+        "required": [
+          "generatedAt",
+          "totals",
+          "applications"
+        ],
+        "additionalProperties": false
       }
     }
   }

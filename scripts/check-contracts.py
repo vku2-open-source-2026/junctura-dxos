@@ -72,7 +72,7 @@ def composition_inventory(spec, source=None):
 # When handlers change, review this inventory and add an observed positive case.
 EXPECTED = {
     '/health': {'get', 'head'}, '/ready': {'get'}, '/v1/identity': {'get'},
-    '/v1/applications': {'post'}, '/v1/applications/{appId}': {'get'},
+    '/v1/applications': {'post'}, '/v1/applications/stats': {'get'}, '/v1/applications/{appId}': {'get'},
     '/v1/applications/{appId}/approve': {'post'}, '/v1/applications/{appId}/state': {'post'},
     '/v1/approvals': {'post'}, '/v1/approvals/{approvalId}': {'get'},
     '/v1/approvals/{approvalId}/revoke': {'post'},

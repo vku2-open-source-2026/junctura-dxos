@@ -335,6 +335,12 @@
     },
     {
       "name": "tenant-b"
+    },
+    {
+      "name": "demo"
+    },
+    {
+      "name": "production"
     }
   ]
 }

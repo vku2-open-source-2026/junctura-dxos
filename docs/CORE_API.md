@@ -94,6 +94,7 @@ Methods are included with each family; action suffixes are described in the link
 | `/v2/secrets/{name}` (GET, PUT, DELETE) | Secret metadata/write/delete; GET never returns plaintext | Active bound backend; writer for PUT/DELETE | [OPERATIONS.md](OPERATIONS.md) |
 | `/v1/workflows/*` (GET, POST, DELETE) | Definitions and execution lifecycle/oversight | Writer for lifecycle mutations; management `audit.read` for list/summary | Workflow engine; Storage summary and workflow history below |
 | `/v1/applications` (POST), `/{appId}` (GET), `/{appId}/approve`, `/{appId}/state` (POST) | Register, inspect, activate and change application state | Enrolled owner/admin visibility; `applications.register` / `applications.approve` | [CAPABILITIES.md](CAPABILITIES.md) |
+| `/v1/applications/stats` (GET) | Tenant application counts, activity timestamps and IDs | Management `audit.read`; verified client ID | Application statistics below |
 | `/v1/approvals` (POST), `/{approvalId}` (GET), `/{approvalId}/revoke` (POST) | Application, capability, grant and enabled composition decisions | Resource-specific independent approval/visibility; grant writes also require writer | [CAPABILITIES.md](CAPABILITIES.md) |
 | `/v1/capabilities` (GET), `/{capabilityId}/versions/*` (GET, POST, PUT) | Registry and authorized discovery | Management `capabilities.write` / `capabilities.publish`; consumers need exact discover grant | [CAPABILITIES.md](CAPABILITIES.md) |
 | `/v1/trust/grants` (POST), `/{grantId}` (GET), `/{grantId}/activate`, `/{grantId}/revoke` (POST) | Direct trust lifecycle | Management `trust.write` / `trust.approve`; mutations require writer | [CAPABILITIES.md](CAPABILITIES.md) |
@@ -225,7 +226,7 @@ Flowable initializes its own schema on first boot; review migrations/backups bef
 
 Applications maintain business BPMN outside the Core image. Operators set `WORKFLOW_DEFINITIONS_DIR` to their directory; unset/empty uses [infra/workflows](../infra/workflows/README.md), which contains no business BPMN.
 [Example workflows](../examples/workflows/README.md) are not deployed by default. `workflow-init` mounts the directory read-only at `/definitions/business` and recursively collects `*.bpmn20.xml`;
-the technical checkpoint mount is separate. `WORKFLOW_TENANTS` defaults to `tenant-a,tenant-b`, trims comma-separated
+the technical checkpoint mount is separate. `WORKFLOW_TENANTS` defaults to `demo,production,tenant-a,tenant-b`, trims comma-separated
 items and requires each to match `^[a-z0-9][a-z0-9-]{0,62}$`; empty/invalid items abort initialization.
 
 Every business file must pass [definition-policy.mjs](../src/modules/workflow/definition-policy.mjs)
@@ -330,6 +331,29 @@ The organization root is the tenant (`platform`); children are registered applic
 Relations include active, unexpired direct grants only; labels use the capability title, falling back to its exact ID.
 Limits are 1000 applications and 500 relations; `truncated` reports overflow. Application names come from registrations;
 other principals use subjects, while callers can obtain their own `preferredUsername` from identity.
+
+## Application statistics
+
+`GET /v1/applications/stats` requires a verified client ID and management `audit.read` in
+the caller's tenant and issuer. It rejects any query string (`400 invalid_query`) and
+non-GET (`405`), returns `Cache-Control: no-store`, and fails with `403
+stats_permission_required` or `503 application_stats_unavailable`. Results cover only the
+caller's tenant and issuer and contain counts, timestamps, display names, states and IDs.
+
+The body has `generatedAt`, `totals` and `applications`. `totals` contains `applications`,
+`activeApplications`, `activeLast24h`, `activeLast7d` and `activeConnections`. Each
+application contains `id`, `name`, `state`, `registeredAt`, `lastActivityAt`,
+`calls.outgoing.last24h`, `calls.outgoing.last7d`, `calls.incoming.last24h`,
+`calls.incoming.last7d`, `capabilities.published`, `connections.given`,
+`connections.received`, `data.collections`, `data.records` and `files` (`count`, `bytes`,
+or `null` when objects storage is not configured).
+
+`lastActivityAt` is the latest actor audit timestamp or consumer/provider execution
+creation timestamp. `activeLast24h`/`activeLast7d` count applications active in those
+windows; `calls` count executions created in the window; `connections` count active
+unexpired grants; `data` counts owned records and distinct collections. No record content,
+collection names, object keys, file names, capability manifests, grant proposals, subjects
+or audit reasons are returned.
 
 ## Storage summary and workflow history
 

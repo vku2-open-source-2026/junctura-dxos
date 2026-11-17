@@ -21,6 +21,7 @@ const capabilityLayer = (path) => {
 };
 const PUBLIC = new Set([
   "modules/applications/applications.mjs",
+  "modules/applications/stats.mjs",
   "modules/audit/audit.mjs",
   "modules/directory/directory.mjs",
   "modules/metrics/metrics.mjs",
@@ -30,6 +31,7 @@ const PUBLIC = new Set([
   "modules/objects/objects.mjs",
   "modules/objects/malware-scan.mjs",
   "modules/storage/storage.mjs",
+  "modules/storage/filer.mjs",
   "modules/secrets/secrets.mjs",
   "modules/workflow/workflow.mjs",
   "modules/workflow/client.mjs",

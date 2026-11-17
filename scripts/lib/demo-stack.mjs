@@ -15,7 +15,21 @@ const CALLBACK = "http://127.0.0.1:9876/callback";
 export const q = value => `'${String(value).replaceAll("'", "''")}'`;
 export const step = message => console.log(`• ${message}`);
 
-export async function connectDemoStack({ tenant, base = process.env.PUBLIC_URL ?? "http://127.0.0.1:8080" }) {
+export async function ensureTenantGroup({ tenant, admin, must, createGroup = false }) {
+  const readGroup = async () => {
+    const response = await must(await admin(`groups?search=${encodeURIComponent(tenant)}&exact=true`), [200], "Read tenant groups");
+    return (await response.json()).find(group => group.name === tenant);
+  };
+  let group = await readGroup();
+  if (!group && createGroup) {
+    await must(await admin("groups", { name: tenant }), [201, 409], `Create tenant group ${tenant}`);
+    group = await readGroup();
+  }
+  if (!group) throw new Error(`Tenant group ${tenant} does not exist in Keycloak`);
+  return group;
+}
+
+export async function connectDemoStack({ tenant, base = process.env.PUBLIC_URL ?? "http://127.0.0.1:8080", createGroup = false }) {
   const issuer = `${base}/identity/realms/junctura`;
   if (!process.env.KEYCLOAK_ADMIN_PASSWORD) throw new Error("KEYCLOAK_ADMIN_PASSWORD missing: run from the repository root after npm run setup");
   const run = promisify(execFile);
@@ -34,8 +48,7 @@ export async function connectDemoStack({ tenant, base = process.env.PUBLIC_URL ?
   };
   const idFrom = response => response.headers.get("location").split("/").at(-1);
 
-  const group = (await (await admin(`groups?search=${encodeURIComponent(tenant)}&exact=true`)).json()).find(g => g.name === tenant);
-  if (!group) throw new Error(`Tenant group ${tenant} does not exist in Keycloak`);
+  const group = await ensureTenantGroup({ tenant, admin, must, createGroup });
   const template = (await (await admin("clients?clientId=tenant-a")).json())[0];
   const mappersFor = async () => {
     const source = await (await admin(`clients/${template.id}`)).json();

@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "../../common/Card";
 import { Badge } from "../../common/Badge";
 import { Button } from "../../common/Button";
 import { AppStateBadge } from "./AppStateBadge";
+import { AppActivityCard } from "./AppActivityCard";
 import { formatDateTime } from "./format";
 import type { AppDetailModel } from "./appDetailModel";
 import type { AppRelatedData } from "./useAppRelated";
@@ -164,6 +165,8 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
           </dl>
         </CardContent>
       </Card>
+
+      <AppActivityCard applicationId={application.appId} />
 
       <Card>
         <CardHeader>

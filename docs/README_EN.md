@@ -22,7 +22,7 @@ A minimal server-side Node SDK is available in `sdk/node/`. There is no public d
 git clone https://github.com/vku2-open-source-2026/junctura-dxos.git
 cd junctura-dxos
 npm run setup
-npm run local:up
+npm run local:demo
 npm run healthcheck
 ```
 
@@ -157,11 +157,13 @@ git clone https://github.com/vku2-open-source-2026/junctura-dxos.git
 cd junctura-dxos
 npm run setup
 docker compose config --quiet
-npm run local:up
+npm run local:demo
 npm run healthcheck
 docker compose exec -T core node scripts/check-health.mjs
 docker compose ps
 ```
+
+`npm run local:demo` runs `setup` only when `.env` is missing, then `local:up`, `env:provision`, `demo:seed` and `demo:console`, and prints the Console URL. Provisioning creates the read-only `demo` account in tenant `demo` (the only account in public login hints) and `admin1`–`admin3` plus the read-only judge `giamkhao` in tenant `production`; their passwords are generated at run time and stored in `.junctura/demo-accounts.json` (mode 0600). See [operations](OPERATIONS.md#public-demo-server).
 
 If you already have a checkout, start from its root. `npm run setup` creates an ignored `.env` containing random local fixture credentials and refuses to overwrite an existing file. Preserve an existing `.env` and compare its setting names with [.env.example](../.env.example); copying the empty credential template is not a substitute for setup.
 

@@ -10,6 +10,7 @@ import { PendingApprovalsProvider } from "./services/pendingApprovals";
 import { ToastProvider } from "./components/common/Toast";
 import { AppShell } from "./components/layout/AppShell";
 import { OverviewScreen } from "./components/screens/dashboard";
+import { EcosystemScreen } from "./components/screens/ecosystem";
 import { TrafficScreen } from "./components/screens/dashboard/TrafficScreen";
 import { RequestsScreen } from "./components/screens/dashboard/RequestsScreen";
 import { UsersScreen } from "./components/screens/users";
@@ -111,6 +112,8 @@ const AppContent: React.FC<AppContentProps> = ({
     switch (currentScreen) {
       case "dashboard":
         return <OverviewScreen onNavigate={handleNavigate} />;
+      case "ecosystem":
+        return <EcosystemScreen />;
       case "traffic":
         return <TrafficScreen />;
       case "requests":
