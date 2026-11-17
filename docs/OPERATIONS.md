@@ -182,6 +182,17 @@ Capability/composition suites also invoke it with live authority fixtures. It do
 sessions/keys, Flowable history, objects, OpenBao or cross-store consistency. A deployment needs encrypted,
 access-controlled backup storage, retention and a rehearsed coordinated restore of every store/role.
 
+## Signing in with the packaged Console
+
+The Console image proxies only `/api/*` to `gateway:8080`; its packaged Nginx has no `/identity/`
+location, and its allowlist permits workflow reads only (no workflow start, complete or cancel).
+The Gateway ([infra/nginx/default.conf](../infra/nginx/default.conf)) serves `/identity/` on
+`127.0.0.1:${PORT:-8080}`, but with the default relative `/api` base the browser requests the OIDC
+endpoints on the Console origin. To sign in, put one origin in front that routes `/identity/` to
+the Gateway and all other paths to the Console, as the nginx block below does for the public demo.
+The Vite development server proxies both `/identity` and `/api` instead. See the
+[packaged proxy contract](CONSOLE.md#packaged-proxy-contract).
+
 ## Public demo server
 
 Use a dedicated host with synthetic data, Node 24, Docker Compose, a domain and an HTTPS proxy:
