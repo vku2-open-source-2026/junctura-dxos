@@ -20,13 +20,21 @@ import { isStoragePath, handleStorage } from "./modules/storage/storage.mjs";
 import { TRUST_GRAPH_PATH, handleTrust, handleTrustGraph } from "./modules/capability/trust/trust.mjs";
 import { handleMetrics, isMetricsPath, recordRequest } from "./modules/metrics/metrics.mjs";
 
+const tenantOf = new WeakMap();
+
 export function createApi(config) {
-  const authorize = createAuthorizer(config);
+  const authorizer = createAuthorizer(config);
+  const authorize = async (request, withContext = false) => {
+    const identity = await authorizer(request, withContext);
+    tenantOf.set(request, identity.tenantId);
+    return identity;
+  };
   return async (request, response) => {
     const startedAt = performance.now();
     if (typeof response.once === "function") response.once("finish", () => {
       try {
         recordRequest({
+          tenantId: tenantOf.get(request),
           method: request.method,
           path: request.url?.split("?", 1)[0],
           statusCode: response.statusCode,

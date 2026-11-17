@@ -44,10 +44,13 @@ management_client)` confer explicit [permissions](CAPABILITIES.md#permissions):
 | `trust.approve` | Independent trust decisions and application approval decisions. |
 | `capabilities.write`, `capabilities.publish`, `capabilities.approve` | Authoring (creation always needs `write`), tenant registry administration incl. publication, and publication approval. |
 | `compositions.write`, `compositions.publish`, `compositions.approve` | Separate composition authoring, publication and approval powers. |
-| `audit.read` | Read and verify the caller tenant's audit history; also the tenant directory, storage and workflow administration views (metadata, no record values). |
+| `audit.read` | Read and verify the caller tenant's audit history; also the tenant directory, traffic metrics, storage and workflow administration views (metadata, no record values). |
 
 Activation/reactivation consumes an unexpired approval bound to the proposal digest/revision,
 from a subject other than the owner. Realm roles/membership do not imply management permissions.
+
+Traffic metrics require a verified client and `audit.read` in the caller's tenant; observations are per-process, per-tenant, in-memory and cleared on restart.
+Only requests with a verified tenant are recorded; probes and `401` responses are excluded.
 
 For private application/resource/audit calls, Core signs verified tenant, issuer,
 subject and client ID in an HS256 assertion with `junctura-data` audience and 30-second
