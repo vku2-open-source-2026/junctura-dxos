@@ -4,7 +4,7 @@
 // a separate gate; these claims deliberately simulate trusted Core assertions.
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { before, after, test } from "node:test";
 import { promisify } from "node:util";
@@ -80,7 +80,8 @@ before(async () => {
   assert.ok(ready, "fresh disposable database ready");
   await sql("CREATE ROLE junctura_data NOLOGIN NOINHERIT; ALTER DATABASE junctura_data OWNER TO junctura_data;");
   await docker("exec", name, "sh", "/migrations/migrate.sh", "-U", "junctura_admin", "-d", "junctura_data", "-v", "ON_ERROR_STOP=1");
-  assert.equal(await sql("SELECT max(version) FROM core.schema_migrations;"), "26");
+  const latestMigration = String(Math.max(...readdirSync(resolve("infra/postgres")).filter(file => /^\d{3}-.*\.sql$/.test(file)).map(file => Number(file.slice(0, 3)))));
+  assert.equal(await sql("SELECT max(version) FROM core.schema_migrations;"), latestMigration);
   await sql(`INSERT INTO app_private.principals(tenant_id,issuer,subject,management_client,permissions) VALUES
     (${q(tenant)},${q(issuer)},'owner','management',ARRAY['applications.register','capabilities.write','trust.write']),
     (${q(tenant)},${q(issuer)},'approver','management',ARRAY['applications.approve','capabilities.approve','trust.approve']),

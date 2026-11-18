@@ -671,6 +671,10 @@ export const vi = {
       "label": "Tổng quan",
       "desc": "Số liệu vận hành, biểu đồ lưu lượng và nhật ký lệnh gọi."
     },
+    "ecosystem": {
+      "label": "Hệ sinh thái",
+      "desc": "Tổng quan ứng dụng, mức hoạt động và kết nối trong môi trường."
+    },
     "traffic": {
       "label": "Lưu lượng",
       "desc": "Số lệnh gọi, lỗi và độ trễ theo từng phút."
@@ -767,6 +771,52 @@ export const vi = {
       "label": "Cài đặt",
       "desc": "Tên tổ chức, ngôn ngữ, phiên đăng nhập."
     }
+  },
+  "environment": {
+    "demo": "Môi trường demo · dữ liệu giả lập · chỉ xem",
+    "production": "Môi trường vận hành · dữ liệu giả lập của các sản phẩm đang chạy",
+    "tenant": "Tenant: {tenant}"
+  },
+  "ecosystem": {
+    "title": "Hệ sinh thái",
+    "subtitle": "Tổng quan các ứng dụng đã đăng ký, mức hoạt động và kết nối trong môi trường này.",
+    "loading": "Đang tải số liệu hệ sinh thái...",
+    "loadErrorTitle": "Không tải được số liệu hệ sinh thái",
+    "loadErrorDesc": "Cổng API chưa trả về số liệu. Hãy thử lại; không có số liệu ước lượng nào được hiển thị.",
+    "statApplications": "Ứng dụng",
+    "statApplicationsHint": "đã đăng ký trong môi trường",
+    "statActive": "Đang hoạt động",
+    "statActiveHint": "trạng thái active",
+    "statActive24h": "Hoạt động 24 giờ",
+    "statActive24hHint": "ứng dụng có hoạt động trong 24 giờ",
+    "statActive7d": "Hoạt động 7 ngày",
+    "statActive7dHint": "ứng dụng có hoạt động trong 7 ngày",
+    "statConnections": "Kết nối đang mở",
+    "statConnectionsHint": "quyền kết nối còn hiệu lực",
+    "tableTitle": "Ứng dụng trong hệ sinh thái",
+    "tableHint": "Số liệu tổng hợp, không hiển thị nội dung dữ liệu hay tên tệp.",
+    "colName": "Ứng dụng",
+    "colState": "Trạng thái",
+    "colLastActivity": "Hoạt động gần nhất",
+    "lastActivity": "Hoạt động gần nhất",
+    "colCallsOut24h": "Gọi ra 24h",
+    "colCallsOut7d": "Gọi ra 7 ngày",
+    "colCallsIn24h": "Gọi vào 24h",
+    "colCallsIn7d": "Gọi vào 7 ngày",
+    "colConnections": "Kết nối (gửi/nhận)",
+    "colCapabilities": "Năng lực đã công bố",
+    "colRecords": "Bản ghi",
+    "colFiles": "Tệp",
+    "never": "Chưa có hoạt động",
+    "filesUnavailable": "Không có dữ liệu tệp",
+    "openApp": "Mở chi tiết ứng dụng {name}",
+    "emptyTitle": "Chưa có ứng dụng nào",
+    "emptyDesc": "Môi trường này chưa đăng ký ứng dụng nào. Khi ứng dụng được đăng ký, số liệu hoạt động sẽ xuất hiện ở đây.",
+    "connectionMap": "Xem sơ đồ kết nối",
+    "activityTitle": "Hoạt động",
+    "activityDesc": "Số liệu tổng hợp của ứng dụng này.",
+    "activityError": "Không tải được số liệu hoạt động.",
+    "activityMissing": "Chưa có số liệu hoạt động cho ứng dụng này."
   },
   "palette": {
     "title": "Tìm nhanh",

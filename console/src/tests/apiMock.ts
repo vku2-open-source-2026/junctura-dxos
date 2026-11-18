@@ -43,6 +43,19 @@ function defaultResponse(url: string): Response {
   if (url.includes("/v1/audit-events")) {
     return json(200, { items: [], nextCursor: null });
   }
+  if (url.includes("/v1/applications/stats")) {
+    return json(200, {
+      generatedAt: "2026-11-10T00:00:00.000Z",
+      totals: {
+        applications: 0,
+        activeApplications: 0,
+        activeLast24h: 0,
+        activeLast7d: 0,
+        activeConnections: 0,
+      },
+      applications: [],
+    });
+  }
   if (url.includes("/v1/trust/graph")) return json(200, EMPTY_GRAPH);
   if (url.includes("/v1/metrics/traffic")) {
     return json(200, {

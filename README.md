@@ -151,9 +151,11 @@ sequenceDiagram
 git clone https://github.com/vku2-open-source-2026/junctura-dxos.git
 cd junctura-dxos
 npm run setup        # tạo .env với mật khẩu ngẫu nhiên
-npm run local:up     # build và khởi động toàn bộ hệ thống
+npm run local:demo   # build, khởi động, tạo tài khoản và dữ liệu mô phỏng
 npm run healthcheck  # kiểm tra các dịch vụ đã sẵn sàng
 ```
+
+`local:demo` chạy `setup` khi thiếu `.env`, rồi `local:up`, `env:provision`, `demo:seed` và `demo:console`, và in địa chỉ Console. Login hints chỉ chứa tài khoản `demo` chỉ xem; mật khẩu của `production` nằm trong `.junctura/demo-accounts.json` (0600).
 
 Hoặc dùng bản phát hành: tải `junctura-0.2.0.tar.gz` từ [Releases](https://github.com/vku2-open-source-2026/junctura-dxos/releases), kiểm tra bằng `sha256sum -c junctura-0.2.0.tar.gz.sha256`, giải nén (`tar -xzf junctura-0.2.0.tar.gz`), vào thư mục `junctura-0.2.0` rồi chạy ba lệnh trên từ `npm run setup`.
 
@@ -200,6 +202,7 @@ const same = await junctura.getRecord("contacts", record.id);
 | Lệnh | Tác dụng |
 | --- | --- |
 | `npm run setup` | Tạo `.env` với mật khẩu ngẫu nhiên (chỉ chạy một lần) |
+| `npm run local:demo` | Chạy demo cục bộ: `setup` (nếu cần), `local:up`, `env:provision`, `demo:seed`, `demo:console` |
 | `npm run local:up` / `local:down` / `local:status` | Khởi động, dừng (giữ dữ liệu), xem trạng thái hệ thống |
 | `npm run healthcheck` · `npm run doctor` | Kiểm tra sẵn sàng · chẩn đoán lỗi cấu hình |
 | `npm run app:enroll -- <tên>` | Đăng ký và phê duyệt một ứng dụng mới |
@@ -208,7 +211,9 @@ const same = await junctura.getRecord("contacts", record.id);
 | `npm run provider:pki -- <tên>…` | Tạo CA và chứng chỉ TLS cho dịch vụ cung cấp năng lực chạy nội bộ (Tầng 2) |
 | `npm run backup` · `npm run restore -- <thư-mục> --yes` | Sao lưu · khôi phục toàn bộ dữ liệu |
 | `npm run console` | Chạy Console ở chế độ phát triển |
-| `npm run demo:provision` · `demo:console` | Tạo tài khoản admin demo · build lại Console kèm login hints ([hướng dẫn](docs/OPERATIONS.md#public-demo-server)) |
+| `npm run env:provision` | Tạo/cập nhật tài khoản `demo`/`production`, quyền Console và login hints (`demo` only); `demo:provision` là bí danh |
+| `npm run demo:seed` | Nạp dữ liệu mô phỏng qua API thật; từ chối `production`, `tenant-a`, `tenant-b` |
+| `npm run demo:console` | Build lại Console kèm login hints ([hướng dẫn](docs/OPERATIONS.md#public-demo-server)) |
 | `npm test` · `npm run test:integration` | Kiểm thử đơn vị · kiểm thử tích hợp |
 
 ## API chính
@@ -223,6 +228,7 @@ Mọi API đi qua cổng `http://127.0.0.1:8080` và yêu cầu `Authorization: 
 | Chia sẻ | `POST /v2/resource-shares` · `DELETE /v2/resource-shares/{id}` | Chia sẻ một bản ghi/tệp cho ứng dụng khác, có hạn dùng |
 | Quy trình | `GET /v1/workflows/definitions` · `POST /v1/workflows/executions` | Khởi chạy, theo dõi, hoàn thành, hủy quy trình BPMN |
 | Ứng dụng | `POST /v1/applications` · `POST /v1/approvals` | Đăng ký ứng dụng và phê duyệt độc lập |
+| Thống kê | `GET /v1/applications/stats` | Số đếm và mốc thời gian theo tenant, chỉ cần `audit.read` |
 | Năng lực | `GET /v1/capabilities` · `POST /v1/capabilities/{id}/versions` | Công bố và khám phá năng lực có phiên bản |
 | Cấp quyền | `POST /v1/trust/grants` · `POST /v1/trust/grants/{id}/revoke` | Cấp, kích hoạt và thu hồi quyền giữa ứng dụng |
 | Đồng ý của tôi | `GET`/`POST /v1/me/consents` · `POST /v1/me/consents/{id}/revoke` | Người dân cho phép ứng dụng nào được gọi chức năng nào về mình, vì mục đích gì, đến khi nào; thu hồi tức thì |

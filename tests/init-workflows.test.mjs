@@ -24,7 +24,7 @@ async function workspace(t) {
   return root;
 }
 
-function engine(previous) {
+function engine(previous, allowedTenants = ["tenant-a", "tenant-b"]) {
   const calls = [], uploads = [], reads = [], messages = [];
   const request = async (path, options) => {
     calls.push(path);
@@ -38,7 +38,7 @@ function engine(previous) {
     assert.equal(url.pathname, "/repository/process-definitions");
     assert.equal(url.searchParams.get("latest"), "true");
     const key = url.searchParams.get("key"), tenant = url.searchParams.get("tenantId");
-    assert.ok(["tenant-a", "tenant-b"].includes(tenant));
+    assert.ok(allowedTenants.includes(tenant));
     return { data: previous ? [{ id: `${key}:1:${tenant}/resource` }] : [] };
   };
   const text = async (path) => {
@@ -81,6 +81,24 @@ test("deploys a new business key and the technical checkpoint for every configur
   ]);
   assert.deepEqual(fake.reads, []);
   assert.equal(fake.messages.at(-1), "Workflow definitions ready: 1 business, 1 technical, tenants: tenant-a,tenant-b (4 deployed)");
+});
+
+test("the default deploys business and technical definitions to both environments and legacy tenants", async (t) => {
+  const previous = process.env.WORKFLOW_TENANTS;
+  t.after(() => {
+    if (previous === undefined) delete process.env.WORKFLOW_TENANTS;
+    else process.env.WORKFLOW_TENANTS = previous;
+  });
+  delete process.env.WORKFLOW_TENANTS;
+  const root = await workspace(t);
+  const expected = ["demo", "production", "tenant-a", "tenant-b"];
+  const fake = engine(undefined, expected);
+  const result = await initWorkflows({ root, ...fake });
+  assert.deepEqual(result, { ok: true, business: 1, technical: 1, tenants: expected, deployed: 8 });
+  assert.deepEqual(fake.uploads.map(({ tenant, name }) => [tenant, name]), [
+    ...expected.map(tenant => [tenant, "sample.bpmn20.xml"]),
+    ...expected.map(tenant => [tenant, "checkpoint.bpmn20.xml"]),
+  ]);
 });
 
 test("skips identical resource XML for business and technical definitions", async (t) => {

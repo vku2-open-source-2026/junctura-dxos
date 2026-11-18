@@ -11,6 +11,12 @@ In the current screens, the decisions an operator can take are application regis
 
 The shared design system supports light/dark themes, text sizing and bilingual text: Vietnamese (`vi`) by default, English (`en`) selectable.
 
+## Environment banner
+
+After sign-in, the environment banner shows the verified tenant from `/v1/identity`:
+`demo` shows the demo, simulated-data, read-only label; `production` shows the operations
+environment label; any other tenant shows its name only. There is no banner without a user.
+
 ## Terminology
 
 | Concept | Vietnamese | English | Meaning |
@@ -39,11 +45,12 @@ The shared design system supports light/dark themes, text sizing and bilingual t
 
 ## Navigation
 
-[modules.ts](../console/src/constants/modules.ts) defines the seven working sidebar entries in this order; permission checks can hide restricted entries. The footer contains Docs and Settings.
+[modules.ts](../console/src/constants/modules.ts) defines the current sidebar entries in this order; permission checks can hide restricted entries. The footer contains Docs and Settings.
 
 | Screen ID | Vietnamese sidebar label |
 | --- | --- |
 | `dashboard` | Tổng quan |
+| `ecosystem` | Hệ sinh thái |
 | `queue` | Việc cần duyệt |
 | `apps` | Ứng dụng |
 | `caps` | Năng lực |
@@ -62,10 +69,11 @@ Reads below are `GET` unless stated otherwise; paths are Gateway paths before th
 | Screen | Reads | Allowed actions and boundaries |
 | --- | --- | --- |
 | Overview (`dashboard`) | `/v1/metrics/traffic?minutes=60`, `/v1/metrics/requests?limit=6`; with `audit.read`, `/v1/workflows/executions?status=running&limit=100` | Refresh; open traffic, request log or running executions. Traffic and recent requests refresh every 30 seconds. |
+| Ecosystem (`ecosystem`, Hệ sinh thái) | `/v1/applications/stats` with `audit.read` | Read-only totals and an application table: state, last activity, calls in/out, connections, published capabilities, records and files. Rows open the application detail; a link opens the connection map. No mutation controls. |
 | Traffic (`traffic`, Lưu lượng) | `/v1/metrics/features?minutes=60` | Refresh; inspect requests, errors and latency by feature, sorted by request count; refreshes every 30 seconds. |
 | Requests (`requests`, Nhật ký request) | `/v1/metrics/requests?limit=100` | Refresh; filter by status and method; refreshes every 30 seconds. |
 | Approval queue (`queue`) | `/v1/trust/graph`; application/grant lookup when deciding | Approve/reject pending application registrations and sharing grants; reject requires a reason. Own proposals are blocked. The queue refreshes every 15 seconds. |
-| Applications (`apps`) | `/v1/trust/graph`, `/v1/applications/{id}`; detail also reads capabilities and storage summary, plus audit events and directory principals with `audit.read` | Search/filter; inspect owner, capabilities, sharing, storage and approval metadata. Approve/reject only pending registrations; revoke an existing application with a reason. Applications register through the API; no registration form. Technical identifiers are collapsed. |
+| Applications (`apps`) | `/v1/trust/graph`, `/v1/applications/{id}`; detail also reads capabilities, storage summary and, with `audit.read`, `/v1/applications/stats`, audit events and directory principals | Search/filter; inspect owner, capabilities, sharing, storage, activity and approval metadata. Approve/reject only pending registrations; revoke an existing application with a reason. Applications register through the API; no registration form. Technical identifiers are collapsed. |
 | Capabilities (`caps`) | `/v1/capabilities?limit=100` | Search/filter the catalogue by state; refresh. Read-only; no publication or invocation controls. |
 | Connection map (`connect-map`, Sơ đồ kết nối) | `/v1/trust/graph` | Inspect/filter relations; revoke with a reason when permitted (`trust.write` or `trust.approve`). |
 | Sharing grants (`grants`, Quyền truy cập) | `/v1/trust/graph`; optional `/v1/audit-events?limit=100` and `/v1/directory/principals` with `audit.read` | Search/filter pending, active, rejected, revoked and expired relations; inspect proposer/decision metadata. Approve/reject pending proposals or revoke effective grants (`trust.approve`); reject/revoke require a reason. No create, propose or extend action. |
@@ -85,6 +93,13 @@ Reads below are `GET` unless stated otherwise; paths are Gateway paths before th
 | Sign-in (`login`) | `/login-hints.json`; OIDC endpoints described below, followed by `/v1/identity` | Password sign-in or PKCE SSO; retry identity verification. |
 
 Application decisions use `POST /v1/approvals`, then `POST /v1/applications/{id}/approve` or `/state`; revocation uses `/state`. Sharing approval first reads `GET /v1/trust/grants/{id}`, creates an approval, then calls `POST /v1/trust/grants/{id}/activate`. Sharing rejection/revocation uses `POST /v1/trust/grants/{id}/revoke`. Revision-bound writes send `If-Match`.
+
+The application detail also shows an Activity card from `/v1/applications/stats`, only with
+`audit.read`: last activity, calls, connections, published capabilities, records and files.
+A missing entry shows a neutral message, and a failed request shows inline error text.
+The API client validates the complete statistics response; malformed data produces the
+error state with retry in both the Ecosystem page and the Activity card, never zero-filled
+numbers.
 
 ## Security
 
@@ -127,6 +142,7 @@ The table mirrors every API location in [default.conf](../console/nginx/default.
 | `/ready` | GET |
 | `/v1/identity` | GET |
 | `/v1/applications/{id}` | GET |
+| `/v1/applications/stats` | GET |
 | `/v1/applications/{id}/approve`, `/v1/applications/{id}/state` | POST |
 | `/v1/applications` | POST |
 | `/v1/approvals` | POST |

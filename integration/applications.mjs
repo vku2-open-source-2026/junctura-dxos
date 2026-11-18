@@ -46,6 +46,7 @@ async function login(username,password,clientId,full=false) {
   assert.equal(tokens.status,200); const session=await tokens.json();return full?session:session.access_token;
 }
 async function human(label,tenant,permissions) {
+  adminToken=await operatorToken(); // Keycloak operator tokens live 60 s; slow hosts outlast them.
   const clientId=`${prefix}-management-${tenant}`;
   const username=`${prefix}-${label}`, password=randomBytes(32).toString("hex");
   const result=await admin("users",{username,enabled:true,firstName:"Technical",lastName:"Fixture",email:`${username}@example.invalid`,emailVerified:true,attributes:{tenant_id:[tenant]},credentials:[{type:"password",value:password,temporary:false}]},"POST");
@@ -134,7 +135,7 @@ before(async()=>{
   // pinned Keycloak profile drops undeclared user attributes on admin create.
   const template=(await (await admin("clients?clientId=tenant-a")).json())[0];
   const source=await (await admin(`clients/${template.id}`)).json();
-  for(const tenant of ["tenant-a","tenant-b"]){
+  for(const tenant of ["tenant-a","tenant-b","demo","production"]){
     const protocolMappers=structuredClone(source.protocolMappers);
     for(const mapper of protocolMappers) delete mapper.id;
     protocolMappers.find(m=>m.name==="tenant").config["claim.value"]=tenant;
@@ -495,4 +496,37 @@ test("audit verification over HTTP seals the tenant chain and requires audit.rea
   assert.equal((await api("/v1/audit-events/verify",stranger,{})).status,403);
   assert.equal((await api("/v1/audit-events/verify",auditor,{seal:1})).status,400);
   assert.equal((await api("/v1/audit-events/verify",undefined,{})).status,401);
+});
+
+const environmentReads=['/v1/applications/stats','/v1/capabilities','/v1/trust/graph','/v1/audit-events','/v1/directory/principals',
+  '/v1/directory/organizations','/v1/metrics/traffic','/v1/metrics/requests','/v1/metrics/features','/v1/me/data-access',
+  '/v1/me/consents','/v1/emergency-accesses','/v1/storage/summary','/v1/storage/files','/v1/storage/collections',
+  '/v1/workflows/definitions','/v1/workflows/executions','/v1/workflows/summary'];
+test('demo and production environments are isolated on every management read and in application statistics',async()=>{
+  const permissions=['applications.register','applications.approve','trust.approve','audit.read'];
+  const prodOwner=await human('prod-owner','production',permissions), prodApprover=await human('prod-approver','production',permissions);
+  const demoReader=await human('demo-reader','demo',['audit.read']);
+  const backend=await resourceBackend('prod-backend',prodOwner,prodApprover,'production');
+  const secrets=[backend.app.appId,backend.subject,backend.clientId,prodOwner.id,prodApprover.id];
+  assert.equal((await api('/v1/applications/stats',undefined)).status,401);
+  assert.equal((await api('/v1/applications/stats',serviceToken)).status,403,'service identities are not administrators');
+  const prodStats=await api('/v1/applications/stats',prodOwner);assert.equal(prodStats.status,200);
+  const prodBody=await prodStats.json();
+  assert.ok(prodBody.applications.some(a=>a.id===backend.app.appId&&a.state==='active'));
+  assert.ok(prodBody.totals.applications>=1&&prodBody.totals.activeApplications>=1);
+  const statuses={};
+  for(const path of environmentReads){
+    for(const headers of [{},{'X-Tenant-Id':'production','X-Junctura-Tenant':'production'}]){
+      const r=await globalThis.fetch(base+path,{headers:{Authorization:`Bearer ${demoReader.token}`,...headers},signal:AbortSignal.timeout(15000)});
+      const text=await r.text();statuses[path]=r.status;
+      assert.ok(r.status<500,`${path}: ${r.status}`);
+      for(const value of secrets) assert.ok(!text.includes(value),`${path} leaks production data`);
+    }
+  }
+  console.log('demo read statuses',JSON.stringify(statuses));
+  assert.equal(statuses['/v1/applications/stats'],200);assert.equal(statuses['/v1/audit-events'],200);
+  const demoStats=await (await api('/v1/applications/stats',demoReader)).json();
+  assert.ok(!demoStats.applications.some(a=>a.id===backend.app.appId));
+  assert.equal(demoStats.totals.applications,demoStats.applications.length);
+  for(const who of [demoReader,foreign]) assert.ok([403,404].includes((await api(`/v1/applications/${backend.app.appId}`,who)).status));
 });

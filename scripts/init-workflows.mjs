@@ -18,7 +18,7 @@ async function definitions(directory) {
 
 export async function initWorkflows({
   root = "/definitions",
-  tenants = process.env.WORKFLOW_TENANTS ?? "tenant-a,tenant-b",
+  tenants = process.env.WORKFLOW_TENANTS ?? "demo,production,tenant-a,tenant-b",
   request,
   text,
   log = console.log,

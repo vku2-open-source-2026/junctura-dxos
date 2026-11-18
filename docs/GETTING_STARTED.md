@@ -18,7 +18,7 @@ git clone https://github.com/vku2-open-source-2026/junctura-dxos.git
 cd junctura-dxos
 npm run setup
 npm run doctor
-npm run local:up
+npm run local:demo
 npm run healthcheck
 ```
 
@@ -33,8 +33,15 @@ it reports Gateway and Console readiness. It prints configuration key names, nev
 their secret values. Optional Python/OpenSSL diagnostics concern integration tests,
 not the ordinary installation. C4A/C4B should both report disabled.
 
-`local:up` builds Core and Console, starts their dependencies, applies migrations
-and waits up to 300 seconds. `healthcheck` reads `.env` and requires both process
+`local:demo` runs `setup` only when `.env` is missing, then `local:up` (build,
+start, migrations, wait up to 300 seconds), `env:provision`, `demo:seed` and
+`demo:console`, and prints the Console URL. Provisioning creates the read-only
+`demo` account in tenant `demo` and `admin1`–`admin3` plus the read-only judge
+`giamkhao` in tenant `production`; passwords are generated at run time, never
+printed, and stored in `.junctura/demo-accounts.json` (mode 0600). Only `demo`
+appears in the public login hints; the judge expiry defaults to 2026-12-15 and is
+applied only when `env:provision` is re-run. Use `local:up` instead if you do not
+want the simulated accounts and data. See [Operations](OPERATIONS.md#public-demo-server). `healthcheck` reads `.env` and requires both process
 liveness and configured Foundation readiness. Expected final probe output:
 
 ```text

@@ -666,6 +666,10 @@ export const en: typeof vi = {
       "label": "Overview",
       "desc": "Operational numbers, traffic chart and request log."
     },
+    "ecosystem": {
+      "label": "Ecosystem",
+      "desc": "Overview of applications, activity and connections in this environment."
+    },
     "traffic": {
       "label": "Traffic",
       "desc": "Requests, errors and latency per minute."
@@ -762,6 +766,52 @@ export const en: typeof vi = {
       "label": "Settings",
       "desc": "Organisation name, language and sign-in sessions."
     }
+  },
+  "environment": {
+    "demo": "Demo environment · simulated data · read-only",
+    "production": "Operations environment · simulated data of the running products",
+    "tenant": "Tenant: {tenant}"
+  },
+  "ecosystem": {
+    "title": "Ecosystem",
+    "subtitle": "Overview of registered applications, activity and connections in this environment.",
+    "loading": "Loading ecosystem statistics...",
+    "loadErrorTitle": "Could not load ecosystem statistics",
+    "loadErrorDesc": "The API gateway did not return statistics. Try again; no estimated numbers are shown.",
+    "statApplications": "Applications",
+    "statApplicationsHint": "registered in this environment",
+    "statActive": "Active",
+    "statActiveHint": "in active state",
+    "statActive24h": "Active in 24 hours",
+    "statActive24hHint": "applications active in the last 24 hours",
+    "statActive7d": "Active in 7 days",
+    "statActive7dHint": "applications active in the last 7 days",
+    "statConnections": "Open connections",
+    "statConnectionsHint": "grants still in effect",
+    "tableTitle": "Applications in the ecosystem",
+    "tableHint": "Aggregate counts only; data content and file names are not shown.",
+    "colName": "Application",
+    "colState": "State",
+    "colLastActivity": "Last activity",
+    "lastActivity": "Last activity",
+    "colCallsOut24h": "Calls out 24h",
+    "colCallsOut7d": "Calls out 7d",
+    "colCallsIn24h": "Calls in 24h",
+    "colCallsIn7d": "Calls in 7d",
+    "colConnections": "Connections (given/received)",
+    "colCapabilities": "Published capabilities",
+    "colRecords": "Records",
+    "colFiles": "Files",
+    "never": "Never",
+    "filesUnavailable": "No file data",
+    "openApp": "Open application details for {name}",
+    "emptyTitle": "No applications yet",
+    "emptyDesc": "No application is registered in this environment yet. When an application is registered, its activity statistics will appear here.",
+    "connectionMap": "View the connection map",
+    "activityTitle": "Activity",
+    "activityDesc": "Aggregate statistics for this application.",
+    "activityError": "Could not load activity statistics.",
+    "activityMissing": "No activity statistics for this application yet."
   },
   "palette": {
     "title": "Quick search",

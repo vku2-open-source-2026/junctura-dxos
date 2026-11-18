@@ -4,6 +4,7 @@ import {
   Activity,
   AlertTriangle,
   AppWindow,
+  Boxes,
   Building2,
   CheckCircle2,
   FolderArchive,
@@ -52,6 +53,12 @@ export interface ModuleDef {
 
 export const MODULES = [
   { id: "dashboard", group: "overview", icon: Home },
+  {
+    id: "ecosystem",
+    group: "overview",
+    icon: Boxes,
+    perm: "audit.read",
+  },
   { id: "traffic", group: "overview", icon: Activity },
   { id: "requests", group: "overview", icon: List },
   { id: "queue", group: "overview", icon: Inbox, badgeKey: "pending" },
@@ -99,6 +106,7 @@ export const MODULE_IDS: ModuleId[] = MODULES.map((module) => module.id);
 
 export const SIDEBAR_ITEM_IDS = [
   "dashboard",
+  "ecosystem",
   "queue",
   "apps",
   "caps",
@@ -111,6 +119,7 @@ export type SidebarItemId = (typeof SIDEBAR_ITEM_IDS)[number];
 
 export const SIDEBAR_SCREEN_MAP: Partial<Record<ScreenId, ModuleId>> = {
   dashboard: "dashboard",
+  ecosystem: "ecosystem",
   traffic: "dashboard",
   requests: "dashboard",
   queue: "queue",
