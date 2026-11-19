@@ -7,7 +7,7 @@ This is the default, empty business definitions directory. It contains no BPMN
 files, so a default deployment installs only the technical checkpoint.
 
 Set `WORKFLOW_DEFINITIONS_DIR` to an operator-provided application directory
-(for example `../junctura-workspace/workflows`). Compose mounts it read-only at
+(for example `../junctura-health/workflows`). Compose mounts it read-only at
 `/definitions/business`; the initializer recursively collects `*.bpmn20.xml`.
 
 Every business definition must pass the strict policy before any definition is

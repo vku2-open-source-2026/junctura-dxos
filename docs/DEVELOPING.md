@@ -252,7 +252,7 @@ The runner strips CRLF delimiters for execution but hashes original bytes;
 
 ## Demo data and developer journey
 
-Layer 1 ships no domain scenario; a Layer-2 repository (for example junctura-workspace)
+Layer 1 ships no domain scenario; a Layer-2 repository (junctura-health)
 registers its own applications, capabilities, grants and records through the public APIs.
 
 `npm run local:demo` runs `setup` when `.env` is missing, then `local:up`, `env:provision`,

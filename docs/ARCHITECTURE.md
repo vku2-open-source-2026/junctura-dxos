@@ -27,11 +27,11 @@ The Junctura Console is the operator interface of Layer 1, comparable to Supabas
 
 At least one user-facing GUI application must exercise Core APIs in a real end-to-end scenario. Technical vendor administration consoles do not substitute for this application.
 
-Layer 2 provides shared, domain-neutral digital capability spaces on top of Core: [junctura-workspace](https://github.com/vku2-open-source-2026/junctura-workspace) (under development; planned workflow inbox, capability catalog and access requests, personal consent view) and the shared health contracts and UI kit in [junctura-health](https://github.com/vku2-open-source-2026/junctura-health).
+Layer 2 is [junctura-health](https://github.com/vku2-open-source-2026/junctura-health), the shared health capability space: versioned capability contracts, medical BPMN workflows (`workflows/`), the shared UI kit `@junctura/health-ui`, seed data and demo setup (`demo:setup`/`demo:seed`) and the Cổng Junctura Health application — the user-facing GUI of Layer 2.
 
 ## Layer 3 — Business applications
 
-Sector applications plug in and out on top of Layers 1 and 2 without changing them: the Clinic, Pharmacy, Hospital and Insurance applications in the `vku2-open-source-2026` organization (a personal MyHealth application is planned). They own their business rules, data and screens, and reach Core only through its public APIs.
+Sector applications plug in and out on top of Layers 1 and 2 without changing them: the Clinic, Pharmacy, Hospital and Insurance applications in the `vku2-open-source-2026` organization (a personal MyHealth application is planned). They own their business rules, data and screens, follow the contracts Layer 2 defines, and call Layer 1 directly with their own identity through its public APIs; there is no intermediary station.
 
 ## Runtime topology
 

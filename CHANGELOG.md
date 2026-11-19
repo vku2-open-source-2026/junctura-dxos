@@ -8,6 +8,15 @@ All notable changes to Junctura are recorded here. Versions follow
 
 ## Unreleased
 
+- **Docs — Layer 2 is junctura-health (issue #53):** README, architecture,
+  developing and OLP docs name [junctura-health](https://github.com/vku2-open-source-2026/junctura-health)
+  as the Layer 2 shared health capability space (capability contracts, medical
+  BPMN workflows, `@junctura/health-ui`, seed data and the Cổng Junctura Health
+  GUI) in place of the former workspace repository. Layer 3 apps (Clinic,
+  Hospital, Pharmacy, Insurance, MyHealth) call Core directly with their own
+  identity under the contracts Layer 2 defines; `WORKFLOW_DEFINITIONS_DIR`
+  examples point to `../junctura-health/workflows`.
+
 - **CI dependency audit:** the Console audit now blocks only on advisories in
   dependencies that ship in the served bundle (`npm audit --omit=dev`). The full
   audit, including Vite and Vitest build and test tooling, still runs and prints
