@@ -8,6 +8,11 @@ All notable changes to Junctura are recorded here. Versions follow
 
 ## Unreleased
 
+- **CI dependency audit:** the Console audit now blocks only on advisories in
+  dependencies that ship in the served bundle (`npm audit --omit=dev`). The full
+  audit, including Vite and Vitest build and test tooling, still runs and prints
+  its report without failing the job, so an advisory with no upstream fix (such
+  as GHSA-fc5q-39xc-vjpf in `picomatch`) no longer turns `main` red.
 - **Environments demo / production (issue #48):** `npm run env:provision`
   (with `demo:provision` as an alias) now creates two environment tenants.
   Tenant `demo` has one read-only account `demo`, the only account in public
