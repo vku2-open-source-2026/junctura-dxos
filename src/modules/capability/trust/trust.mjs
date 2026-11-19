@@ -98,7 +98,9 @@ export const TRUST_GRAPH_PATH = "/v1/trust/graph";
 
 // Read-only view of the tenant's cross-application trust: applications as nodes,
 // direct grants as edges. The database applies the same visibility rule as a
-// grant lookup (administrators see the tenant, writers their own providers).
+// grant lookup (administrators and audit.read principals see the tenant, writers
+// their own providers); readOnly reports that the caller holds no mutating trust
+// permission.
 export async function handleTrustGraph(request, response, identity, config, url) {
   if (url.pathname !== TRUST_GRAPH_PATH) throw new HttpError(404, "not_found");
   if (request.method !== "GET") throw new HttpError(405, "method_not_allowed");
@@ -114,7 +116,8 @@ export async function handleTrustGraph(request, response, identity, config, url)
     result = await db.json();
   } catch { throw new HttpError(503, "trust_unavailable"); }
   if (result?.error) throw new HttpError(result.status, result.error);
-  if (result?.status !== 200 || !Array.isArray(result.value?.nodes) || !Array.isArray(result.value?.edges)) throw new HttpError(503, "trust_unavailable");
+  if (result?.status !== 200 || !Array.isArray(result.value?.nodes) || !Array.isArray(result.value?.edges) ||
+    typeof result.value.readOnly !== "boolean") throw new HttpError(503, "trust_unavailable");
   response.setHeader("Cache-Control", "no-store");
   return json(response, 200, result.value);
 }

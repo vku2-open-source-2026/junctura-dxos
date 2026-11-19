@@ -8,6 +8,14 @@ All notable changes to Junctura are recorded here. Versions follow
 
 ## Unreleased
 
+- **Read-only trust graph for auditors (issue #56):** migration 028 lets a
+  management principal with `audit.read` read the whole tenant's
+  `GET /v1/trust/graph` (tenant scope, read-only); `trust.write` keeps its
+  owned-provider scope and `trust.approve` its tenant scope. The response adds
+  `readOnly`: `true` only when the caller holds neither `trust.write` nor
+  `trust.approve`. Principals without any of the three permissions still get
+  `403 trust_permission_required`.
+
 - **Docs — Layer 2 is junctura-health (issue #53):** README, architecture,
   developing and OLP docs name [junctura-health](https://github.com/vku2-open-source-2026/junctura-health)
   as the Layer 2 shared health capability space (capability contracts, medical

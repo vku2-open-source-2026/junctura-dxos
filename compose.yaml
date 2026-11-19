@@ -91,6 +91,7 @@ services:
       - ./infra/postgres/025-storage-summary.sql:/migrations/025-storage-summary.sql:ro
       - ./infra/postgres/026-storage-collections.sql:/migrations/026-storage-collections.sql:ro
       - ./infra/postgres/027-application-stats.sql:/migrations/027-application-stats.sql:ro
+      - ./infra/postgres/028-trust-graph-read.sql:/migrations/028-trust-graph-read.sql:ro
     depends_on:
       database:
         condition: service_healthy

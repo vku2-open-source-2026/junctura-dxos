@@ -40,11 +40,11 @@ management_client)` confer explicit [permissions](CAPABILITIES.md#permissions):
 | --- | --- |
 | `applications.register` | Propose an application matching an operator enrollment. |
 | `applications.approve` | Administer application lifecycle; approval also needs `trust.approve`. |
-| `trust.write` | Propose direct grants for an owned provider application. |
-| `trust.approve` | Independent trust decisions and application approval decisions. |
+| `trust.write` | Propose direct grants for an owned provider application; also a wider trust-graph view (own providers). |
+| `trust.approve` | Independent trust decisions and application approval decisions; tenant-wide trust-graph view. |
 | `capabilities.write`, `capabilities.publish`, `capabilities.approve` | Authoring (creation always needs `write`), tenant registry administration incl. publication, and publication approval. |
 | `compositions.write`, `compositions.publish`, `compositions.approve` | Separate composition authoring, publication and approval powers. |
-| `audit.read` | Read and verify the caller tenant's audit history; also the tenant directory, traffic metrics, storage and workflow administration views (metadata, no record values). |
+| `audit.read` | Read and verify the caller tenant's audit history; also the tenant directory, traffic metrics, storage, application statistics, workflow administration views and the read-only tenant trust graph (metadata, no record values). |
 
 Activation/reactivation consumes an unexpired approval bound to the proposal digest/revision,
 from a subject other than the owner. Realm roles/membership do not imply management permissions.

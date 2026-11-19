@@ -249,6 +249,7 @@ The runner strips CRLF delimiters for execution but hashes original bytes;
 | 025 | Read-only storage aggregates and workflow audit-access gate. |
 | 026 | Read-only collection field/type inference from at most the 200 newest records, without values. |
 | 027 | Read-only application statistics through a `SECURITY DEFINER` function and private role. |
+| 028 | Trust graph also readable by `audit.read` (tenant scope); `readOnly` reports no mutating trust permission. |
 
 ## Demo data and developer journey
 
