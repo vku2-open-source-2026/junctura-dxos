@@ -17,7 +17,7 @@ Competition requirements, current Junctura coverage and submission checklist.
 | Headless, không giao diện người dùng | Core chỉ cung cấp API; Console là công cụ quản trị tách riêng |
 | Zero-Trust, an toàn thông tin | Xác thực tại cổng, cô lập tenant/ứng dụng, OpenBao, audit được bảo vệ |
 | Sao lưu và khôi phục | Kiểm thử `pg_dump`/`pg_restore` cô lập, kiểm tra lại RLS và audit |
-| Ít nhất một ứng dụng Tầng 2 trong H-P-D-I | [junctura-workspace](https://github.com/vku2-open-source-2026/junctura-workspace) (repo riêng, đang xây dựng); ứng dụng nghiệp vụ Tầng 3 ở các repo Clinic, Pharmacy, Hospital, Insurance |
+| Ít nhất một ứng dụng Tầng 2 trong H-P-D-I | [junctura-health](https://github.com/vku2-open-source-2026/junctura-health) (repo riêng): contract năng lực, quy trình BPMN y tế (`workflows/`), thư viện `@junctura/health-ui`, dữ liệu mẫu và Cổng Junctura Health; giao diện end-to-end đang hoàn thiện cho vòng nộp. Ứng dụng nghiệp vụ Tầng 3 ở các repo Clinic, Hospital, Pharmacy, Insurance, MyHealth |
 | Tầng trên đổi nghiệp vụ không ảnh hưởng tầng nền | Lõi trung lập miền: quy trình nghiệp vụ do ứng dụng cấp khi triển khai, Console không ghi cứng tên nghiệp vụ, `npm run check:neutral` chặn từ vựng nghiệp vụ trong CI |
 
 ## Official references
@@ -34,7 +34,7 @@ Verify the latest organizer announcements before submission. The references, not
 - Open-core means independently reusable services, not simply a single application's backend split into folders.
 - Technology examples in the problem are **references, not required brands**.
 
-Layer 2/3 apps are built in separate repositories: `junctura-workspace` (Layer 2); Clinic, Pharmacy, Hospital and Insurance (Layer 3). Their end-to-end GUI demonstration remains pending; the operator Console does not satisfy Layer 2.
+Layer 2/3 apps are built in separate repositories. Layer 2 is `junctura-health`, the shared health capability space: versioned capability contracts, medical BPMN workflows (`workflows/`), the shared UI kit `@junctura/health-ui`, seed data (`demo:setup`/`demo:seed`) and the Cổng Junctura Health application. Layer 3 apps (Clinic, Hospital, Pharmacy, Insurance, MyHealth) call Core directly with their own identity under the contracts Layer 2 defines. The end-to-end GUI experience is being completed for the submission round; the operator Console does not satisfy Layer 2.
 
 See [architecture](ARCHITECTURE.md), [Core API](CORE_API.md), [capabilities](CAPABILITIES.md) and [Console](CONSOLE.md).
 

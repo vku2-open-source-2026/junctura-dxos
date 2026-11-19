@@ -70,12 +70,11 @@ Mỗi ứng dụng vẫn do đơn vị của mình phát triển và sở hữu;
 ```mermaid
 flowchart TB
   subgraph L3["Tầng 3 · ứng dụng nghiệp vụ (cắm-rút)"]
-    B1["Ứng dụng nghiệp vụ A"]
-    B2["Ứng dụng nghiệp vụ B"]
+    B1["Clinic · Hospital · Pharmacy<br/>Insurance · MyHealth"]
   end
 
   subgraph L2["Tầng 2 · không gian năng lực dùng chung"]
-    W1["Junctura Workspace (đang xây dựng)<br/>quy trình · kết nối · cá nhân"]
+    W1["junctura-health · Cổng Junctura Health<br/>contract năng lực · quy trình BPMN y tế<br/>@junctura/health-ui"]
   end
 
   OPS["Console quản trị<br/>chỉ xem · duyệt quyền truy cập"]
@@ -99,7 +98,7 @@ flowchart TB
     end
   end
 
-  B1 & B2 --> GW
+  B1 --> GW
   W1 --> GW
   OPS --> GW
   GW --> CAP --> FND
@@ -108,6 +107,8 @@ flowchart TB
 Chỉ cổng API mở ra ngoài; mọi dịch vụ khác nằm trong mạng nội bộ. Core chạy không quyền root trên hệ thống tệp chỉ đọc.
 
 **Tầng 1 không chứa nghiệp vụ.** Lõi chỉ cung cấp năng lực dùng chung qua API. Quy trình, tên đơn vị, tên bộ dữ liệu và chức năng nghiệp vụ do ứng dụng Tầng 2/3 cung cấp khi chạy, nên tầng trên đổi nghiệp vụ mà không phải sửa lõi; `npm run check:neutral` chặn từ vựng nghiệp vụ lọt vào lõi.
+
+Tầng 2 là [junctura-health](https://github.com/vku2-open-source-2026/junctura-health) — không gian năng lực y tế dùng chung: contract năng lực, quy trình BPMN y tế (`workflows/`), thư viện giao diện `@junctura/health-ui`, dữ liệu mẫu và Cổng Junctura Health. Ứng dụng Tầng 3 (Clinic, Hospital, Pharmacy, Insurance, MyHealth) ở repo riêng, gọi thẳng Tầng 1 bằng định danh riêng, theo contract do Tầng 2 quy định.
 
 **Console là trang quản trị của lõi**, giống Supabase Studio hay Directus Data Studio: xem trạng thái nền tảng và duyệt **quyền truy cập**: duyệt hoặc thu hồi đăng ký ứng dụng, duyệt hoặc thu hồi quyền chia sẻ chức năng giữa các ứng dụng. Chức năng đã công bố, đồng ý của người dùng và truy cập khẩn cấp chỉ hiển thị để theo dõi (duyệt công bố và hậu kiểm khẩn cấp làm qua API). Console không chạy, hoàn thành, hủy hay duyệt **nghiệp vụ**; việc đó thuộc ứng dụng Tầng 2/3. Lõi chạy đầy đủ khi tắt Console. Chi tiết: [Kiến trúc](docs/ARCHITECTURE.md).
 
@@ -208,7 +209,7 @@ const same = await junctura.getRecord("contacts", record.id);
 | `npm run app:enroll -- <tên>` | Đăng ký và phê duyệt một ứng dụng mới |
 | `npm run trust:demo` · `-- token` | Tạo dữ liệu demo cho sơ đồ tin cậy (4 ứng dụng, 3 chức năng, 5 quyền) · in token người duyệt cho Console |
 | `npm run audit:demo` · `-- tamper` · `-- restore` | Demo kiểm tra toàn vẹn nhật ký: kiểm tra, sửa lén một sự kiện, khôi phục |
-| `npm run provider:pki -- <tên>…` | Tạo CA và chứng chỉ TLS cho dịch vụ cung cấp năng lực chạy nội bộ (Tầng 2) |
+| `npm run provider:pki -- <tên>…` | Tạo CA và chứng chỉ TLS cho dịch vụ cung cấp năng lực chạy nội bộ (Tầng 2/3) |
 | `npm run backup` · `npm run restore -- <thư-mục> --yes` | Sao lưu · khôi phục toàn bộ dữ liệu |
 | `npm run console` | Chạy Console ở chế độ phát triển |
 | `npm run env:provision` | Tạo/cập nhật tài khoản `demo`/`production`, quyền Console và login hints (`demo` only); `demo:provision` là bí danh |
@@ -275,7 +276,7 @@ Phiên bản chính xác và giấy phép của từng thành phần: [THIRD-PAR
 
 ```text
 src/            Junctura Core: xác thực, dữ liệu, tệp, quy trình, ứng dụng, năng lực
-sdk/node/       Node SDK cho ứng dụng Tầng 2
+sdk/node/       Node SDK cho ứng dụng Tầng 2/3
 console/        Junctura Console (React, Vite, TypeScript)
 infra/          Cấu hình Keycloak, Nginx, PostgreSQL (migration), SeaweedFS, Flowable, OpenBao
 scripts/        Cài đặt, chẩn đoán, đăng ký ứng dụng, sao lưu, đóng gói phát hành
@@ -300,7 +301,7 @@ npm run test:integration           # kiểm thử tích hợp
 - [x] Nhật ký kiểm toán niêm phong bằng chuỗi băm SHA-256, kiểm tra toàn vẹn ngay trên Console.
 - [x] Sơ đồ tin cậy (Trust Graph) giữa các ứng dụng trên Console, thu hồi quyền ngay trên sơ đồ.
 - [x] **v0.2.0 — Console quản trị:** Console đọc hoàn toàn từ API thật (nhật ký kiểm toán, lưu lượng, người dùng, tổ chức, dữ liệu, tệp, quy trình), đăng nhập qua Keycloak.
-- [ ] **v0.3.0 — Tầng 2:** các ứng dụng minh họa thuộc không gian H-P-D-I, chia sẻ dữ liệu và năng lực qua Junctura.
+- [ ] **v0.3.0 — Tầng 2 (junctura-health):** không gian năng lực y tế dùng chung — contract năng lực, quy trình BPMN y tế, thư viện `@junctura/health-ui` và Cổng Junctura Health chia sẻ dữ liệu, năng lực qua Junctura; ứng dụng Tầng 3 gọi thẳng lõi theo contract đó.
 - [ ] Giám sát hệ thống (Prometheus, Grafana) và triển khai thử nghiệm trên Internet.
 
 ## Đóng góp
