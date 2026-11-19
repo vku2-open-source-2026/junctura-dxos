@@ -17,6 +17,7 @@ import { Button } from "../../common/Button";
 import { Card, CardContent, CardHeader, CardTitle } from "../../common/Card";
 import { EmptyState } from "../../common/EmptyState";
 import { ErrorState } from "../../common/ErrorState";
+import { ForbiddenNotice } from "../../common/ForbiddenNotice";
 import { LoadingSkeleton } from "../../common/LoadingSkeleton";
 import { PermissionDenied } from "../../common/PermissionDenied";
 import { StatCard } from "../../common/StatCard";
@@ -106,7 +107,7 @@ export const EcosystemScreen: React.FC = () => {
       {!allowed ? (
         permissionBlock
       ) : error === "permission" ? (
-        permissionBlock
+        <ForbiddenNotice />
       ) : error ? (
         <ErrorState
           title={e.loadErrorTitle}

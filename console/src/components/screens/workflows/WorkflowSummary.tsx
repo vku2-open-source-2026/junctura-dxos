@@ -16,13 +16,14 @@ import { Card, CardContent, CardHeader, CardTitle } from "../../common/Card";
 import { StatCard } from "../../common/StatCard";
 import { EmptyState } from "../../common/EmptyState";
 import { ErrorState } from "../../common/ErrorState";
+import { ForbiddenNotice } from "../../common/ForbiddenNotice";
 import { LoadingSkeleton } from "../../common/LoadingSkeleton";
 import { friendlyWorkflowName } from "./workflowMeta";
 
 interface WorkflowSummaryProps {
   summary: WorkflowSummaryData | null;
   loading: boolean;
-  loadError: boolean;
+  loadError: "generic" | "forbidden" | null;
   onRetry: () => void;
   onSelect: (definition: WorkflowSummaryDefinition) => void;
 }
@@ -79,11 +80,15 @@ export const WorkflowSummary: React.FC<WorkflowSummaryProps> = ({
         <CardContent className="p-0">
           {loadError ? (
             <div className="p-5">
-              <ErrorState
-                title={w.summaryErrorTitle}
-                message={w.summaryErrorDesc}
-                onRetry={onRetry}
-              />
+              {loadError === "forbidden" ? (
+                <ForbiddenNotice />
+              ) : (
+                <ErrorState
+                  title={w.summaryErrorTitle}
+                  message={w.summaryErrorDesc}
+                  onRetry={onRetry}
+                />
+              )}
             </div>
           ) : loading && definitions.length === 0 ? (
             <div className="p-5">

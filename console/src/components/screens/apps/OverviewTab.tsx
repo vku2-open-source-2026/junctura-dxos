@@ -7,8 +7,7 @@ import { useI18n } from "../../../locales/i18n";
 import { Card, CardContent, CardHeader, CardTitle } from "../../common/Card";
 import { Badge } from "../../common/Badge";
 import { Button } from "../../common/Button";
-import { AppStateBadge } from "./AppStateBadge";
-import { AppActivityCard } from "./AppActivityCard";
+import { AppStateBadge } from "./AppStateBadge";import { AppActivityCard } from "./AppActivityCard";
 import { formatDateTime } from "./format";
 import type { AppDetailModel } from "./appDetailModel";
 import type { AppRelatedData } from "./useAppRelated";
@@ -24,6 +23,7 @@ interface OverviewTabProps {
   related: AppRelatedData;
   names: Map<string, string>;
   language: Language;
+  canDecide: boolean;
   onApprove: () => void;
   onReject: () => void;
 }
@@ -34,6 +34,7 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
   related,
   names,
   language,
+  canDecide,
   onApprove,
   onReject,
 }) => {
@@ -122,22 +123,30 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
               </p>
             </div>
             <div className="flex flex-wrap gap-2">
-              <Button
-                variant="teal"
-                size="sm"
-                onClick={onApprove}
-                leftIcon={<ShieldCheck className="w-3.5 h-3.5" />}
-              >
-                {a.approveBtn}
-              </Button>
-              <Button
-                variant="destructive"
-                size="sm"
-                onClick={onReject}
-                leftIcon={<XCircle className="w-3.5 h-3.5" />}
-              >
-                {a.rejectBtn}
-              </Button>
+              {canDecide ? (
+                <>
+                  <Button
+                    variant="teal"
+                    size="sm"
+                    onClick={onApprove}
+                    leftIcon={<ShieldCheck className="w-3.5 h-3.5" />}
+                  >
+                    {a.approveBtn}
+                  </Button>
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    onClick={onReject}
+                    leftIcon={<XCircle className="w-3.5 h-3.5" />}
+                  >
+                    {a.rejectBtn}
+                  </Button>
+                </>
+              ) : (
+                <p className="text-sm text-slate-500 dark:text-slate-400">
+                  {t.common.readOnlyAction}
+                </p>
+              )}
             </div>
           </CardContent>
         </Card>

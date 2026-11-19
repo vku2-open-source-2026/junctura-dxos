@@ -4,6 +4,7 @@ import React, { useMemo } from "react";
 import { ArrowLeft } from "lucide-react";
 import type { Application, Language, TrustGraph } from "../../../types";
 import { useI18n } from "../../../locales/i18n";
+import { useSession } from "../../../services/session";
 import { PageHeader } from "../../layout/PageHeader";
 import { Button } from "../../common/Button";
 import { AppStateBadge } from "./AppStateBadge";
@@ -38,6 +39,8 @@ export const AppDetail: React.FC<AppDetailProps> = ({
 }) => {
   const { t } = useI18n();
   const a = t.applications;
+  const { can } = useSession();
+  const canDecide = can("applications.approve");
   const related = useAppRelated(application);
 
   const names = useMemo(
@@ -137,12 +140,17 @@ export const AppDetail: React.FC<AppDetailProps> = ({
           related={related}
           names={names}
           language={language}
+          canDecide={canDecide}
           onApprove={onApprove}
           onReject={onReject}
         />
       )}
       {tab === "settings" && (
-        <SettingsTab application={application} onRevoke={onRevoke} />
+        <SettingsTab
+          application={application}
+          canDecide={canDecide}
+          onRevoke={onRevoke}
+        />
       )}
     </div>
   );

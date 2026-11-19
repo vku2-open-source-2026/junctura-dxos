@@ -8,7 +8,7 @@ import type {
   TrustGraph,
   TrustGraphEdge,
 } from "../../types";
-import { api } from "../../services/apiClient";
+import { ApiError, api } from "../../services/apiClient";
 import { useI18n } from "../../locales/i18n";
 import { useSession } from "../../services/session";
 import { useToast } from "../common/Toast";
@@ -17,6 +17,7 @@ import { Button } from "../common/Button";
 import { Card, CardContent } from "../common/Card";
 import { EmptyState } from "../common/EmptyState";
 import { ErrorState } from "../common/ErrorState";
+import { ForbiddenNotice } from "../common/ForbiddenNotice";
 import { LoadingSkeleton } from "../common/LoadingSkeleton";
 import { SearchFilterBar } from "../common/SearchFilterBar";
 import { displayPerson } from "../../services/display";
@@ -50,6 +51,7 @@ export const GrantsScreen: React.FC = () => {
   const [principals, setPrincipals] = useState<DirectoryPrincipal[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [forbidden, setForbidden] = useState(false);
   const [query, setQuery] = useState("");
   const [stateFilter, setStateFilter] = useState<ShareFilter>("all");
   const [detailEdge, setDetailEdge] = useState<TrustGraphEdge | null>(null);
@@ -62,6 +64,7 @@ export const GrantsScreen: React.FC = () => {
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
+    setForbidden(false);
     try {
       const nextGraph = await api.getTrustGraph();
       setGraph(nextGraph);
@@ -85,11 +88,16 @@ export const GrantsScreen: React.FC = () => {
       setPrincipals(principalPage.items);
     } catch (failure) {
       const code = failure instanceof Error ? failure.message : "";
+      const isForbidden =
+        failure instanceof ApiError && failure.status === 403;
       setGraph(null);
+      setForbidden(isForbidden);
       setError(
-        code === "trust_permission_required"
-          ? g.loadErrorPermission
-          : g.loadErrorGeneric
+        isForbidden
+          ? null
+          : code === "trust_permission_required"
+            ? g.loadErrorPermission
+            : g.loadErrorGeneric
       );
     } finally {
       setLoading(false);
@@ -261,7 +269,9 @@ export const GrantsScreen: React.FC = () => {
         </div>
       )}
 
-      {error ? (
+      {forbidden ? (
+        <ForbiddenNotice />
+      ) : error ? (
         <ErrorState
           title={g.loadErrorTitle}
           message={error}

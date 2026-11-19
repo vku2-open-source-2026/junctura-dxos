@@ -551,7 +551,9 @@ export const vi = {
     "copyFull": "Sao chép giá trị đầy đủ",
     "techDetails": "Chi tiết kỹ thuật",
     "techDetailsShow": "Hiện chi tiết kỹ thuật",
-    "techDetailsHide": "Ẩn chi tiết kỹ thuật"
+    "techDetailsHide": "Ẩn chi tiết kỹ thuật",
+    "forbiddenView": "Tài khoản này không có quyền xem mục này",
+    "readOnlyAction": "Tài khoản của bạn chỉ có quyền xem nên thao tác này không khả dụng."
   },
   "glossary": {
     "capability": {
@@ -629,7 +631,9 @@ export const vi = {
     "toggleTheme": "Đổi giao diện sáng/tối",
     "lightTheme": "Chuyển sang chế độ sáng",
     "darkTheme": "Chuyển sang chế độ tối",
-    "liveShort": "Trực tiếp"
+    "liveShort": "Trực tiếp",
+    "readOnlyBanner": "Bạn đang xem ở chế độ chỉ đọc",
+    "expired": "Phiên đã hết, vui lòng đăng nhập lại"
   },
   "sidebar": {
     "groups": {

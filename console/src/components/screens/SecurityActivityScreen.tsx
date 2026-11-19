@@ -3,11 +3,12 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Download, RefreshCw } from "lucide-react";
 import type { AuditEventEntry, AuditVerification } from "../../types";
-import { api } from "../../services/apiClient";
+import { ApiError, api } from "../../services/apiClient";
 import { useI18n } from "../../locales/i18n";
 import { PageHeader } from "../layout/PageHeader";
 import { Button } from "../common/Button";
 import { ErrorState } from "../common/ErrorState";
+import { ForbiddenNotice } from "../common/ForbiddenNotice";
 import { useToast } from "../common/Toast";
 import { AuditTable } from "./audit/AuditTable";
 import { IntegrityCard } from "./audit/IntegrityCard";
@@ -26,6 +27,7 @@ export const SecurityActivityScreen: React.FC = () => {
   const [entries, setEntries] = useState<AuditEventEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
+  const [loadForbidden, setLoadForbidden] = useState(false);
   const [query, setQuery] = useState("");
   const [resultFilter, setResultFilter] = useState<ResultFilter>("all");
   const [rangeFilter, setRangeFilter] = useState<RangeFilter>("7d");
@@ -41,11 +43,15 @@ export const SecurityActivityScreen: React.FC = () => {
   const load = useCallback(async () => {
     setLoading(true);
     setLoadError(false);
+    setLoadForbidden(false);
     try {
       const page = await api.getAuditEvents({ limit: 100 });
       setEntries(page.items);
-    } catch {
+    } catch (failure) {
       setEntries([]);
+      setLoadForbidden(
+        failure instanceof ApiError && failure.status === 403
+      );
       setLoadError(true);
     } finally {
       setLoading(false);
@@ -162,7 +168,11 @@ export const SecurityActivityScreen: React.FC = () => {
       />
 
       {loadError ? (
-        <ErrorState message={a.errorGeneric} onRetry={() => void load()} />
+        loadForbidden ? (
+          <ForbiddenNotice />
+        ) : (
+          <ErrorState message={a.errorGeneric} onRetry={() => void load()} />
+        )
       ) : (
         <AuditTable
           rows={filtered}

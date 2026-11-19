@@ -38,6 +38,14 @@ export function permissionsFromRoles(roles: readonly string[]): PermId[] {
   return permissions;
 }
 
+export function isReadOnlyPermissions(
+  permissions: readonly PermId[]
+): boolean {
+  return !permissions.some((perm) =>
+    (WRITER_PERMISSIONS as PermId[]).includes(perm)
+  );
+}
+
 export interface SessionContextValue {
   user: SessionUser | null;
   permissions: PermId[];

@@ -299,7 +299,7 @@ describe("Task 34 — users and organisations from the directory API", () => {
     ).toBeInTheDocument();
   });
 
-  it("shows a permission message when the directory returns 403", async () => {
+  it("shows a friendly permission message when the directory returns 403", async () => {
     installApiFetch([
       (url) =>
         url.includes("/v1/directory/principals")
@@ -308,11 +308,11 @@ describe("Task 34 — users and organisations from the directory API", () => {
     ]);
     await openScreen("users");
     expect(
-      await screen.findByText(viStrings.users.permissionDeniedTitle)
+      await screen.findByText(viStrings.common.forbiddenView)
     ).toBeInTheDocument();
   });
 
-  it("shows a permission message when organisations return 403", async () => {
+  it("shows a friendly permission message when organisations return 403", async () => {
     installApiFetch([
       (url) =>
         url.includes("/v1/directory/organizations")
@@ -321,7 +321,7 @@ describe("Task 34 — users and organisations from the directory API", () => {
     ]);
     await openScreen("orgs");
     expect(
-      await screen.findByText(viStrings.orgs.permissionDeniedTitle)
+      await screen.findByText(viStrings.common.forbiddenView)
     ).toBeInTheDocument();
   });
 

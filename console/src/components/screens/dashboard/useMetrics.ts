@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { FeatureSeries, RecentRequest, TrafficSeries } from "../../../types";
-import { api } from "../../../services/apiClient";
+import { ApiError, api } from "../../../services/apiClient";
 
 function useAutoRefresh(load: (silent: boolean) => Promise<void>, refreshMs?: number) {
   const loadRef = useRef(load);
@@ -18,24 +18,30 @@ function useAutoRefresh(load: (silent: boolean) => Promise<void>, refreshMs?: nu
   }, [refreshMs, load]);
 }
 
+type LoadError = "generic" | "forbidden" | null;
+
 export function useTrafficSeries(minutes: number, refreshMs?: number) {
   const [series, setSeries] = useState<TrafficSeries | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(false);
+  const [error, setError] = useState<LoadError>(null);
   const requestId = useRef(0);
 
   const load = useCallback(
     async (silent = false) => {
       const current = ++requestId.current;
       if (!silent) setLoading(true);
-      setError(false);
+      setError(null);
       try {
         const next = await api.getTrafficSeries(minutes);
         if (current === requestId.current) setSeries(next);
-      } catch {
+      } catch (failure) {
         if (current === requestId.current) {
           setSeries(null);
-          setError(true);
+          setError(
+            failure instanceof ApiError && failure.status === 403
+              ? "forbidden"
+              : "generic"
+          );
         }
       } finally {
         if (current === requestId.current) setLoading(false);
@@ -52,21 +58,25 @@ export function useTrafficSeries(minutes: number, refreshMs?: number) {
 export function useFeatureSeries(minutes: number, refreshMs?: number) {
   const [series, setSeries] = useState<FeatureSeries | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(false);
+  const [error, setError] = useState<LoadError>(null);
   const requestId = useRef(0);
 
   const load = useCallback(
     async (silent = false) => {
       const current = ++requestId.current;
       if (!silent) setLoading(true);
-      setError(false);
+      setError(null);
       try {
         const next = await api.getFeatureSeries(minutes);
         if (current === requestId.current) setSeries(next);
-      } catch {
+      } catch (failure) {
         if (current === requestId.current) {
           setSeries(null);
-          setError(true);
+          setError(
+            failure instanceof ApiError && failure.status === 403
+              ? "forbidden"
+              : "generic"
+          );
         }
       } finally {
         if (current === requestId.current) setLoading(false);
@@ -83,21 +93,25 @@ export function useFeatureSeries(minutes: number, refreshMs?: number) {
 export function useRecentRequests(limit: number, refreshMs?: number) {
   const [items, setItems] = useState<RecentRequest[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(false);
+  const [error, setError] = useState<LoadError>(null);
   const requestId = useRef(0);
 
   const load = useCallback(
     async (silent = false) => {
       const current = ++requestId.current;
       if (!silent) setLoading(true);
-      setError(false);
+      setError(null);
       try {
         const next = await api.getRecentRequests(limit);
         if (current === requestId.current) setItems(next);
-      } catch {
+      } catch (failure) {
         if (current === requestId.current) {
           setItems([]);
-          setError(true);
+          setError(
+            failure instanceof ApiError && failure.status === 403
+              ? "forbidden"
+              : "generic"
+          );
         }
       } finally {
         if (current === requestId.current) setLoading(false);

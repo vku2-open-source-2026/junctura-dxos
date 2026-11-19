@@ -9,6 +9,7 @@ import { Button } from "../../common/Button";
 import { Card, CardContent, CardHeader, CardTitle } from "../../common/Card";
 import { EmptyState } from "../../common/EmptyState";
 import { ErrorState } from "../../common/ErrorState";
+import { ForbiddenNotice } from "../../common/ForbiddenNotice";
 import { LoadingSkeleton } from "../../common/LoadingSkeleton";
 import { formatDateTime, statusClass } from "./metrics";
 import { useRecentRequests } from "./useMetrics";
@@ -79,11 +80,15 @@ export const RequestsScreen: React.FC = () => {
       />
 
       {error ? (
-        <ErrorState
-          title={d.loadError}
-          message={d.recentError}
-          onRetry={refresh}
-        />
+        error === "forbidden" ? (
+          <ForbiddenNotice />
+        ) : (
+          <ErrorState
+            title={d.loadError}
+            message={d.recentError}
+            onRetry={refresh}
+          />
+        )
       ) : (
         <Card>
           <CardHeader>

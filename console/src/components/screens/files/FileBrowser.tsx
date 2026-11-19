@@ -19,6 +19,7 @@ import { Button } from "../../common/Button";
 import { Card, CardContent, CardHeader, CardTitle } from "../../common/Card";
 import { EmptyState } from "../../common/EmptyState";
 import { ErrorState } from "../../common/ErrorState";
+import { ForbiddenNotice } from "../../common/ForbiddenNotice";
 import { LoadingSkeleton } from "../../common/LoadingSkeleton";
 import { FileListing } from "./FileListing";
 import {
@@ -220,19 +221,15 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({ app }) => {
             <LoadingSkeleton rows={5} />
           </div>
         ) : error ? (
-          <ErrorState
-            title={
-              error === "permission"
-                ? f.folderPermissionTitle
-                : f.folderErrorTitle
-            }
-            message={
-              error === "permission"
-                ? f.folderPermissionDesc
-                : f.folderErrorDesc
-            }
-            onRetry={() => setRetryToken((token) => token + 1)}
-          />
+          error === "permission" ? (
+            <ForbiddenNotice />
+          ) : (
+            <ErrorState
+              title={f.folderErrorTitle}
+              message={f.folderErrorDesc}
+              onRetry={() => setRetryToken((token) => token + 1)}
+            />
+          )
         ) : empty ? (
           <EmptyState
             title={f.folderEmptyTitle}

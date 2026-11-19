@@ -206,6 +206,7 @@ export class ApiClient {
   private token: string | null;
   private currentIdentity: UserIdentity | null;
   private identityRequestId = 0;
+  private refreshHandler: (() => Promise<boolean>) | null = null;
   private readonly listeners = new Set<() => void>();
 
   constructor() {
@@ -243,7 +244,8 @@ export class ApiClient {
   private async send(
     path: string,
     init: RequestInit = {},
-    withAuth = true
+    withAuth = true,
+    allowRefresh = true
   ): Promise<Response> {
     if (!isApprovedBaseUrl(this.baseUrl)) {
       throw new ApiError(0, "gateway_origin_not_approved");
@@ -252,7 +254,24 @@ export class ApiClient {
     if (withAuth && this.token) {
       headers.set("Authorization", `Bearer ${this.token}`);
     }
-    return fetch(this.buildUrl(path), { ...init, headers });
+    const response = await fetch(this.buildUrl(path), { ...init, headers });
+    if (
+      response.status === 401 &&
+      withAuth &&
+      this.token &&
+      allowRefresh &&
+      this.refreshHandler
+    ) {
+      const renewed = await this.refreshHandler();
+      if (renewed) {
+        return this.send(path, init, withAuth, false);
+      }
+    }
+    return response;
+  }
+
+  public setRefreshHandler(handler: (() => Promise<boolean>) | null): void {
+    this.refreshHandler = handler;
   }
 
   private async fail(res: Response, fallback: string): Promise<never> {

@@ -5,7 +5,7 @@ import { ArrowLeft } from "lucide-react";
 import { JuncturaLogo } from "../common/JuncturaLogo";
 import { PublicControls } from "../common/PublicControls";
 import { useI18n } from "../../locales/i18n";
-import { getOidcError, type OidcErrorCode } from "../../services/oidc";
+import { getOidcError, getSessionExpired, type OidcErrorCode } from "../../services/oidc";
 import { LoginBackdrop } from "./login/LoginBackdrop";
 import { LoginForm } from "./login/LoginForm";
 import type { IdentityState, ScreenId } from "../../types";
@@ -23,6 +23,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
 }) => {
   const { t } = useI18n();
   const [callbackError] = useState<OidcErrorCode | null>(getOidcError);
+  const [sessionExpired] = useState(getSessionExpired);
 
   const status = identityState.status;
   const needsSignOut =
@@ -55,6 +56,15 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
           </div>
 
           <div className="px-6 pb-6 sm:px-8">
+            {sessionExpired && (
+              <p
+                role="status"
+                data-testid="session-expired"
+                className="mb-3 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm leading-relaxed text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-200"
+              >
+                {t.session.expired}
+              </p>
+            )}
             <LoginForm
               callbackError={callbackError}
               identityNotice={identityNotice}

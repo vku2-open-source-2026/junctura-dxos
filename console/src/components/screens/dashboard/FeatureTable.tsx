@@ -7,13 +7,14 @@ import { useI18n } from "../../../locales/i18n";
 import { Card, CardContent, CardHeader, CardTitle } from "../../common/Card";
 import { EmptyState } from "../../common/EmptyState";
 import { ErrorState } from "../../common/ErrorState";
+import { ForbiddenNotice } from "../../common/ForbiddenNotice";
 import { LoadingSkeleton } from "../../common/LoadingSkeleton";
 import { FeatureSparkline } from "./FeatureSparkline";
 
 interface FeatureTableProps {
   features: FeatureMetric[];
   loading: boolean;
-  loadError: boolean;
+  loadError: "generic" | "forbidden" | null;
   onRetry: () => void;
 }
 
@@ -50,11 +51,15 @@ export const FeatureTable: React.FC<FeatureTableProps> = ({
       <CardContent className="p-0">
         {loadError ? (
           <div className="p-5">
-            <ErrorState
-              title={d.loadError}
-              message={d.loadErrorHint}
-              onRetry={onRetry}
-            />
+            {loadError === "forbidden" ? (
+              <ForbiddenNotice />
+            ) : (
+              <ErrorState
+                title={d.loadError}
+                message={d.loadErrorHint}
+                onRetry={onRetry}
+              />
+            )}
           </div>
         ) : loading && features.length === 0 ? (
           <div className="p-5">

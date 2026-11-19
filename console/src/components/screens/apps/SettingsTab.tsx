@@ -10,11 +10,13 @@ import { AppStateBadge } from "./AppStateBadge";
 
 interface SettingsTabProps {
   application: Application;
+  canDecide: boolean;
   onRevoke: () => void;
 }
 
 export const SettingsTab: React.FC<SettingsTabProps> = ({
   application,
+  canDecide,
   onRevoke,
 }) => {
   const { t } = useI18n();
@@ -51,14 +53,20 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
             </p>
           ) : (
             <div className="space-y-3">
-              <Button
-                variant="destructive"
-                size="sm"
-                onClick={onRevoke}
-                leftIcon={<Ban className="w-3.5 h-3.5" />}
-              >
-                {a.actionRevoke}
-              </Button>
+              {canDecide ? (
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  onClick={onRevoke}
+                  leftIcon={<Ban className="w-3.5 h-3.5" />}
+                >
+                  {a.actionRevoke}
+                </Button>
+              ) : (
+                <p className="text-sm text-slate-500 dark:text-slate-400">
+                  {t.common.readOnlyAction}
+                </p>
+              )}
               <div className="flex items-start gap-2 text-sm text-slate-500 dark:text-slate-400">
                 <Info className="mt-0.5 h-4 w-4 flex-shrink-0" aria-hidden="true" />
                 <p>{a.selfRegistrationNotice}</p>

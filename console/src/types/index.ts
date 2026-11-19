@@ -365,6 +365,8 @@ export interface TrustGraph {
   edges: TrustGraphEdge[];
   truncated: boolean;
   generatedAt: string;
+  /** True when the API says this session may only look, not revoke. */
+  readOnly?: boolean;
 }
 
 export interface TrustGrant {

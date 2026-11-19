@@ -8,6 +8,7 @@ import { Button } from "../../common/Button";
 import { Card, CardContent, CardHeader, CardTitle } from "../../common/Card";
 import { EmptyState } from "../../common/EmptyState";
 import { ErrorState } from "../../common/ErrorState";
+import { ForbiddenNotice } from "../../common/ForbiddenNotice";
 import { LoadingSkeleton } from "../../common/LoadingSkeleton";
 
 export type StructureStatus =
@@ -88,13 +89,7 @@ export const CollectionStructurePanel: React.FC<
           />
         )}
 
-        {status === "permission" && (
-          <ErrorState
-            title={r.structurePermissionTitle}
-            message={r.structurePermissionDesc}
-            onRetry={onRetry}
-          />
-        )}
+        {status === "permission" && <ForbiddenNotice />}
 
         {status === "ready" && collection && (
           <div className="space-y-4">
