@@ -327,7 +327,58 @@ Demo security checklist:
 | Users page says `missing` | Run `env:provision` to upsert the environment principals for the current issuer. |
 | Empty data pages | Run `demo:seed`, or the Layer-2 scenario repository's setup, against the running stack. |
 | Judge still active after the expiry date | Re-run `env:provision -- --tenants production`, or use `--disable-judge`; expiry is applied only when the script runs. |
-| Wrong issuer after changing `PUBLIC_URL` | For disposable data only, reset as above and reprovision; preserve real data for a reviewed authority migration. |
+| Wrong issuer after changing `PUBLIC_URL` | For disposable data, reset as above and reprovision; to keep real data, follow [Changing `PUBLIC_URL` on a running deployment](#changing-public_url-on-a-running-deployment). |
+
+### Changing `PUBLIC_URL` on a running deployment
+
+`PUBLIC_URL` sets the issuer that Keycloak signs into tokens (`<PUBLIC_URL>/identity/realms/junctura`)
+and that Core accepts (`OIDC_ISSUER`). Browser sign-in by redirect only works when it is the public
+HTTPS origin: otherwise the Keycloak login form posts to the old address. Core keys principals,
+enrollments, applications, grants, executions and subject consents by `(tenant, issuer, …)`, so a
+new issuer alone makes every existing identity unknown. To move a deployment that keeps real data:
+
+1. Back up and note the old issuer:
+
+   ```sh
+   npm run backup
+   curl -fsS http://127.0.0.1:8080/identity/realms/junctura/.well-known/openid-configuration | grep -o '"issuer":"[^"]*"'
+   ```
+
+2. Stop Core so that nothing writes an issuer during the move: `docker compose stop core`.
+3. Rewrite the issuer in one transaction (as the database owner, on `junctura_data`):
+
+   ```sql
+   \set old 'http://127.0.0.1:8080/identity/realms/junctura'
+   \set new 'https://junctura.example/identity/realms/junctura'
+   BEGIN;
+   UPDATE app_private.principals            SET issuer = :'new' WHERE issuer = :'old';
+   UPDATE app_private.enrollments           SET issuer = :'new' WHERE issuer = :'old';
+   UPDATE app_private.applications          SET issuer = :'new' WHERE issuer = :'old';
+   UPDATE trust_private.grants              SET issuer = :'new' WHERE issuer = :'old';
+   UPDATE execution_private.executions      SET issuer = :'new' WHERE issuer = :'old';
+   UPDATE execution_private.subject_consents SET issuer = :'new' WHERE issuer = :'old';
+   UPDATE composition_private.executions    SET issuer = :'new' WHERE issuer = :'old';
+   COMMIT;
+   ```
+
+   `app_private.audit` is not rewritten: it is append-only and the issuer is part of each entry
+   hash. Old entries keep the old issuer as history; audit queries are scoped by tenant, so they
+   stay visible. Application activity in the Console counts events from the new issuer onward.
+
+4. Set `PUBLIC_URL=https://junctura.example` in `.env` (no trailing slash, no `/identity`) and
+   recreate the two services that read it: `docker compose up -d identity core`.
+5. Allow the public origin for the Console's single sign-on: in the Keycloak administration, add
+   `https://junctura.example/*` to the `junctura-console` client's redirect URIs and post-logout
+   redirect URIs, and `https://junctura.example` to its web origins. The realm file is imported
+   only once, so this is not picked up from `infra/keycloak/realm.json`.
+6. Verify: the discovery document above reports the new issuer, `npm run healthcheck` passes,
+   a password sign-in to the Console shows data, and a redirect sign-in completes on the public
+   origin. Existing tokens and sessions carry the old issuer and are rejected; users sign in again.
+
+Administrative scripts that call Keycloak may keep using the local gateway, for example
+`PUBLIC_URL=http://127.0.0.1:8080 npm run env:provision`; the issuer of the tokens they obtain
+is set by Keycloak, not by the address they call. To roll back, restore the backup with the old
+`.env` value.
 
 ## Deployment gate
 
