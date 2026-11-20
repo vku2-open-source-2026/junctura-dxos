@@ -213,6 +213,7 @@
     "schema": "TrustGraph",
     "value": {
       "scope": "tenant",
+      "readOnly": false,
       "nodes": [
         {
           "appId": "9b1f3c2a-4d5e-4f60-8a71-0c2d3e4f5a6b",
