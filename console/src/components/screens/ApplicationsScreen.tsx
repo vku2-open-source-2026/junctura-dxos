@@ -2,12 +2,13 @@
 // SPDX-License-Identifier: Apache-2.0
 import React, { useCallback, useEffect, useState } from "react";
 import type { Application, TrustGraph } from "../../types";
-import { api } from "../../services/apiClient";
+import { ApiError, api } from "../../services/apiClient";
 import { useI18n } from "../../locales/i18n";
 import { useToast } from "../common/Toast";
 import { LoadingSkeleton } from "../common/LoadingSkeleton";
 import { ErrorState } from "../common/ErrorState";
 import { EmptyState } from "../common/EmptyState";
+import { ForbiddenNotice } from "../common/ForbiddenNotice";
 import { AppList } from "./apps/AppList";
 import { AppDetail } from "./apps/AppDetail";
 import {
@@ -26,6 +27,7 @@ export const ApplicationsScreen: React.FC = () => {
   const [graph, setGraph] = useState<TrustGraph | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [loadForbidden, setLoadForbidden] = useState(false);
 
   const [detailApp, setDetailApp] = useState<Application | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
@@ -49,9 +51,11 @@ export const ApplicationsScreen: React.FC = () => {
   const loadApplications = useCallback(async () => {
     setIsLoading(true);
     setLoadError(null);
+    setLoadForbidden(false);
     try {
       setGraph(await api.getTrustGraph());
-    } catch {
+    } catch (failure) {
+      setLoadForbidden(failure instanceof ApiError && failure.status === 403);
       setLoadError(a.loadListFailed);
     } finally {
       setIsLoading(false);
@@ -270,12 +274,15 @@ export const ApplicationsScreen: React.FC = () => {
   }
 
   return (
-    <AppList
-      applications={graph?.nodes ?? []}
-      isLoading={isLoading}
-      error={loadError}
-      onOpen={openApp}
-      onRetry={() => void loadApplications()}
-    />
+    <>
+      {loadForbidden && <ForbiddenNotice />}
+      <AppList
+        applications={graph?.nodes ?? []}
+        isLoading={isLoading && !loadForbidden}
+        error={loadForbidden ? null : loadError}
+        onOpen={openApp}
+        onRetry={() => void loadApplications()}
+      />
+    </>
   );
 };

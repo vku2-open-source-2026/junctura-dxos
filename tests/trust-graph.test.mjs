@@ -5,12 +5,13 @@ import { createServer } from "node:http";
 import { after, before, test } from "node:test";
 import { handleTrustGraph } from "../src/modules/capability/trust/trust.mjs";
 import { HttpError, json } from "../src/platform/http/http.mjs";
+import { readFileSync } from "node:fs";
 
 const identity = { tenantId: "tenant-a", subject: "approver", issuer: "https://identity.example.invalid", clientId: "management", roles: ["core-reader"] };
 const provider = "11111111-1111-4111-8111-111111111111";
 const consumer = "22222222-2222-4222-8222-222222222222";
 const graph = {
-  scope: "tenant",
+  scope: "tenant", readOnly: true,
   nodes: [{ appId: provider, displayName: "Danh bạ", state: "active", owned: false }, { appId: consumer, displayName: "Văn bản", state: "active", owned: false }],
   edges: [{ grantId: "33333333-3333-4333-8333-333333333333", providerAppId: provider, consumerAppId: consumer,
     capabilityId: `urn:junctura:capability:${provider}:contact-lookup`, version: "1.0.0", title: "Tra cứu liên hệ",
@@ -18,6 +19,7 @@ const graph = {
     activatedAt: "2026-11-04T00:01:00+00:00", revokedAt: null, expiresAt: "2026-12-04T00:00:00+00:00" }],
   truncated: false, generatedAt: "2026-11-04T00:02:00.000Z",
 };
+const writerGraph = { ...graph, readOnly: false };
 let reply = { status: 200, value: graph };
 let seen = [];
 let data, core, base;
@@ -65,5 +67,58 @@ test("permission errors, bad requests and outages fail closed", async () => {
   assert.equal((await get()).status, 503);
   reply = { status: 200, value: { nodes: "x" } };
   assert.equal((await get()).status, 503, "malformed database answer is rejected");
+  reply = { status: 200, value: { ...graph, readOnly: "yes" } };
+  assert.equal((await get()).status, 503, "a non-boolean readOnly is rejected");
   reply = { status: 200, value: graph };
+});
+
+test("the readOnly flag passes through unchanged", async () => {
+  reply = { status: 200, value: writerGraph };
+  const response = await get();
+  assert.equal(response.status, 200);
+  assert.equal((await response.json()).readOnly, false, "writers and approvers are not read-only");
+  reply = graph;
+});
+
+test("migration 028 grants audit.read tenant access and marks pure viewers read-only", () => {
+  const sql = readFileSync(new URL("../infra/postgres/028-trust-graph-read.sql", import.meta.url), "utf8");
+  assert.match(sql, /CREATE OR REPLACE FUNCTION core\.trust_graph\(payload jsonb\) RETURNS jsonb/);
+  assert.match(sql, /SET LOCAL ROLE junctura_app_owner/);
+  assert.match(sql, /LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path=pg_catalog/);
+  assert.match(sql, /ARRAY\['trust\.write','trust\.approve','audit\.read'\]::text\[\]/, "audit.read is accepted");
+  assert.match(sql, /perms IS NULL OR NOT \(perms && ARRAY\['trust\.write','trust\.approve','audit\.read'\]::text\[\]\)/, "empty or unrelated permissions still fail closed");
+  assert.match(sql, /administrator:='trust\.approve'=ANY\(perms\)/);
+  assert.match(sql, /auditor:='audit\.read'=ANY\(perms\)/);
+  assert.match(sql, /readOnly:=NOT administrator AND NOT 'trust\.write'=ANY\(perms\)/);
+  assert.match(sql, /g\.issuer=iss AND \(administrator OR auditor OR p\.owner_subject=who\)/, "auditors see the whole tenant");
+  assert.match(sql, /'scope',CASE WHEN administrator OR auditor THEN 'tenant' ELSE 'owned' END/);
+  assert.match(sql, /'readOnly',readOnly/);
+  assert.match(sql, /ALTER FUNCTION core\.trust_graph\(jsonb\) OWNER TO junctura_app_owner/);
+  assert.match(sql, /REVOKE ALL ON FUNCTION core\.trust_graph\(jsonb\) FROM PUBLIC/);
+  assert.match(sql, /GRANT EXECUTE ON FUNCTION core\.trust_graph\(jsonb\) TO junctura_trust_api/);
+  assert.match(sql, /INSERT INTO core\.schema_migrations\(version\) VALUES\(28\)/);
+  assert.match(sql, /NOTIFY pgrst,'reload schema'/);
+});
+
+test("migration 019 stays unchanged with its original permission gate", () => {
+  const sql = readFileSync(new URL("../infra/postgres/019-trust-graph.sql", import.meta.url), "utf8");
+  assert.match(sql, /perms && ARRAY\['trust\.write','trust\.approve'\]::text\[\]/, "original writer/approver gate preserved");
+  assert.match(sql, /INSERT INTO core\.schema_migrations\(version\) VALUES\(19\)/);
+  assert.doesNotMatch(sql, /audit\.read/, "migration 019 is not modified to accept audit.read");
+  assert.doesNotMatch(sql, /readOnly/);
+});
+
+test("migration 029 opens capabilities, applications and emergency reviews to audit.read, read-only", () => {
+  const sql = readFileSync(new URL("../infra/postgres/029-read-only-viewers.sql", import.meta.url), "utf8");
+  assert.match(sql, /auditor:=coalesce\('audit\.read'=ANY\(perms\),false\);/);
+  assert.match(sql, /IF NOT management AND NOT auditor AND actor IS NULL THEN/);
+  assert.match(sql, /perms && ARRAY\['trust\.approve','audit\.read'\]::text\[\]/);
+  // Reviewing an emergency access still needs trust.approve.
+  assert.match(sql, /ELSIF operation='review' THEN\n    IF NOT 'trust\.approve'=ANY\(perms\) THEN RETURN jsonb_build_object\('status',403/);
+  // The application wrapper only answers reads; every other operation goes to the original command.
+  assert.match(sql, /IF operation='get' AND /);
+  assert.match(sql, /RETURN app_private\.application_management_command\(operation,payload\);/);
+  assert.match(sql, /GRANT EXECUTE ON FUNCTION core\.application_command\(text,jsonb\) TO junctura_app_api;/);
+  assert.match(sql, /REVOKE ALL ON FUNCTION app_private\.application_management_command\(text,jsonb\) FROM PUBLIC,junctura_app_api;/);
+  assert.match(sql, /INSERT INTO core\.schema_migrations\(version\) VALUES\(29\);/);
 });

@@ -546,7 +546,9 @@ export const en: typeof vi = {
     "copyFull": "Copy the full value",
     "techDetails": "Technical details",
     "techDetailsShow": "Show technical details",
-    "techDetailsHide": "Hide technical details"
+    "techDetailsHide": "Hide technical details",
+    "forbiddenView": "This account does not have permission to view this item",
+    "readOnlyAction": "Your account is read-only, so this action is not available."
   },
   "glossary": {
     "capability": {
@@ -624,7 +626,9 @@ export const en: typeof vi = {
     "toggleTheme": "Toggle color theme",
     "lightTheme": "Switch to light mode",
     "darkTheme": "Switch to dark mode",
-    "liveShort": "Live"
+    "liveShort": "Live",
+    "readOnlyBanner": "You are viewing in read-only mode",
+    "expired": "Your session has expired, please sign in again"
   },
   "sidebar": {
     "groups": {

@@ -1577,7 +1577,7 @@
       "get": {
         "operationId": "getTrustGraph",
         "summary": "Read the tenant trust graph",
-        "description": "Implemented. Read-only view of direct cross-application trust: applications as nodes and grants as edges, with the effective state (pending, active, expired, revoked) and expiry. An administrator with trust.approve sees every grant of its tenant; a writer with trust.write sees only grants whose provider application it owns. No query parameters: the tenant and scope come from the verified caller. At most 500 newest edges are returned; truncated reports more. See CAPABILITY_DIRECT_TRUST.md.",
+        "description": "Implemented. Read-only view of direct cross-application trust: applications as nodes and grants as edges, with the effective state (pending, active, expired, revoked) and expiry. An administrator with trust.approve or a read-only viewer with audit.read sees every grant of its tenant; a writer with trust.write sees only grants whose provider application it owns. readOnly is true when the caller holds neither trust.write nor trust.approve. No query parameters: the tenant and scope come from the verified caller. At most 500 newest edges are returned; truncated reports more. See CAPABILITY_DIRECT_TRUST.md.",
         "tags": [
           "trust"
         ],
@@ -6887,6 +6887,7 @@
         "additionalProperties": false,
         "required": [
           "scope",
+          "readOnly",
           "nodes",
           "edges",
           "truncated",
@@ -6899,6 +6900,10 @@
               "tenant",
               "owned"
             ]
+          },
+          "readOnly": {
+            "type": "boolean",
+            "description": "True when the caller holds neither trust.write nor trust.approve (an audit.read viewer); such a caller can change nothing."
           },
           "nodes": {
             "type": "array",

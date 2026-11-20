@@ -7,7 +7,7 @@ import { test } from "node:test";
 test("every numbered migration is mounted into the data-migrate runner", () => {
   const compose = readFileSync(new URL("../compose.yaml", import.meta.url), "utf8");
   const migrations = readdirSync(new URL("../infra/postgres/", import.meta.url)).filter((name) => /^\d{3}-.+\.sql$/.test(name)).sort();
-  assert.ok(migrations.length >= 27);
+  assert.ok(migrations.length >= 29);
   for (const name of migrations) {
     assert.ok(compose.includes(`- ./infra/postgres/${name}:/migrations/${name}:ro`), `${name} is not mounted in compose.yaml`);
   }

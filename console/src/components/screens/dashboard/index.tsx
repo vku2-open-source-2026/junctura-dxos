@@ -21,6 +21,7 @@ import { Badge, type BadgeVariant } from "../../common/Badge";
 import { Button } from "../../common/Button";
 import { ErrorState } from "../../common/ErrorState";
 import { EmptyState } from "../../common/EmptyState";
+import { ForbiddenNotice } from "../../common/ForbiddenNotice";
 import { LoadingSkeleton } from "../../common/LoadingSkeleton";
 import { TrafficChart } from "./TrafficChart";
 import { formatClock, statusClass } from "./metrics";
@@ -114,11 +115,15 @@ export const OverviewScreen: React.FC<OverviewScreenProps> = ({ onNavigate }) =>
       />
 
       {traffic.error ? (
-        <ErrorState
-          title={d.loadError}
-          message={d.loadErrorHint}
-          onRetry={refresh}
-        />
+        traffic.error === "forbidden" ? (
+          <ForbiddenNotice />
+        ) : (
+          <ErrorState
+            title={d.loadError}
+            message={d.loadErrorHint}
+            onRetry={refresh}
+          />
+        )
       ) : (
         <>
           <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
@@ -252,7 +257,11 @@ export const OverviewScreen: React.FC<OverviewScreenProps> = ({ onNavigate }) =>
             </CardHeader>
             <CardContent>
               {recent.error ? (
-                <ErrorState message={d.recentError} onRetry={recent.refresh} />
+                recent.error === "forbidden" ? (
+                  <ForbiddenNotice />
+                ) : (
+                  <ErrorState message={d.recentError} onRetry={recent.refresh} />
+                )
               ) : recent.loading && recent.items.length === 0 ? (
                 <LoadingSkeleton rows={3} />
               ) : recent.items.length === 0 ? (

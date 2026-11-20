@@ -8,6 +8,23 @@ All notable changes to Junctura are recorded here. Versions follow
 
 ## Unreleased
 
+- **Read-only viewers see every Console page:** migration 029 lets a
+  management principal with `audit.read` list and read every capability
+  (`GET /v1/capabilities`), read any application of its tenant
+  (`GET /v1/applications/{id}`) and list the emergency access review queue
+  (`GET /v1/emergency-accesses`). Writes keep their own permissions; reviewing
+  an emergency access still needs `trust.approve`. The Console renews its session
+  with the refresh token (memory only) and shows a read-only banner, hides write
+  actions and turns a 403 into a calm notice.
+
+- **Read-only trust graph for auditors:** migration 028 lets a
+  management principal with `audit.read` read the whole tenant's
+  `GET /v1/trust/graph` (tenant scope, read-only); `trust.write` keeps its
+  owned-provider scope and `trust.approve` its tenant scope. The response adds
+  `readOnly`: `true` only when the caller holds neither `trust.write` nor
+  `trust.approve`. Principals without any of the three permissions still get
+  `403 trust_permission_required`.
+
 - **Docs — changing `PUBLIC_URL` on a running deployment (issue #55):**
   `docs/OPERATIONS.md` explains how to move an installation that keeps real data
   to a new public origin: back up, stop Core, rewrite the issuer of principals,

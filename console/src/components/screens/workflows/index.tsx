@@ -7,7 +7,7 @@ import type {
   WorkflowSummary as WorkflowSummaryData,
   WorkflowSummaryDefinition,
 } from "../../../types";
-import { api } from "../../../services/apiClient";
+import { ApiError, api } from "../../../services/apiClient";
 import { useI18n } from "../../../locales/i18n";
 import { PageHeader } from "../../layout/PageHeader";
 import { Button } from "../../common/Button";
@@ -17,6 +17,12 @@ import { WorkflowCaseTable } from "./WorkflowCaseTable";
 import { friendlyWorkflowName } from "./workflowMeta";
 
 type WorkflowStatus = WorkflowExecutionSummary["status"];
+type LoadError = "generic" | "forbidden" | null;
+
+const errorOf = (failure: unknown): LoadError =>
+  failure instanceof ApiError && failure.status === 403
+    ? "forbidden"
+    : "generic";
 
 export const WorkflowsScreen: React.FC = () => {
   const { t } = useI18n();
@@ -26,15 +32,15 @@ export const WorkflowsScreen: React.FC = () => {
   const [executions, setExecutions] = useState<WorkflowExecutionSummary[]>([]);
   const [filter, setFilter] = useState<WorkflowStatus>("running");
   const [loading, setLoading] = useState(true);
-  const [summaryError, setSummaryError] = useState(false);
-  const [executionsError, setExecutionsError] = useState(false);
+  const [summaryError, setSummaryError] = useState<LoadError>(null);
+  const [executionsError, setExecutionsError] = useState<LoadError>(null);
   const [selected, setSelected] =
     useState<WorkflowSummaryDefinition | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
-    setSummaryError(false);
-    setExecutionsError(false);
+    setSummaryError(null);
+    setExecutionsError(null);
     const [summaryResult, executionsResult] = await Promise.allSettled([
       api.getWorkflowSummary(),
       api.getWorkflowExecutions({ limit: 100 }),
@@ -43,13 +49,13 @@ export const WorkflowsScreen: React.FC = () => {
       setSummary(summaryResult.value);
     } else {
       setSummary(null);
-      setSummaryError(true);
+      setSummaryError(errorOf(summaryResult.reason));
     }
     if (executionsResult.status === "fulfilled") {
       setExecutions(executionsResult.value);
     } else {
       setExecutions([]);
-      setExecutionsError(true);
+      setExecutionsError(errorOf(executionsResult.reason));
     }
     setLoading(false);
   }, []);

@@ -6,6 +6,12 @@ export const OIDC_CLIENT_ID = "junctura-console";
 export const OIDC_REALM_PATH = "/identity/realms/junctura/protocol/openid-connect";
 export const OIDC_SESSION_KEY = "junctura_oidc_session";
 export const OIDC_ERROR_KEY = "junctura_oidc_error";
+export const SESSION_EXPIRED_KEY = "junctura_session_expired";
+
+// Renew the access token shortly before it expires so a reader session never
+// dies in the middle of a page load.
+const RENEW_BEFORE_MS = 30_000;
+const DEFAULT_TOKEN_TTL_MS = 5 * 60_000;
 
 export type OidcErrorCode =
   | "state_mismatch"
@@ -37,6 +43,152 @@ interface OidcSession {
 }
 
 let pendingOidcError: OidcErrorCode | null = null;
+let refreshTimer: ReturnType<typeof setTimeout> | null = null;
+let refreshInFlight: Promise<boolean> | null = null;
+
+// The refresh token outlives the access token, so it must never touch web
+// storage: a single XSS bug would otherwise be able to read it. It lives only
+// in this module variable and is dropped on reload, which is an accepted
+// trade-off — the user signs in again after a page refresh.
+let refreshToken: string | null = null;
+
+function storeRefreshToken(value: string | null): void {
+  refreshToken = value;
+}
+
+// Older builds kept the refresh token in sessionStorage under this key; wipe
+// any leftover on startup so data written by a previous version cannot linger.
+const LEGACY_REFRESH_KEY = "junctura_oidc_refresh";
+
+export function removeLegacyRefreshToken(): void {
+  try {
+    sessionStorage.removeItem(LEGACY_REFRESH_KEY);
+  } catch {
+    // Nothing to clean when storage is unavailable.
+  }
+}
+
+removeLegacyRefreshToken();
+
+export function getSessionExpired(): boolean {
+  try {
+    return sessionStorage.getItem(SESSION_EXPIRED_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function setSessionExpired(expired: boolean): void {
+  try {
+    if (expired) {
+      sessionStorage.setItem(SESSION_EXPIRED_KEY, "1");
+    } else {
+      sessionStorage.removeItem(SESSION_EXPIRED_KEY);
+    }
+  } catch {
+    // Without storage the flag only affects the current page lifecycle.
+  }
+}
+
+function tokenExpiryMs(token: string): number | null {
+  const claims = decodeJwtPayload(token);
+  const exp = claims?.exp;
+  return typeof exp === "number" && Number.isFinite(exp)
+    ? exp * 1000
+    : null;
+}
+
+function cancelRenewal(): void {
+  if (refreshTimer !== null) {
+    clearTimeout(refreshTimer);
+    refreshTimer = null;
+  }
+}
+
+// Clears the renewal timer and any stored refresh/expired state. Used on
+// sign-out and to keep tests isolated.
+export function clearSessionState(): void {
+  cancelRenewal();
+  refreshInFlight = null;
+  storeRefreshToken(null);
+  setSessionExpired(false);
+}
+
+// Renews before the earlier of the access token's expiry and the refresh token's
+// (Keycloak's SSO idle timeout is often shorter than the access token lifetime).
+function scheduleRenewal(token: string, refreshExpiresInSeconds?: number): void {
+  cancelRenewal();
+  let expiry = tokenExpiryMs(token) ?? Date.now() + DEFAULT_TOKEN_TTL_MS;
+  if (typeof refreshExpiresInSeconds === "number" && Number.isFinite(refreshExpiresInSeconds) && refreshExpiresInSeconds > 0) {
+    expiry = Math.min(expiry, Date.now() + refreshExpiresInSeconds * 1000);
+  }
+  const delay = Math.max(0, expiry - RENEW_BEFORE_MS - Date.now());
+  refreshTimer = setTimeout(() => {
+    refreshTimer = null;
+    void refreshSession();
+  }, delay);
+}
+
+function applyTokenResult(payload: Record<string, unknown>): void {
+  const accessToken = payload.access_token;
+  if (typeof accessToken !== "string") return;
+  if (typeof payload.refresh_token === "string" && payload.refresh_token) {
+    storeRefreshToken(payload.refresh_token);
+  } else if (!refreshToken) {
+    storeRefreshToken(null);
+  }
+  api.setToken(accessToken);
+  const refreshExpiresIn = payload.refresh_expires_in;
+  scheduleRenewal(accessToken, typeof refreshExpiresIn === "number" ? refreshExpiresIn : undefined);
+}
+
+function finishRefreshFailure(): boolean {
+  cancelRenewal();
+  storeRefreshToken(null);
+  api.setToken(null);
+  setSessionExpired(true);
+  return false;
+}
+
+// Renews the access token with the stored refresh token. Concurrent callers
+// share one in-flight request; a failure ends the session and sends the user
+// back to the login screen with the "session expired" notice.
+export async function refreshSession(): Promise<boolean> {
+  if (!refreshToken) return false;
+  if (refreshInFlight) return refreshInFlight;
+  refreshInFlight = (async () => {
+    const stored = refreshToken;
+    try {
+      const body = new URLSearchParams({
+        grant_type: "refresh_token",
+        client_id: OIDC_CLIENT_ID,
+        refresh_token: stored,
+      });
+      let response: Response;
+      try {
+        response = await fetch(`${gatewayOrigin()}${OIDC_REALM_PATH}/token`, {
+          method: "POST",
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          body,
+          signal: AbortSignal.timeout(15000),
+        });
+      } catch {
+        return finishRefreshFailure();
+      }
+      if (!response.ok) return finishRefreshFailure();
+      const payload: unknown = await response.json().catch(() => null);
+      if (!isRecord(payload) || typeof payload.access_token !== "string") {
+        return finishRefreshFailure();
+      }
+      setSessionExpired(false);
+      applyTokenResult(payload);
+      return true;
+    } finally {
+      refreshInFlight = null;
+    }
+  })();
+  return refreshInFlight;
+}
 
 function base64UrlEncode(bytes: Uint8Array): string {
   let binary = "";
@@ -243,7 +395,8 @@ export async function signInWithPassword(
 
   writeSession(null);
   clearOidcError();
-  api.setToken(payload.access_token);
+  setSessionExpired(false);
+  applyTokenResult(payload);
 }
 
 export async function handleCallback(): Promise<OidcCallbackResult> {
@@ -301,8 +454,9 @@ export async function handleCallback(): Promise<OidcCallbackResult> {
 
   writeSession(null);
   clearOidcError();
+  setSessionExpired(false);
   clearAuthQuery();
-  api.setToken(payload.access_token);
+  applyTokenResult(payload);
   return { status: "success" };
 }
 
@@ -312,5 +466,9 @@ export function startLogout(): void {
   url.searchParams.set("post_logout_redirect_uri", redirectUri());
   writeSession(null);
   setOidcError(null);
+  setSessionExpired(false);
+  clearSessionState();
   window.location.assign(url.toString());
 }
+
+api.setRefreshHandler(refreshSession);

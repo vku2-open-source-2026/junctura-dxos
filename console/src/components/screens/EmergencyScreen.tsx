@@ -3,7 +3,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { AlertTriangle, CheckCircle2, RefreshCw, ShieldAlert } from "lucide-react";
 import type { EmergencyAccess } from "../../types";
-import { api } from "../../services/apiClient";
+import { ApiError, api } from "../../services/apiClient";
 import { useI18n } from "../../locales/i18n";
 import { useSession } from "../../services/session";
 import { PageHeader } from "../layout/PageHeader";
@@ -12,6 +12,7 @@ import { Badge, type BadgeVariant } from "../common/Badge";
 import { Button } from "../common/Button";
 import { EmptyState } from "../common/EmptyState";
 import { ErrorState } from "../common/ErrorState";
+import { ForbiddenNotice } from "../common/ForbiddenNotice";
 import { LoadingSkeleton } from "../common/LoadingSkeleton";
 import { PermissionDenied } from "../common/PermissionDenied";
 import { SearchFilterBar } from "../common/SearchFilterBar";
@@ -36,6 +37,7 @@ export const EmergencyScreen: React.FC = () => {
   const [accesses, setAccesses] = useState<EmergencyAccess[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
+  const [forbidden, setForbidden] = useState(false);
   const [query, setQuery] = useState("");
   const [stateFilter, setStateFilter] = useState<StateFilter>("all");
 
@@ -46,10 +48,12 @@ export const EmergencyScreen: React.FC = () => {
   const load = useCallback(async () => {
     setLoading(true);
     setLoadError(false);
+    setForbidden(false);
     try {
       setAccesses(await api.getEmergencyAccesses());
-    } catch {
+    } catch (failure) {
       setAccesses([]);
+      setForbidden(failure instanceof ApiError && failure.status === 403);
       setLoadError(true);
     } finally {
       setLoading(false);
@@ -162,7 +166,14 @@ export const EmergencyScreen: React.FC = () => {
 
           {loadError ? (
             <div className="p-5">
-              <ErrorState message={t.common.error} onRetry={() => void load()} />
+              {forbidden ? (
+                <ForbiddenNotice />
+              ) : (
+                <ErrorState
+                  message={t.common.error}
+                  onRetry={() => void load()}
+                />
+              )}
             </div>
           ) : loading ? (
             <div className="p-5">

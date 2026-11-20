@@ -204,12 +204,14 @@ authority. One grant must cover every required manifest permission; partial gran
 `invoke` also requires `core-writer`. Deprecation/revocation, disabled authority, subject rebinding or
 inactive apps block subsequent checks. Reads use a statement snapshot; an authorized in-flight read may finish.
 
-`GET /v1/trust/graph` takes no query parameters: `trust.approve` sees tenant scope, `trust.write`
-sees owned providers. It returns application nodes and up to 500 newest grant edges with effective
-states, operations, revisions and timestamps; `truncated` indicates more. Digests, permissions,
-subject bindings and approvals stay private. Locally, `npm run trust:demo` enrolls `app-danhba`, `app-vanban`,
-`app-lichhop`, `app-thongbao`, publishes `contact-lookup`, `document-summary`, `availability`, and creates
-active/pending/revoked grants. `npm run trust:demo -- token` prints a local-only approver token for Console LIVE mode.
+`GET /v1/trust/graph` takes no query parameters: `trust.approve` or `audit.read` sees tenant scope,
+`trust.write` alone sees owned providers. It returns application nodes and up to 500 newest grant edges with
+effective states, operations, revisions and timestamps; `truncated` indicates more. `readOnly` is `true`
+when the caller holds neither `trust.write` nor `trust.approve` (pure `audit.read` viewers), `false`
+otherwise. Digests, permissions, subject bindings and approvals stay private. Locally, `npm run trust:demo`
+enrolls `app-danhba`, `app-vanban`, `app-lichhop`, `app-thongbao`, publishes `contact-lookup`,
+`document-summary`, `availability`, and creates active/pending/revoked grants. `npm run trust:demo -- token`
+prints a local-only approver token for Console LIVE mode.
 
 ## Capability execution
 

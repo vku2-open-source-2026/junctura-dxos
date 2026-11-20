@@ -10,6 +10,7 @@ import { Button } from "../../common/Button";
 import { Card, CardContent } from "../../common/Card";
 import { EmptyState } from "../../common/EmptyState";
 import { ErrorState } from "../../common/ErrorState";
+import { ForbiddenNotice } from "../../common/ForbiddenNotice";
 import { LoadingSkeleton } from "../../common/LoadingSkeleton";
 import { OrgChart } from "./OrgChart";
 
@@ -67,11 +68,7 @@ export const OrganizationsScreen: React.FC = () => {
       />
 
       {error === "permission" ? (
-        <ErrorState
-          title={o.permissionDeniedTitle}
-          message={o.permissionDeniedDesc}
-          onRetry={() => void load()}
-        />
+        <ForbiddenNotice />
       ) : error === "expired" ? (
         <ErrorState
           title={o.sessionExpiredTitle}

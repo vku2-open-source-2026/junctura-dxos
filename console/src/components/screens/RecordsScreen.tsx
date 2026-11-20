@@ -14,6 +14,7 @@ import { Button } from "../common/Button";
 import { Card, CardContent } from "../common/Card";
 import { EmptyState } from "../common/EmptyState";
 import { ErrorState } from "../common/ErrorState";
+import { ForbiddenNotice } from "../common/ForbiddenNotice";
 import { LoadingSkeleton } from "../common/LoadingSkeleton";
 import { PermissionDenied } from "../common/PermissionDenied";
 import { StatCard } from "../common/StatCard";
@@ -173,15 +174,15 @@ export const RecordsScreen: React.FC = () => {
           </CardContent>
         </Card>
       ) : error ? (
-        <ErrorState
-          title={
-            error === "permission" ? r.permissionDeniedTitle : r.loadErrorTitle
-          }
-          message={
-            error === "permission" ? r.permissionDeniedDesc : r.loadErrorDesc
-          }
-          onRetry={() => void load()}
-        />
+        error === "permission" ? (
+          <ForbiddenNotice />
+        ) : (
+          <ErrorState
+            title={r.loadErrorTitle}
+            message={r.loadErrorDesc}
+            onRetry={() => void load()}
+          />
+        )
       ) : loading && !summary ? (
         <Card>
           <CardContent>

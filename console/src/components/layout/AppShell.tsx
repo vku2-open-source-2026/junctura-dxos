@@ -7,6 +7,7 @@ import { Header } from "./Header";
 import { ServicePanel } from "./ServicePanel";
 import { PageTabs } from "./PageTabs";
 import { EnvironmentBanner } from "./EnvironmentBanner";
+import { ReadOnlyBanner } from "./ReadOnlyBanner";
 import { CommandPalette } from "./CommandPalette";
 import { JuncturaLogo } from "../common/JuncturaLogo";
 import { useI18n } from "../../locales/i18n";
@@ -152,6 +153,7 @@ export const AppShell: React.FC<AppShellProps> = ({
           />
 
           <main className="mx-auto w-full min-w-0 max-w-7xl flex-1 p-4 md:p-8">
+            <ReadOnlyBanner />
             <EnvironmentBanner />
             <PageTabs currentScreen={currentScreen} onNavigate={onNavigate} />
             {children}

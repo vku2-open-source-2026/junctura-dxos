@@ -9,6 +9,7 @@ import { Badge, type BadgeVariant } from "../../common/Badge";
 import { Button } from "../../common/Button";
 import { EmptyState } from "../../common/EmptyState";
 import { ErrorState } from "../../common/ErrorState";
+import { ForbiddenNotice } from "../../common/ForbiddenNotice";
 import { LoadingSkeleton } from "../../common/LoadingSkeleton";
 import { formatDateTime } from "../dashboard/metrics";
 import { friendlyWorkflowName } from "./workflowMeta";
@@ -20,7 +21,7 @@ interface WorkflowCaseTableProps {
   products: Record<string, string>;
   filter: WorkflowStatus;
   loading: boolean;
-  loadError: boolean;
+  loadError: "generic" | "forbidden" | null;
   onFilterChange: (status: WorkflowStatus) => void;
   onRetry: () => void;
 }
@@ -127,11 +128,15 @@ export const WorkflowCaseTable: React.FC<WorkflowCaseTableProps> = ({
       <CardContent className="p-0">
         {loadError ? (
           <div className="p-5">
-            <ErrorState
-              title={w.loadErrorTitle}
-              message={w.loadErrorDesc}
-              onRetry={onRetry}
-            />
+            {loadError === "forbidden" ? (
+              <ForbiddenNotice />
+            ) : (
+              <ErrorState
+                title={w.loadErrorTitle}
+                message={w.loadErrorDesc}
+                onRetry={onRetry}
+              />
+            )}
           </div>
         ) : loading && executions.length === 0 ? (
           <div className="p-5">

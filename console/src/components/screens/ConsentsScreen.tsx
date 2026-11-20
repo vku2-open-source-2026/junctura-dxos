@@ -3,7 +3,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { CheckCircle2, RefreshCw, ShieldOff, UserCheck } from "lucide-react";
 import type { SubjectConsent } from "../../types";
-import { api } from "../../services/apiClient";
+import { ApiError, api } from "../../services/apiClient";
 import { useI18n } from "../../locales/i18n";
 import { useSession } from "../../services/session";
 import { PageHeader } from "../layout/PageHeader";
@@ -12,6 +12,7 @@ import { Badge } from "../common/Badge";
 import { Button } from "../common/Button";
 import { EmptyState } from "../common/EmptyState";
 import { ErrorState } from "../common/ErrorState";
+import { ForbiddenNotice } from "../common/ForbiddenNotice";
 import { LoadingSkeleton } from "../common/LoadingSkeleton";
 import { PermissionDenied } from "../common/PermissionDenied";
 import { SearchFilterBar } from "../common/SearchFilterBar";
@@ -27,6 +28,7 @@ export const ConsentsScreen: React.FC = () => {
   const [consents, setConsents] = useState<SubjectConsent[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
+  const [forbidden, setForbidden] = useState(false);
   const [query, setQuery] = useState("");
 
   const numberLocale = language === "vi" ? "vi-VN" : "en-GB";
@@ -34,10 +36,12 @@ export const ConsentsScreen: React.FC = () => {
   const load = useCallback(async () => {
     setLoading(true);
     setLoadError(false);
+    setForbidden(false);
     try {
       setConsents(await api.getConsents());
-    } catch {
+    } catch (failure) {
       setConsents([]);
+      setForbidden(failure instanceof ApiError && failure.status === 403);
       setLoadError(true);
     } finally {
       setLoading(false);
@@ -131,7 +135,11 @@ export const ConsentsScreen: React.FC = () => {
       />
 
       {loadError ? (
-        <ErrorState message={t.common.error} onRetry={() => void load()} />
+        forbidden ? (
+          <ForbiddenNotice />
+        ) : (
+          <ErrorState message={t.common.error} onRetry={() => void load()} />
+        )
       ) : loading ? (
         <LoadingSkeleton rows={4} />
       ) : visible.length === 0 ? (

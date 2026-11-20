@@ -59,6 +59,7 @@ interface Props {
 export const TrustGraphView: React.FC<Props> = ({ graph, canRevoke = false, onRevoke, now = Date.now() }) => {
   const { language } = useI18n();
   const s = TRUST_GRAPH_STRINGS[language];
+  const canRevokeEdge = canRevoke && graph.readOnly !== true;
   const [filter, setFilter] = useState<TrustGrantState | "all">("all");
   const [sel, setSel] = useState<Selection>(null);
   const [reason, setReason] = useState("");
@@ -243,7 +244,7 @@ export const TrustGraphView: React.FC<Props> = ({ graph, canRevoke = false, onRe
                   <dt className="text-slate-500">{s.expires}</dt><dd>{fmt(selEdge.expiresAt)} ({rel(selEdge.expiresAt)})</dd>
                   {selEdge.revokedAt && (<><dt className="text-slate-500">{s.revokedAt}</dt><dd>{fmt(selEdge.revokedAt)}</dd></>)}
                 </dl>
-                {canRevoke && onRevoke && (selEdge.state === "active" || selEdge.state === "pending") && (
+                {canRevokeEdge && onRevoke && (selEdge.state === "active" || selEdge.state === "pending") && (
                   confirming ? (
                     <div className="space-y-2 border-t border-slate-200 pt-3 dark:border-slate-700">
                       <label htmlFor="tg-reason" className="block text-sm font-medium">{s.reason}</label>
