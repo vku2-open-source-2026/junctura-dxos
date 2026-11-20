@@ -182,7 +182,7 @@ See [CI](../.github/workflows/ci.yml).
 
 Run [infra/postgres/migrate.sh](../infra/postgres/migrate.sh) with `docker compose run --rm data-migrate`;
 Compose gates `data` and then Core on success. Number after the highest `infra/postgres/NNN-*.sql`:
-currently `027`, so next is `028`. Mount new files in `compose.yaml`'s `data-migrate` service.
+currently `029`, so next is `030`. Mount new files in `compose.yaml`'s `data-migrate` service.
 **All applied files are immutable**: preserve their exact bytes and add forward migrations.
 
 SHA-256 enters `core.schema_migration_checksums` in the applying transaction
@@ -250,6 +250,7 @@ The runner strips CRLF delimiters for execution but hashes original bytes;
 | 026 | Read-only collection field/type inference from at most the 200 newest records, without values. |
 | 027 | Read-only application statistics through a `SECURITY DEFINER` function and private role. |
 | 028 | Trust graph also readable by `audit.read` (tenant scope); `readOnly` reports no mutating trust permission. |
+| 029 | `audit.read` reads every capability, any application and the emergency review queue of its tenant, read-only. |
 
 ## Demo data and developer journey
 

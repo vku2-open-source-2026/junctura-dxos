@@ -8,6 +8,15 @@ All notable changes to Junctura are recorded here. Versions follow
 
 ## Unreleased
 
+- **Read-only viewers see every Console page (issue #56):** migration 029 lets a
+  management principal with `audit.read` list and read every capability
+  (`GET /v1/capabilities`), read any application of its tenant
+  (`GET /v1/applications/{id}`) and list the emergency access review queue
+  (`GET /v1/emergency-accesses`). Writes keep their own permissions; reviewing
+  an emergency access still needs `trust.approve`. The Console renews its session
+  with the refresh token (memory only) and shows a read-only banner, hides write
+  actions and turns a 403 into a calm notice.
+
 - **Read-only trust graph for auditors (issue #56):** migration 028 lets a
   management principal with `audit.read` read the whole tenant's
   `GET /v1/trust/graph` (tenant scope, read-only); `trust.write` keeps its

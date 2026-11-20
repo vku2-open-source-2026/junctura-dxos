@@ -107,3 +107,18 @@ test("migration 019 stays unchanged with its original permission gate", () => {
   assert.doesNotMatch(sql, /audit\.read/, "migration 019 is not modified to accept audit.read");
   assert.doesNotMatch(sql, /readOnly/);
 });
+
+test("migration 029 opens capabilities, applications and emergency reviews to audit.read, read-only", () => {
+  const sql = readFileSync(new URL("../infra/postgres/029-read-only-viewers.sql", import.meta.url), "utf8");
+  assert.match(sql, /auditor:=coalesce\('audit\.read'=ANY\(perms\),false\);/);
+  assert.match(sql, /IF NOT management AND NOT auditor AND actor IS NULL THEN/);
+  assert.match(sql, /perms && ARRAY\['trust\.approve','audit\.read'\]::text\[\]/);
+  // Reviewing an emergency access still needs trust.approve.
+  assert.match(sql, /ELSIF operation='review' THEN\n    IF NOT 'trust\.approve'=ANY\(perms\) THEN RETURN jsonb_build_object\('status',403/);
+  // The application wrapper only answers reads; every other operation goes to the original command.
+  assert.match(sql, /IF operation='get' AND /);
+  assert.match(sql, /RETURN app_private\.application_management_command\(operation,payload\);/);
+  assert.match(sql, /GRANT EXECUTE ON FUNCTION core\.application_command\(text,jsonb\) TO junctura_app_api;/);
+  assert.match(sql, /REVOKE ALL ON FUNCTION app_private\.application_management_command\(text,jsonb\) FROM PUBLIC,junctura_app_api;/);
+  assert.match(sql, /INSERT INTO core\.schema_migrations\(version\) VALUES\(29\);/);
+});
