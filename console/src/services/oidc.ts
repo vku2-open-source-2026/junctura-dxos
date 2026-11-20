@@ -114,9 +114,14 @@ export function clearSessionState(): void {
   setSessionExpired(false);
 }
 
-function scheduleRenewal(token: string): void {
+// Renews before the earlier of the access token's expiry and the refresh token's
+// (Keycloak's SSO idle timeout is often shorter than the access token lifetime).
+function scheduleRenewal(token: string, refreshExpiresInSeconds?: number): void {
   cancelRenewal();
-  const expiry = tokenExpiryMs(token) ?? Date.now() + DEFAULT_TOKEN_TTL_MS;
+  let expiry = tokenExpiryMs(token) ?? Date.now() + DEFAULT_TOKEN_TTL_MS;
+  if (typeof refreshExpiresInSeconds === "number" && Number.isFinite(refreshExpiresInSeconds) && refreshExpiresInSeconds > 0) {
+    expiry = Math.min(expiry, Date.now() + refreshExpiresInSeconds * 1000);
+  }
   const delay = Math.max(0, expiry - RENEW_BEFORE_MS - Date.now());
   refreshTimer = setTimeout(() => {
     refreshTimer = null;
@@ -133,7 +138,8 @@ function applyTokenResult(payload: Record<string, unknown>): void {
     storeRefreshToken(null);
   }
   api.setToken(accessToken);
-  scheduleRenewal(accessToken);
+  const refreshExpiresIn = payload.refresh_expires_in;
+  scheduleRenewal(accessToken, typeof refreshExpiresIn === "number" ? refreshExpiresIn : undefined);
 }
 
 function finishRefreshFailure(): boolean {

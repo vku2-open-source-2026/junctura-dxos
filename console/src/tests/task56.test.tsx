@@ -188,6 +188,40 @@ describe("Task 56b — session renewal", () => {
     expect(body.get("refresh_token")).toBe("stored-refresh");
   });
 
+  it("renews before the refresh token expires when it outlives the access token less", async () => {
+    vi.useFakeTimers();
+    try {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(() =>
+          Promise.resolve(
+            tokenResponse(200, {
+              access_token: [
+                "eyJhbGciOiJub25lIn0",
+                btoa(JSON.stringify({ exp: Math.floor(Date.now() / 1000) + 3600 }))
+                  .replace(/=+$/, "").replace(/\+/g, "-").replace(/\//g, "_"),
+                "sig",
+              ].join("."),
+              refresh_token: "short-refresh",
+              expires_in: 3600,
+              refresh_expires_in: 1800,
+            })
+          )
+        )
+      );
+      await signInWithPassword("operator", "fixture-secret");
+      vi.mocked(fetch).mockClear();
+      await vi.advanceTimersByTimeAsync(1800 * 1000 - 31_000);
+      expect(fetch).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(2_000);
+      expect(fetch).toHaveBeenCalledTimes(1);
+      const [, init] = vi.mocked(fetch).mock.calls[0];
+      expect(new URLSearchParams(String(init?.body)).get("grant_type")).toBe("refresh_token");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("coalesces concurrent renewals into a single request", async () => {
     await signInFixture("stored-refresh");
     let calls = 0;
