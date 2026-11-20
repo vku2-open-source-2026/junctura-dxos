@@ -25,6 +25,14 @@ All notable changes to Junctura are recorded here. Versions follow
   `trust.approve`. Principals without any of the three permissions still get
   `403 trust_permission_required`.
 
+- **Docs — changing `PUBLIC_URL` on a running deployment (issue #55):**
+  `docs/OPERATIONS.md` explains how to move an installation that keeps real data
+  to a new public origin: back up, stop Core, rewrite the issuer of principals,
+  enrollments, applications, grants, executions and subject consents in one
+  transaction (the append-only audit keeps the old issuer as history), set
+  `PUBLIC_URL`, recreate `identity` and `core`, and open the Console client to the
+  public origin. Redirect sign-in needs the public HTTPS origin as issuer.
+
 - **Docs — Layer 2 is junctura-health (issue #53):** README, architecture,
   developing and OLP docs name [junctura-health](https://github.com/vku2-open-source-2026/junctura-health)
   as the Layer 2 shared health capability space (capability contracts, medical
