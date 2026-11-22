@@ -7,6 +7,7 @@ Junctura Core is a domain-neutral, headless platform exposing reusable infrastru
 Use [CORE_API.md](CORE_API.md) for API contracts and [CAPABILITIES.md](CAPABILITIES.md) for optional capability reuse.
 See [SECURITY.md](SECURITY.md) for authorization boundaries and [OPERATIONS.md](OPERATIONS.md) to operate and recover the stack.
 Start a local stack with [GETTING_STARTED.md](GETTING_STARTED.md).
+The three-tier model, repository map, call rules and storage consequences are in [TIER_MODEL.md](TIER_MODEL.md).
 
 ## Layer 1 — Headless PaaS
 
@@ -19,19 +20,21 @@ Two kinds of approval are kept apart:
 | Approval | Examples | Layer |
 | --- | --- | --- |
 | Platform access | Register an application, publish a capability, share or revoke access, review emergency access | Layer 1 (identity, security and zero-trust duties) |
-| Business decision | Approve a request, verify a document, complete a workflow step | Layer 2/3 applications; Core only provides the workflow engine |
+| Business decision | Approve a request, verify a document, complete a workflow step | Layer 2 shared administrative processes and Layer 3 sector business rules; Core only provides the execution and authorization mechanisms |
 
 The Junctura Console is the operator interface of Layer 1, comparable to Supabase Studio or the Directus Data Studio. It views platform state and decides platform access only; it never starts, completes, cancels or approves business work. Core runs fully without it (Compose profile `console`).
 
-## Layer 2 — Applications
+## Layer 2 — Shared digital workspace
 
 At least one user-facing GUI application must exercise Core APIs in a real end-to-end scenario. Technical vendor administration consoles do not substitute for this application.
 
-Layer 2 is [junctura-health](https://github.com/vku2-open-source-2026/junctura-health), the shared health capability space: versioned capability contracts, medical BPMN workflows (`workflows/`), the shared UI kit `@junctura/health-ui`, seed data and demo setup (`demo:setup`/`demo:seed`) and the Cổng Junctura Health application — the user-facing GUI of Layer 2.
+Layer 2 is [junctura-workspace](https://github.com/vku2-open-source-2026/junctura-workspace), the domain-neutral shared workspace with an end-user GUI: records, tasks, bulletins, directory and the H–P–D–I progression (digital work, process and records standardisation, data-driven operation, AI). It uses Layer 1 through `@junctura/server-client`, publishes APIs for Layer 3 applications and reads the industry pack installed for the deployment. The shared UI kit is `@junctura/ui`; the sample pack is Education. `junctura-workspace` is under construction; its records, tasks, bulletins and directory APIs for Layer 3 are target design. The Layer 2 demo level is reached when at least one H–P–D–I application uses the Core in an end-to-end flow; demo levels 2 and 3 are planned.
 
-## Layer 3 — Business applications
+## Layer 3 — Sector packs and business applications
 
-Sector applications plug in and out on top of Layers 1 and 2 without changing them: the Clinic, Pharmacy, Hospital and Insurance applications in the `vku2-open-source-2026` organization (a personal MyHealth application is planned). They own their business rules, data and screens, follow the contracts Layer 2 defines, and call Layer 1 directly with their own identity through its public APIs; there is no intermediary station.
+Layer 3 carries sector business rules as pluggable packs and applications. [junctura-health](https://github.com/vku2-open-source-2026/junctura-health) is the health pack: versioned capability contracts, medical BPMN workflows, units, data schemas, shared catalogues, seed data and the shared UI kit `@junctura/health-ui`. The Clinic, Pharmacy, Hospital, Insurance and MyHealth applications use the pack and live in the `vku2-open-source-2026` organization.
+
+Applications own their business rules, data and screens. They use Layer 2 APIs, call Layer 1 within the limits in [TIER_MODEL.md](TIER_MODEL.md), and exchange with other Layer 3 applications only through one-time Layer 1 capability tickets under capability contracts, consent and audit. Removing Layer 3 leaves Layers 1 and 2 running. Applications are migrating their data to Layer 1. When complete, Layer 2 and Layer 3 applications must store business state through the Core API; removing an application container then keeps its data, and the Console can see the structure of the migrated data.
 
 ## Runtime topology
 
