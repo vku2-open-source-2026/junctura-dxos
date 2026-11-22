@@ -131,8 +131,9 @@ Consult [release evidence](ARCHITECTURE.md) and
 
 The owner must later provide a server target, private secret distribution, domain/TLS
 decisions, backup destination and recovery objectives, monitoring ownership and a
-maintenance/patch policy. Layer 2 remains a separate application project using public
-Core contracts; the Console does not meet the business application requirement.
+maintenance/patch policy. Layers 2 and 3 remain separate projects using public
+Core contracts; the Console does not meet the business application requirement. See
+[TIER_MODEL.md](TIER_MODEL.md).
 
 ## Publishing a GitHub Release
 

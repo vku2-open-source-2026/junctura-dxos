@@ -2968,7 +2968,7 @@ export const en: typeof vi = {
     "navCapabilities": "Capability areas",
     "layersTitle": "What Junctura includes",
     "layersLead": "Eight shared functions sit below. Your applications connect to them through the API gateway.",
-    "layerTier2": "Your applications (Layer 2)",
+    "layerTier2": "Layer 2 and Layer 3 applications",
     "layerTier2Desc": "Your organisation's software uses the shared functions through the API gateway.",
     "layersGateway": "API Gateway",
     "layersHint": "Hover or use the Tab key to see what each block does.",

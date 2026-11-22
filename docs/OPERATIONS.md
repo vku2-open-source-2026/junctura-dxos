@@ -3,7 +3,7 @@
 
 # Operator guide
 
-Operate this single-host Layer-1 Compose stack from the repository root; Layer-2/3 apps own business decisions.
+Operate this single-host Layer-1 Compose stack from the repository root; Layer-3 applications own business decisions.
 
 ## Start, check and stop
 
@@ -157,6 +157,12 @@ npm run healthcheck
 archive the volume, then restarts it. Quiesce writes: the separate database dumps are not a coordinated
 snapshot. Git-ignored `backups/` contains identities/private data; protect it like `.env`.
 
+The command covers the three PostgreSQL databases and the object store. OpenBao, `.env` and
+credential material must be preserved separately, so it is not by itself a full-system restore.
+Once every application state has moved to Layer 1, a coordinated backup of the Layer 1 stores
+covers that state; the full backup scope and the components that need a separate backup are
+described in this guide.
+
 Restore verifies checksums before changes, requires `--yes` and takes a safety backup at
 `backups/pre-restore-*` unless `--no-safety-backup` is specified. It stops application services,
 drops/recreates the three databases with original owners/ACLs/RLS, replaces the object volume,
@@ -213,7 +219,7 @@ groups, including `tenant-a` and `tenant-b`.
 | `console/public/login-hints.json` (Git-ignored, mode `0644`, `demo` only) | `npm run env:provision` when `demo` is selected |
 | `.junctura/demo-accounts.json` (Git-ignored, mode `0600`, all environment passwords) | `npm run env:provision` |
 | Simulated applications, capabilities, grants, records, notes and files | `npm run demo:seed` |
-| A Layer-2 scenario of its own | the Layer-2 repository's setup script |
+| A Layer-3 scenario of its own | the Layer-3 pack or application repository's setup script |
 
 ```sh
 git clone https://github.com/vku2-open-source-2026/junctura-dxos.git
@@ -308,7 +314,7 @@ npm run demo:console
 
 Only for a disposable demo reset: keep `.env`, run `docker compose --profile console down -v`,
 then `npm run local:up`, `npm run env:provision`, `npm run demo:seed`, `npm run demo:console`
-and the Layer-2 setup. This destroys all named volumes, including every database, objects and
+and the Layer-3 setup. This destroys all named volumes, including every database, objects and
 OpenBao state.
 
 Demo security checklist:
@@ -325,7 +331,7 @@ Demo security checklist:
 | No prefilled account | Rebuild Console after `env:provision`; fetch hints with `Accept: application/json`. |
 | `401` / `login_failed` | Route `/identity/` to Gateway; match `PUBLIC_URL` to the public origin. |
 | Users page says `missing` | Run `env:provision` to upsert the environment principals for the current issuer. |
-| Empty data pages | Run `demo:seed`, or the Layer-2 scenario repository's setup, against the running stack. |
+| Empty data pages | Run `demo:seed`, or the Layer-3 scenario repository's setup, against the running stack. |
 | Judge still active after the expiry date | Re-run `env:provision -- --tenants production`, or use `--disable-judge`; expiry is applied only when the script runs. |
 | Wrong issuer after changing `PUBLIC_URL` | For disposable data, reset as above and reprovision; to keep real data, follow [Changing `PUBLIC_URL` on a running deployment](#changing-public_url-on-a-running-deployment). |
 

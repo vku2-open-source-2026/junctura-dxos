@@ -67,14 +67,17 @@ Mỗi ứng dụng vẫn do đơn vị của mình phát triển và sở hữu;
 
 ## Kiến trúc
 
+Sơ đồ dưới đây là kiến trúc đích.
+
 ```mermaid
 flowchart TB
-  subgraph L3["Tầng 3 · ứng dụng nghiệp vụ (cắm-rút)"]
-    B1["Clinic · Hospital · Pharmacy<br/>Insurance · MyHealth"]
+  subgraph L3["Tầng 3 · gói ngành và ứng dụng nghiệp vụ (cắm-rút)"]
+    HEALTH_PACK["junctura-health · gói ngành Y tế<br/>hợp đồng năng lực · BPMN · @junctura/health-ui"]
+    HEALTH_APPS["Clinic · Hospital · Pharmacy<br/>Insurance · MyHealth"]
   end
 
-  subgraph L2["Tầng 2 · không gian năng lực dùng chung"]
-    W1["junctura-health · Cổng Junctura Health<br/>contract năng lực · quy trình BPMN y tế<br/>@junctura/health-ui"]
+  subgraph L2["Tầng 2 · không gian năng lực số dùng chung"]
+    WORKSPACE["junctura-workspace<br/>giao diện dùng chung · @junctura/ui<br/>đọc gói ngành"]
   end
 
   OPS["Console quản trị<br/>chỉ xem · duyệt quyền truy cập"]
@@ -98,19 +101,21 @@ flowchart TB
     end
   end
 
-  B1 --> GW
-  W1 --> GW
+  HEALTH_APPS --> WORKSPACE
+  HEALTH_APPS -->|"giới hạn"| GW
+  WORKSPACE --> GW
+  HEALTH_PACK -.->|"đọc khi triển khai"| WORKSPACE
   OPS --> GW
   GW --> CAP --> FND
 ```
 
 Chỉ cổng API mở ra ngoài; mọi dịch vụ khác nằm trong mạng nội bộ. Core chạy không quyền root trên hệ thống tệp chỉ đọc.
 
-**Tầng 1 không chứa nghiệp vụ.** Lõi chỉ cung cấp năng lực dùng chung qua API. Quy trình, tên đơn vị, tên bộ dữ liệu và chức năng nghiệp vụ do ứng dụng Tầng 2/3 cung cấp khi chạy, nên tầng trên đổi nghiệp vụ mà không phải sửa lõi; `npm run check:neutral` chặn từ vựng nghiệp vụ lọt vào lõi.
+**Tầng 1 không chứa nghiệp vụ.** Lõi chỉ cung cấp năng lực dùng chung qua API. Quy trình, tên đơn vị, tên bộ dữ liệu và chức năng nghiệp vụ do gói ngành và ứng dụng Tầng 3 cung cấp khi chạy, nên tầng trên đổi nghiệp vụ mà không phải sửa lõi; `npm run check:neutral` chặn từ vựng nghiệp vụ lọt vào lõi.
 
-Tầng 2 là [junctura-health](https://github.com/vku2-open-source-2026/junctura-health) — không gian năng lực y tế dùng chung: contract năng lực, quy trình BPMN y tế (`workflows/`), thư viện giao diện `@junctura/health-ui`, dữ liệu mẫu và Cổng Junctura Health. Ứng dụng Tầng 3 (Clinic, Hospital, Pharmacy, Insurance, MyHealth) ở repo riêng, gọi thẳng Tầng 1 bằng định danh riêng, theo contract do Tầng 2 quy định.
+Tầng 2 là [junctura-workspace](https://github.com/vku2-open-source-2026/junctura-workspace) — không gian năng lực số dùng chung, trung lập ngành: giao diện người dùng cuối, quản lý hồ sơ, công việc, bảng tin, danh bạ, thư viện `@junctura/ui` và đọc gói ngành. `junctura-workspace` đang được xây dựng. API hồ sơ, công việc, bảng tin và danh bạ cho Tầng 3 thuộc thiết kế đích. Tầng 3 gồm [junctura-health](https://github.com/vku2-open-source-2026/junctura-health) — gói ngành Y tế với hợp đồng năng lực, quy trình BPMN, đơn vị, lược đồ dữ liệu, danh mục dùng chung, dữ liệu mẫu và `@junctura/health-ui` — cùng năm ứng dụng Clinic, Hospital, Pharmacy, Insurance, MyHealth. Ứng dụng Tầng 3 dùng Tầng 2 qua API của Workspace, dùng Tầng 1 trong giới hạn cho phép, và trao đổi với nhau chỉ qua vé dùng một lần của Tầng 1. Demo mức 2 và 3 là dự kiến. Chi tiết: [Mô hình ba tầng](docs/TIER_MODEL.md).
 
-**Console là trang quản trị của lõi**, giống Supabase Studio hay Directus Data Studio: xem trạng thái nền tảng và duyệt **quyền truy cập**: duyệt hoặc thu hồi đăng ký ứng dụng, duyệt hoặc thu hồi quyền chia sẻ chức năng giữa các ứng dụng. Chức năng đã công bố, đồng ý của người dùng và truy cập khẩn cấp chỉ hiển thị để theo dõi (duyệt công bố và hậu kiểm khẩn cấp làm qua API). Console không chạy, hoàn thành, hủy hay duyệt **nghiệp vụ**; việc đó thuộc ứng dụng Tầng 2/3. Lõi chạy đầy đủ khi tắt Console. Chi tiết: [Kiến trúc](docs/ARCHITECTURE.md).
+**Console là trang quản trị của lõi**, giống Supabase Studio hay Directus Data Studio: xem trạng thái nền tảng và duyệt **quyền truy cập**: duyệt hoặc thu hồi đăng ký ứng dụng, duyệt hoặc thu hồi quyền chia sẻ chức năng giữa các ứng dụng. Chức năng đã công bố, đồng ý của người dùng và truy cập khẩn cấp chỉ hiển thị để theo dõi (duyệt công bố và hậu kiểm khẩn cấp làm qua API). Console không chạy, hoàn thành, hủy hay duyệt **nghiệp vụ**. Tầng 2 xử lý quy trình quản trị dùng chung. Tầng 3 quyết định nghiệp vụ chuyên ngành. Core cung cấp cơ chế thực thi và phân quyền. Lõi chạy đầy đủ khi tắt Console. Chi tiết: [Kiến trúc](docs/ARCHITECTURE.md).
 
 ### Một lần chia sẻ năng lực diễn ra thế nào
 
@@ -263,6 +268,7 @@ Phiên bản chính xác và giấy phép của từng thành phần: [THIRD-PAR
 | --- | --- |
 | [Hướng dẫn bắt đầu](docs/GETTING_STARTED.md) | Cài đặt, đăng ký ứng dụng, gọi API, SDK |
 | [Kiến trúc](docs/ARCHITECTURE.md) | Ba tầng, dịch vụ, ranh giới tin cậy, quyết định chính |
+| [Mô hình ba tầng](docs/TIER_MODEL.md) | Vai trò từng tầng, repo theo tầng, luật gọi, lưu trữ, ba mức demo |
 | [Core API](docs/CORE_API.md) · [OpenAPI](docs/contracts/foundation-api.openapi.json) | Route, quyền, payload, quy tắc retry, quy trình do ứng dụng cung cấp |
 | [Chia sẻ năng lực](docs/CAPABILITIES.md) | Đăng ký ứng dụng, registry, cấp quyền, gọi và ghép năng lực |
 | [Bảo mật](docs/SECURITY.md) | Ranh giới tin cậy, phân quyền tài nguyên, kiểm toán, kết quả quét |
@@ -301,7 +307,8 @@ npm run test:integration           # kiểm thử tích hợp
 - [x] Nhật ký kiểm toán niêm phong bằng chuỗi băm SHA-256, kiểm tra toàn vẹn ngay trên Console.
 - [x] Sơ đồ tin cậy (Trust Graph) giữa các ứng dụng trên Console, thu hồi quyền ngay trên sơ đồ.
 - [x] **v0.2.0 — Console quản trị:** Console đọc hoàn toàn từ API thật (nhật ký kiểm toán, lưu lượng, người dùng, tổ chức, dữ liệu, tệp, quy trình), đăng nhập qua Keycloak.
-- [ ] **v0.3.0 — Tầng 2 (junctura-health):** không gian năng lực y tế dùng chung — contract năng lực, quy trình BPMN y tế, thư viện `@junctura/health-ui` và Cổng Junctura Health chia sẻ dữ liệu, năng lực qua Junctura; ứng dụng Tầng 3 gọi thẳng lõi theo contract đó.
+- [ ] **v0.3.0 — Tầng 2 (junctura-workspace):** không gian năng lực số dùng chung — giao diện hồ sơ, công việc, bảng tin, danh bạ, thư viện `@junctura/ui` và gói mẫu Giáo dục, trung lập ngành.
+- [ ] **Tầng 3 (junctura-health và năm ứng dụng Y tế):** gói ngành Y tế với hợp đồng năng lực, quy trình BPMN, lược đồ dữ liệu, danh mục dùng chung; các ứng dụng Clinic, Hospital, Pharmacy, Insurance, MyHealth dùng Tầng 1 và Tầng 2 theo [mô hình ba tầng](docs/TIER_MODEL.md).
 - [ ] Giám sát hệ thống (Prometheus, Grafana) và triển khai thử nghiệm trên Internet.
 
 ## Đóng góp

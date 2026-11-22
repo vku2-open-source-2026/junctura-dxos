@@ -8,6 +8,11 @@ All notable changes to Junctura are recorded here. Versions follow
 
 ## Unreleased
 
+- **Docs — three-tier model (issue #61):** Document the three-tier model and its
+  call and storage rules. `junctura-workspace` is the planned Layer 2 workspace.
+  The health pack and five health applications belong to Layer 3. This supersedes
+  the repository mapping in issue #53.
+
 - **Planned Foundation and Capability API contracts** for record storage, workflow tasks, identity, files, events, search, privacy and application audit, including conditional record writes, atomic increments, expiring locks, task claims and idempotent retries.
 
 - **Read-only viewers see every Console page:** migration 029 lets a
@@ -34,15 +39,6 @@ All notable changes to Junctura are recorded here. Versions follow
   transaction (the append-only audit keeps the old issuer as history), set
   `PUBLIC_URL`, recreate `identity` and `core`, and open the Console client to the
   public origin. Redirect sign-in needs the public HTTPS origin as issuer.
-
-- **Docs — Layer 2 is junctura-health (issue #53):** README, architecture,
-  developing and OLP docs name [junctura-health](https://github.com/vku2-open-source-2026/junctura-health)
-  as the Layer 2 shared health capability space (capability contracts, medical
-  BPMN workflows, `@junctura/health-ui`, seed data and the Cổng Junctura Health
-  GUI) in place of the former workspace repository. Layer 3 apps (Clinic,
-  Hospital, Pharmacy, Insurance, MyHealth) call Core directly with their own
-  identity under the contracts Layer 2 defines; `WORKFLOW_DEFINITIONS_DIR`
-  examples point to `../junctura-health/workflows`.
 
 - **CI dependency audit:** the Console audit now blocks only on advisories in
   dependencies that ship in the served bundle (`npm audit --omit=dev`). The full
