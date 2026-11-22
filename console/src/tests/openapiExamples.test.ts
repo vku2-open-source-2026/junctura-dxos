@@ -143,7 +143,7 @@ describe("Foundation API Explorer inventory", () => {
     const documented: string[] = [];
     for (const [path, pathItem] of Object.entries(spec.paths)) {
       for (const [method, operation] of Object.entries(pathItem as Record<string, any>)) {
-        if (operation.operationId) documented.push(`${method.toUpperCase()} ${path}`);
+        if (operation.operationId && operation["x-junctura-status"] !== "planned") documented.push(`${method.toUpperCase()} ${path}`);
       }
     }
     expect(FOUNDATION_ENDPOINTS).toHaveLength(documented.length);

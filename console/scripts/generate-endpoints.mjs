@@ -51,6 +51,8 @@ const endpoints = [];
 for (const [endpointPath, pathItem] of Object.entries(spec.paths)) {
   for (const [method, operation] of Object.entries(pathItem)) {
     if (!methods.has(method) || !operation.operationId) continue;
+    // Planned operations have no server yet, so the Console does not offer them.
+    if (operation["x-junctura-status"] === "planned") continue;
     const parameters = operationParameters(pathItem, operation);
     const requestContentTypes = Object.keys(operation.requestBody?.content ?? {});
     const responses = Object.keys(operation.responses ?? {});
