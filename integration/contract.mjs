@@ -11,10 +11,12 @@ const routes = Object.keys(spec.paths)
   regex: new RegExp('^' + path.replace(/[.*+?^$()|[\]\\]/g, '\\$&').replace(/\{[^}]+\}/g, '([^/]+)') + '$') }));
 const observations = [];
 const secretNames = new Set(['client_secret', 'access_token', 'refresh_token', 'id_token', 'id_token_hint', 'code', 'code_verifier']);
-function redact(value) {
-  if (Array.isArray(value)) return value.map(redact);
+// `details.code` carries a machine error code, not an OAuth code, so it stays visible to the validator.
+function redact(value, parent) {
+  if (Array.isArray(value)) return value.map(item => redact(item));
   if (!value || typeof value !== 'object') return value;
-  return Object.fromEntries(Object.entries(value).map(([key, v]) => [key, secretNames.has(key) && typeof v === 'string' ? '[redacted]' : redact(v)]));
+  return Object.fromEntries(Object.entries(value).map(([key, v]) => [key,
+    secretNames.has(key) && typeof v === 'string' && !(parent === 'details' && key === 'code') ? '[redacted]' : redact(v, key)]));
 }
 
 export async function contractFetch(input, options = {}) {

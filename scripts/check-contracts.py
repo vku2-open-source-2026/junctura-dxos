@@ -157,7 +157,30 @@ def check_value(spec, schema, value, label):
     validator = Draft202012Validator({'$ref': URI + '#/$defs/Observed'}, registry=registry, format_checker=FORMATS)
     error = next(validator.iter_errors(value), None)
     # jsonschema's normal messages can contain tokens/payloads. Never emit them.
-    require(error is None, label + ': schema mismatch' + (f' ({error.validator})' if error else ''))
+    # Diagnostics list only JSON paths and keyword names, never values.
+    require(error is None, label + ': schema mismatch' + (f' ({error.validator}{describe_error(error)})' if error else ''))
+
+
+def describe_error(error):
+    def where(item):
+        path = '/'.join(str(part) for part in item.absolute_path)
+        return '/' + path if path else '/'
+    def token(item):
+        # Server-defined machine codes are safe to show; never show other values.
+        value = item.instance
+        if item.validator != 'enum':
+            return ''
+        if isinstance(value, str) and re.fullmatch(r'[a-z_]{1,64}', value):
+            return f'={value}'
+        if isinstance(value, str):
+            classes = ''.join(sorted({'a' if c.islower() else 'A' if c.isupper() else '9' if c.isdigit() else '_' if c == '_' else ' ' if c.isspace() else '.' for c in value}))
+            return f'=<str len {len(value)} chars [{classes}]>'
+        return f'=<{type(value).__name__}>'
+    branches = []
+    for item in error.context or []:
+        branches.append(f'branch {item.relative_schema_path[0]} {where(item)} {item.validator}{token(item)}')
+    detail = ' at ' + where(error)
+    return detail + ('; ' + '; '.join(branches[:8]) if branches else '')
 
 
 def validate_official_structure(*specs):
@@ -289,7 +312,7 @@ def validate_observations(spec, observations, suite=None):
             require(media in response['content'], label + ': undocumented response content type')
             if media == 'application/json':
                 require(not item.get('responseInvalidJson'), label + ': invalid response JSON')
-                check_value(spec, response['content'][media]['schema'], item.get('responseBody'), label + ' response')
+                check_value(spec, response['content'][media]['schema'], item.get('responseBody'), label + ' response ' + str(item['status']))
             elif media == 'application/octet-stream':
                 require(item['responseBytes'] > 0, label + ': empty object download')
                 require(int(headers['content-length']) == item['responseBytes'], label + ': binary length mismatch')
