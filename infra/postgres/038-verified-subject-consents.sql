@@ -58,7 +58,11 @@ SET LOCAL ROLE junctura_app_owner;
 -- different login is an operator reconciliation task, not a routine insert.
 CREATE OR REPLACE FUNCTION app_private.subject_binding_names_disjoint() RETURNS trigger
 LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog,app_private AS $$
+DECLARE original text := current_setting('request.jwt.claims', true);
 BEGIN
+  -- Check within the row tenant regardless of the caller claims, so direct
+  -- operator inserts cannot bypass the disjointness rule through RLS.
+  PERFORM set_config('request.jwt.claims', jsonb_build_object('tenant_id', NEW.tenant_id)::text, true);
   IF NEW.subject_id = NEW.login_subject THEN
     RAISE EXCEPTION 'subject id and login subject must differ';
   END IF;
@@ -68,6 +72,7 @@ BEGIN
       AND (o.login_subject=NEW.subject_id OR o.subject_id=NEW.login_subject)) THEN
     RAISE EXCEPTION 'subject ids and login subjects must not share identifiers';
   END IF;
+  PERFORM set_config('request.jwt.claims', coalesce(original, ''), true);
   RETURN NEW;
 END $$;
 DROP TRIGGER IF EXISTS subject_binding_names_disjoint ON app_private.subject_bindings;
@@ -245,6 +250,8 @@ BEGIN
     'generatedAt', to_char(clock_timestamp() AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')));
 END $$;
 
+-- Ownership changes run as the migration role, which owns functions created before SET LOCAL ROLE.
+RESET ROLE;
 ALTER FUNCTION execution_private.canonical_subject(text,text,text) OWNER TO junctura_app_owner;
 ALTER FUNCTION execution_private.active_consent(text,text,text,uuid,text,text) OWNER TO junctura_app_owner;
 REVOKE ALL ON FUNCTION execution_private.canonical_subject(text,text,text) FROM PUBLIC;
@@ -254,6 +261,25 @@ ALTER FUNCTION core.subject_access(jsonb) OWNER TO junctura_app_owner;
 REVOKE ALL ON FUNCTION core.subject_consent(text,jsonb) FROM PUBLIC,junctura_api,junctura_app_api,junctura_resource_api,junctura_audit_api,junctura_trust_api,junctura_execution_api;
 REVOKE ALL ON FUNCTION core.subject_access(jsonb) FROM PUBLIC,junctura_api,junctura_app_api,junctura_resource_api,junctura_audit_api,junctura_trust_api,junctura_execution_api;
 GRANT EXECUTE ON FUNCTION core.subject_consent(text,jsonb) TO junctura_subject_api;
+
+-- A binding created after the upgrade maps that login's quarantined legacy
+-- consents to the bound subjectId, so operators can reconcile one login at a time.
+CREATE OR REPLACE FUNCTION app_private.subject_binding_map_consents() RETURNS trigger
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, app_private AS $$
+DECLARE original text := current_setting('request.jwt.claims', true);
+BEGIN
+  PERFORM set_config('request.jwt.claims', jsonb_build_object('tenant_id', NEW.tenant_id)::text, true);
+  UPDATE execution_private.subject_consents s SET canonical_subject = NEW.subject_id
+    WHERE s.tenant_id = NEW.tenant_id AND s.issuer = NEW.issuer
+      AND s.data_subject = NEW.login_subject AND s.canonical_subject IS NULL;
+  PERFORM set_config('request.jwt.claims', coalesce(original, ''), true);
+  RETURN NEW;
+END $$;
+ALTER FUNCTION app_private.subject_binding_map_consents() OWNER TO junctura_app_owner;
+REVOKE ALL ON FUNCTION app_private.subject_binding_map_consents() FROM PUBLIC;
+DROP TRIGGER IF EXISTS subject_binding_map_consents ON app_private.subject_bindings;
+CREATE TRIGGER subject_binding_map_consents AFTER INSERT ON app_private.subject_bindings
+  FOR EACH ROW EXECUTE FUNCTION app_private.subject_binding_map_consents();
 RESET ROLE;
 REVOKE CREATE ON SCHEMA core FROM junctura_app_owner;
 INSERT INTO core.schema_migrations(version) VALUES (38);
