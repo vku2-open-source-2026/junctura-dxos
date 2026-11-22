@@ -162,7 +162,14 @@ def describe_error(error):
     def token(item):
         # Server-defined machine codes are safe to show; never show other values.
         value = item.instance
-        return f'={value}' if item.validator == 'enum' and isinstance(value, str) and re.fullmatch(r'[a-z_]{1,64}', value) else ''
+        if item.validator != 'enum':
+            return ''
+        if isinstance(value, str) and re.fullmatch(r'[a-z_]{1,64}', value):
+            return f'={value}'
+        if isinstance(value, str):
+            classes = ''.join(sorted({'a' if c.islower() else 'A' if c.isupper() else '9' if c.isdigit() else '_' if c == '_' else ' ' if c.isspace() else '.' for c in value}))
+            return f'=<str len {len(value)} chars [{classes}]>'
+        return f'=<{type(value).__name__}>'
     branches = []
     for item in error.context or []:
         branches.append(f'branch {item.relative_schema_path[0]} {where(item)} {item.validator}{token(item)}')
