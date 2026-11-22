@@ -102,6 +102,8 @@ services:
       - ./infra/postgres/036-subject-bindings.sql:/migrations/036-subject-bindings.sql:ro
       - ./infra/postgres/037-directory-management.sql:/migrations/037-directory-management.sql:ro
       - ./infra/postgres/038-verified-subject-consents.sql:/migrations/038-verified-subject-consents.sql:ro
+      - ./infra/postgres/039-workflow-deadlines.sql:/migrations/039-workflow-deadlines.sql:ro
+      - ./infra/postgres/040-workflow-completion-outbox.sql:/migrations/040-workflow-completion-outbox.sql:ro
     depends_on:
       database:
         condition: service_healthy

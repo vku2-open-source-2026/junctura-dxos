@@ -77,6 +77,9 @@ const { purpose, dataSubject, emergency } = redeemed.context;
 | `shareResourceWithAppOrGroup(target, idempotencyKey?)` | Share one record with an app group or exact app |
 | `putObject(id, bytes)`, `getObject(id)` | Malware-scanned object storage |
 | `workflowDefinitions()`, `startWorkflow(id, input, key?)` | BPMN workflows |
+| `startWorkflowWithDeadlines(body, options?)`, `getWorkflowWithDeadline(id, options?)` | Workflow deadlines and per-step unit overrides |
+| `listWorkflowTasks(filters?)`, `claimWorkflowTask(taskId, options?)`, `releaseWorkflowTask(taskId, options?)` | Group inbox and expiring claims |
+| `completeWorkflowTask(id, body, options?)`, `listWorkflowTaskHistory(id, page?)`, `cancelWorkflowWithPendingCheck(id, options?)` | Complete a selected task, read confirmed history or cancel an execution |
 | `discover({ limit, cursor })` | Capabilities this application may call |
 | `execute(target, input, key?, context?)`, `execution(id)`, `waitForExecution(id)` | Capability calls |
 | `redeemTicket({ authorization, invocationId, input })` | Provider ticket redemption |

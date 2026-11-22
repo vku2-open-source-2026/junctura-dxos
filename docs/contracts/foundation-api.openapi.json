@@ -183,6 +183,9 @@
           "404": {
             "$ref": "#/components/responses/NotFound"
           },
+          "405": {
+            "$ref": "#/components/responses/MethodNotAllowed"
+          },
           "409": {
             "$ref": "#/components/responses/PlannedConflict"
           },
@@ -203,9 +206,6 @@
           },
           "504": {
             "$ref": "#/components/responses/GatewayTimeout"
-          },
-          "405": {
-            "$ref": "#/components/responses/MethodNotAllowed"
           }
         },
         "x-junctura-source": "src/modules/data/records.mjs",
@@ -915,7 +915,6 @@
         "tags": [
           "tenant"
         ],
-        "x-junctura-status": "planned",
         "x-junctura-query-policy": "closed",
         "security": [
           {
@@ -928,7 +927,15 @@
         "x-junctura-authority": "tenant",
         "parameters": [
           {
-            "$ref": "#/components/parameters/PlannedLimit"
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20
+            },
+            "example": 25
           },
           {
             "$ref": "#/components/parameters/PlannedCursor"
@@ -1010,13 +1017,13 @@
             }
           },
           "400": {
-            "$ref": "#/components/responses/PlannedBadRequest"
+            "$ref": "#/components/responses/BadRequest"
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
           },
           "403": {
-            "$ref": "#/components/responses/PlannedForbidden"
+            "$ref": "#/components/responses/Forbidden"
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
@@ -1033,7 +1040,9 @@
           "504": {
             "$ref": "#/components/responses/GatewayTimeout"
           }
-        }
+        },
+        "x-junctura-source": "src/modules/workflow/workflow.mjs",
+        "x-junctura-test-suite": "workflow-tasks"
       }
     },
     "/v1/workflows/tasks/{taskId}/claim": {
@@ -1044,7 +1053,6 @@
         "tags": [
           "tenant"
         ],
-        "x-junctura-status": "planned",
         "x-junctura-query-policy": "closed",
         "security": [
           {
@@ -1099,7 +1107,7 @@
             }
           },
           "400": {
-            "$ref": "#/components/responses/PlannedBadRequest"
+            "$ref": "#/components/responses/BadRequest"
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
@@ -1112,6 +1120,9 @@
           },
           "409": {
             "$ref": "#/components/responses/WorkflowTaskConflict"
+          },
+          "413": {
+            "$ref": "#/components/responses/PlannedTooLarge"
           },
           "415": {
             "$ref": "#/components/responses/UnsupportedMedia"
@@ -1128,7 +1139,9 @@
           "504": {
             "$ref": "#/components/responses/GatewayTimeout"
           }
-        }
+        },
+        "x-junctura-source": "src/modules/workflow/workflow.mjs",
+        "x-junctura-test-suite": "workflow-tasks"
       }
     },
     "/v1/workflows/tasks/{taskId}/release": {
@@ -1139,7 +1152,6 @@
         "tags": [
           "tenant"
         ],
-        "x-junctura-status": "planned",
         "x-junctura-query-policy": "closed",
         "security": [
           {
@@ -1161,7 +1173,7 @@
             "$ref": "#/components/responses/NoContent"
           },
           "400": {
-            "$ref": "#/components/responses/PlannedBadRequest"
+            "$ref": "#/components/responses/BadRequest"
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
@@ -1175,6 +1187,12 @@
           "409": {
             "$ref": "#/components/responses/WorkflowTaskConflict"
           },
+          "413": {
+            "$ref": "#/components/responses/PlannedTooLarge"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMedia"
+          },
           "429": {
             "$ref": "#/components/responses/PlannedRateLimited"
           },
@@ -1187,7 +1205,9 @@
           "504": {
             "$ref": "#/components/responses/GatewayTimeout"
           }
-        }
+        },
+        "x-junctura-source": "src/modules/workflow/workflow.mjs",
+        "x-junctura-test-suite": "workflow-tasks"
       }
     },
     "/v1/workflows/executions/{executionId}/history": {
@@ -1198,7 +1218,6 @@
         "tags": [
           "tenant"
         ],
-        "x-junctura-status": "planned",
         "x-junctura-query-policy": "closed",
         "security": [
           {
@@ -1214,7 +1233,15 @@
             "$ref": "#/components/parameters/ExecutionId"
           },
           {
-            "$ref": "#/components/parameters/PlannedLimit"
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20
+            },
+            "example": 25
           },
           {
             "$ref": "#/components/parameters/PlannedCursor"
@@ -1255,13 +1282,13 @@
             }
           },
           "400": {
-            "$ref": "#/components/responses/PlannedBadRequest"
+            "$ref": "#/components/responses/BadRequest"
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
           },
           "403": {
-            "$ref": "#/components/responses/PlannedForbidden"
+            "$ref": "#/components/responses/Forbidden"
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
@@ -1278,7 +1305,9 @@
           "504": {
             "$ref": "#/components/responses/GatewayTimeout"
           }
-        }
+        },
+        "x-junctura-source": "src/modules/workflow/workflow.mjs",
+        "x-junctura-test-suite": "workflow-tasks"
       }
     },
     "/v1/directory/unit-types": {
@@ -3362,6 +3391,24 @@
           }
         ],
         "responses": {
+          "200": {
+            "description": "Existing live object replaced",
+            "headers": {
+              "Cache-Control": {
+                "$ref": "#/components/headers/CacheControl"
+              },
+              "X-Content-Type-Options": {
+                "$ref": "#/components/headers/NoSniff"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ObjectReceipt"
+                }
+              }
+            }
+          },
           "201": {
             "description": "Successful response",
             "headers": {
@@ -3412,24 +3459,6 @@
           },
           "504": {
             "$ref": "#/components/responses/GatewayTimeout"
-          },
-          "200": {
-            "description": "Existing live object replaced",
-            "headers": {
-              "Cache-Control": {
-                "$ref": "#/components/headers/CacheControl"
-              },
-              "X-Content-Type-Options": {
-                "$ref": "#/components/headers/NoSniff"
-              }
-            },
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ObjectReceipt"
-                }
-              }
-            }
           }
         },
         "x-junctura-core-roles": [
@@ -3707,6 +3736,9 @@
           "404": {
             "$ref": "#/components/responses/NotFound"
           },
+          "405": {
+            "$ref": "#/components/responses/MethodNotAllowed"
+          },
           "429": {
             "$ref": "#/components/responses/PlannedRateLimited"
           },
@@ -3718,9 +3750,6 @@
           },
           "504": {
             "$ref": "#/components/responses/GatewayTimeout"
-          },
-          "405": {
-            "$ref": "#/components/responses/MethodNotAllowed"
           }
         },
         "x-junctura-source": "src/modules/data/query/handler.mjs",
@@ -4752,6 +4781,24 @@
           }
         ],
         "responses": {
+          "200": {
+            "description": "Existing live object replaced",
+            "headers": {
+              "Cache-Control": {
+                "$ref": "#/components/headers/CacheControl"
+              },
+              "X-Content-Type-Options": {
+                "$ref": "#/components/headers/NoSniff"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ObjectReceipt"
+                }
+              }
+            }
+          },
           "201": {
             "description": "Successful response",
             "headers": {
@@ -4802,24 +4849,6 @@
           },
           "504": {
             "$ref": "#/components/responses/GatewayTimeout"
-          },
-          "200": {
-            "description": "Existing live object replaced",
-            "headers": {
-              "Cache-Control": {
-                "$ref": "#/components/headers/CacheControl"
-              },
-              "X-Content-Type-Options": {
-                "$ref": "#/components/headers/NoSniff"
-              }
-            },
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ObjectReceipt"
-                }
-              }
-            }
           }
         },
         "x-junctura-core-roles": [
@@ -6225,22 +6254,61 @@
     },
     "/v1/workflows/executions": {
       "post": {
-        "operationId": "startWorkflow",
-        "summary": "Start workflow",
-        "description": "Workflow resources remain TENANT scoped, not app-private. App suspension is not a workflow permission check. Keep private payloads out of tenant-visible variables. UUID key reserves tenant/definition/canonical input. Identical replay returns 200, changed input 409. Uncertain start reconciles history or remains pending; never blindly starts again. Not exactly-once external effects. JSON wire limit 64 KiB and input depth at most 32.",
+        "operationId": "startWorkflowWithDeadlines",
+        "summary": "Start a workflow with deadlines",
+        "description": "unit is the business execution's default task unit and defaults to the deployment binding. taskUnits overrides it for selected BPMN userTask element IDs. The caller must be authorized by the deployed workflow policy for all named units. A business execution needs a resolved unit for every task. dueAt is the optional execution deadline and default for its steps. taskDueAt overrides it for the listed BPMN userTask element IDs each time they activate. Unknown element IDs are invalid. Deadlines mark work overdue without preventing completion. The start key binds definition, input, unit assignments and deadlines. An identical retry replays the original 201 result. Core keeps the start reservation beyond the 24-hour replay window. Checkpoint starts with only definitionId and input retain a 200 on replay and 409 on changed input.",
         "tags": [
           "tenant"
         ],
         "x-junctura-query-policy": "closed",
-        "x-junctura-source": "src/modules/workflow/workflow.mjs",
         "security": [
           {
             "coreBearer": []
           }
         ],
+        "x-junctura-core-roles": [
+          "core-reader",
+          "core-writer"
+        ],
+        "x-junctura-authority": "tenant",
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/Uuid"
+            },
+            "example": "11111111-1111-4111-8111-111111111111",
+            "description": "Lowercase UUID. Business starts and deadline-aware starts replay 201. Technical checkpoint starts with only definitionId and input retain legacy key semantics."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WorkflowStartWithDeadlines"
+              },
+              "example": {
+                "definitionId": "process_a:1:42",
+                "input": {},
+                "unit": "unit-a",
+                "taskUnits": {
+                  "review": "unit-a"
+                },
+                "dueAt": "2030-01-12T12:00:00Z",
+                "taskDueAt": {
+                  "review": "2030-01-10T09:00:00Z"
+                }
+              }
+            }
+          }
+        },
+        "x-max-body-bytes": 65536,
         "responses": {
-          "201": {
-            "description": "Successful response",
+          "200": {
+            "description": "Existing idempotent execution replay",
             "headers": {
               "Cache-Control": {
                 "$ref": "#/components/headers/CacheControl"
@@ -6253,6 +6321,38 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/WorkflowExecution"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Successful response.",
+            "headers": {
+              "Cache-Control": {
+                "$ref": "#/components/headers/CacheControl"
+              },
+              "X-Content-Type-Options": {
+                "$ref": "#/components/headers/NoSniff"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/WorkflowExecutionWithDeadline"
+                    },
+                    {
+                      "$ref": "#/components/schemas/WorkflowExecution"
+                    }
+                  ]
+                },
+                "example": {
+                  "id": "exec-17",
+                  "definitionId": "process_a:1:42",
+                  "status": "running",
+                  "input": {},
+                  "dueAt": "2030-01-12T12:00:00Z"
                 }
               }
             }
@@ -6273,13 +6373,16 @@
             "$ref": "#/components/responses/Conflict"
           },
           "413": {
-            "$ref": "#/components/responses/TooLarge"
+            "$ref": "#/components/responses/PlannedTooLarge"
           },
           "415": {
             "$ref": "#/components/responses/UnsupportedMedia"
           },
+          "422": {
+            "$ref": "#/components/responses/IdempotencyKeyReused"
+          },
           "429": {
-            "$ref": "#/components/responses/RateLimited"
+            "$ref": "#/components/responses/PlannedRateLimited"
           },
           "502": {
             "$ref": "#/components/responses/BadGateway"
@@ -6289,179 +6392,38 @@
           },
           "504": {
             "$ref": "#/components/responses/GatewayTimeout"
-          },
-          "200": {
-            "description": "Existing idempotent execution replay",
-            "headers": {
-              "Cache-Control": {
-                "$ref": "#/components/headers/CacheControl"
-              },
-              "X-Content-Type-Options": {
-                "$ref": "#/components/headers/NoSniff"
-              }
-            },
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/WorkflowExecution"
-                }
-              }
-            }
           }
         },
-        "x-junctura-core-roles": [
-          "core-reader",
-          "core-writer"
-        ],
-        "x-junctura-authority": "tenant",
-        "parameters": [
-          {
-            "$ref": "#/components/parameters/IdempotencyKey"
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/WorkflowStart"
-              }
-            }
-          }
-        },
-        "x-max-body-bytes": 65536,
-        "x-junctura-test-suite": "core",
-        "x-junctura-planned-operation": {
-          "operationId": "startWorkflowWithDeadlines",
-          "summary": "Start a workflow with deadlines",
-          "description": "unit is the business execution's default task unit and defaults to the deployment binding. taskUnits overrides it for selected BPMN userTask element IDs. The caller must be authorized by the deployed workflow policy for all named units. A business execution needs a resolved unit for every task. dueAt is the optional execution deadline and default for its steps. taskDueAt overrides it for the listed BPMN userTask element IDs each time they activate. Unknown element IDs are invalid. Deadlines mark work overdue without preventing completion. The start key binds definition, input, unit assignments and deadlines. An identical retry replays the original 201 result.",
-          "tags": [
-            "tenant"
-          ],
-          "x-junctura-status": "planned",
-          "x-junctura-query-policy": "closed",
-          "security": [
-            {
-              "coreBearer": []
-            }
-          ],
-          "x-junctura-core-roles": [
-            "core-reader",
-            "core-writer"
-          ],
-          "x-junctura-authority": "tenant",
-          "parameters": [
-            {
-              "$ref": "#/components/parameters/PlannedIdempotencyKey"
-            }
-          ],
-          "requestBody": {
-            "required": true,
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/WorkflowStartWithDeadlines"
-                },
-                "example": {
-                  "definitionId": "process_a:1:42",
-                  "input": {},
-                  "unit": "unit-a",
-                  "taskUnits": {
-                    "review": "unit-a"
-                  },
-                  "dueAt": "2030-01-12T12:00:00Z",
-                  "taskDueAt": {
-                    "review": "2030-01-10T09:00:00Z"
-                  }
-                }
-              }
-            }
-          },
-          "x-max-body-bytes": 65536,
-          "responses": {
-            "201": {
-              "description": "Successful response.",
-              "headers": {
-                "Cache-Control": {
-                  "$ref": "#/components/headers/CacheControl"
-                },
-                "X-Content-Type-Options": {
-                  "$ref": "#/components/headers/NoSniff"
-                }
-              },
-              "content": {
-                "application/json": {
-                  "schema": {
-                    "$ref": "#/components/schemas/WorkflowExecutionWithDeadline"
-                  },
-                  "example": {
-                    "id": "exec-17",
-                    "definitionId": "process_a:1:42",
-                    "status": "running",
-                    "input": {},
-                    "dueAt": "2030-01-12T12:00:00Z"
-                  }
-                }
-              }
-            },
-            "400": {
-              "$ref": "#/components/responses/PlannedBadRequest"
-            },
-            "401": {
-              "$ref": "#/components/responses/Unauthorized"
-            },
-            "403": {
-              "$ref": "#/components/responses/PlannedForbidden"
-            },
-            "404": {
-              "$ref": "#/components/responses/NotFound"
-            },
-            "409": {
-              "$ref": "#/components/responses/PlannedConflict"
-            },
-            "413": {
-              "$ref": "#/components/responses/PlannedTooLarge"
-            },
-            "415": {
-              "$ref": "#/components/responses/UnsupportedMedia"
-            },
-            "422": {
-              "$ref": "#/components/responses/IdempotencyKeyReused"
-            },
-            "429": {
-              "$ref": "#/components/responses/PlannedRateLimited"
-            },
-            "502": {
-              "$ref": "#/components/responses/BadGateway"
-            },
-            "503": {
-              "$ref": "#/components/responses/Unavailable"
-            },
-            "504": {
-              "$ref": "#/components/responses/GatewayTimeout"
-            }
-          }
-        }
+        "x-junctura-source": "src/modules/workflow/workflow.mjs",
+        "x-junctura-test-suite": "workflow-tasks"
       }
     },
     "/v1/workflows/executions/{executionId}": {
       "get": {
-        "operationId": "getWorkflow",
-        "summary": "Get workflow",
-        "description": "Workflow resources remain TENANT scoped, not app-private. App suspension is not a workflow permission check. Keep private payloads out of tenant-visible variables. State from durable engine history.",
+        "operationId": "getWorkflowWithDeadline",
+        "summary": "Get a workflow execution and deadline",
+        "description": "Read the execution in the verified tenant. dueAt is null when no execution deadline was supplied. Use the task inbox for individually authorized pending steps.",
         "tags": [
           "tenant"
         ],
         "x-junctura-query-policy": "closed",
-        "x-junctura-source": "src/modules/workflow/workflow.mjs",
         "security": [
           {
             "coreBearer": []
           }
         ],
+        "x-junctura-core-roles": [
+          "core-reader"
+        ],
+        "x-junctura-authority": "tenant",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ExecutionId"
+          }
+        ],
         "responses": {
           "200": {
-            "description": "Successful response",
+            "description": "Successful response.",
             "headers": {
               "Cache-Control": {
                 "$ref": "#/components/headers/CacheControl"
@@ -6473,7 +6435,14 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/WorkflowExecution"
+                  "$ref": "#/components/schemas/WorkflowExecutionWithDeadline"
+                },
+                "example": {
+                  "id": "exec-17",
+                  "definitionId": "process_a:1:42",
+                  "status": "running",
+                  "input": {},
+                  "dueAt": "2030-01-12T12:00:00Z"
                 }
               }
             }
@@ -6490,11 +6459,8 @@
           "404": {
             "$ref": "#/components/responses/NotFound"
           },
-          "405": {
-            "$ref": "#/components/responses/MethodNotAllowed"
-          },
           "429": {
-            "$ref": "#/components/responses/RateLimited"
+            "$ref": "#/components/responses/PlannedRateLimited"
           },
           "502": {
             "$ref": "#/components/responses/BadGateway"
@@ -6506,104 +6472,30 @@
             "$ref": "#/components/responses/GatewayTimeout"
           }
         },
+        "x-junctura-source": "src/modules/workflow/workflow.mjs",
+        "x-junctura-test-suite": "workflow-tasks"
+      },
+      "delete": {
+        "operationId": "cancelWorkflowWithPendingCheck",
+        "summary": "Cancel a workflow execution",
+        "description": "Cancel a running execution in the caller tenant. Repeated cancellation returns 204. A completed execution or an accepted task completion still pending reconciliation returns 409. Cancellation and completion are serialized for the execution.",
+        "tags": [
+          "tenant"
+        ],
+        "x-junctura-query-policy": "closed",
+        "security": [
+          {
+            "coreBearer": []
+          }
+        ],
         "x-junctura-core-roles": [
-          "core-reader"
+          "core-reader",
+          "core-writer"
         ],
         "x-junctura-authority": "tenant",
         "parameters": [
           {
             "$ref": "#/components/parameters/ExecutionId"
-          }
-        ],
-        "x-junctura-test-suite": "core",
-        "x-junctura-planned-operation": {
-          "operationId": "getWorkflowWithDeadline",
-          "summary": "Get a workflow execution and deadline",
-          "description": "Read the execution in the verified tenant. dueAt is null when no execution deadline was supplied. Use the task inbox for individually authorized pending steps.",
-          "tags": [
-            "tenant"
-          ],
-          "x-junctura-status": "planned",
-          "x-junctura-query-policy": "closed",
-          "security": [
-            {
-              "coreBearer": []
-            }
-          ],
-          "x-junctura-core-roles": [
-            "core-reader"
-          ],
-          "x-junctura-authority": "tenant",
-          "parameters": [
-            {
-              "$ref": "#/components/parameters/ExecutionId"
-            }
-          ],
-          "responses": {
-            "200": {
-              "description": "Successful response.",
-              "headers": {
-                "Cache-Control": {
-                  "$ref": "#/components/headers/CacheControl"
-                },
-                "X-Content-Type-Options": {
-                  "$ref": "#/components/headers/NoSniff"
-                }
-              },
-              "content": {
-                "application/json": {
-                  "schema": {
-                    "$ref": "#/components/schemas/WorkflowExecutionWithDeadline"
-                  },
-                  "example": {
-                    "id": "exec-17",
-                    "definitionId": "process_a:1:42",
-                    "status": "running",
-                    "input": {},
-                    "dueAt": "2030-01-12T12:00:00Z"
-                  }
-                }
-              }
-            },
-            "400": {
-              "$ref": "#/components/responses/PlannedBadRequest"
-            },
-            "401": {
-              "$ref": "#/components/responses/Unauthorized"
-            },
-            "403": {
-              "$ref": "#/components/responses/PlannedForbidden"
-            },
-            "404": {
-              "$ref": "#/components/responses/NotFound"
-            },
-            "429": {
-              "$ref": "#/components/responses/PlannedRateLimited"
-            },
-            "502": {
-              "$ref": "#/components/responses/BadGateway"
-            },
-            "503": {
-              "$ref": "#/components/responses/Unavailable"
-            },
-            "504": {
-              "$ref": "#/components/responses/GatewayTimeout"
-            }
-          }
-        }
-      },
-      "delete": {
-        "operationId": "cancelWorkflow",
-        "summary": "Cancel workflow",
-        "description": "Workflow resources remain TENANT scoped, not app-private. App suspension is not a workflow permission check. Keep private payloads out of tenant-visible variables. Repeated cancellation returns 204; completed execution returns 409. No rollback of external effects is implied.",
-        "tags": [
-          "tenant"
-        ],
-        "x-junctura-query-policy": "closed",
-        "x-junctura-source": "src/modules/workflow/workflow.mjs",
-        "security": [
-          {
-            "coreBearer": []
           }
         ],
         "responses": {
@@ -6622,14 +6514,11 @@
           "404": {
             "$ref": "#/components/responses/NotFound"
           },
-          "405": {
-            "$ref": "#/components/responses/MethodNotAllowed"
-          },
           "409": {
             "$ref": "#/components/responses/Conflict"
           },
           "429": {
-            "$ref": "#/components/responses/RateLimited"
+            "$ref": "#/components/responses/PlannedRateLimited"
           },
           "502": {
             "$ref": "#/components/responses/BadGateway"
@@ -6641,6 +6530,24 @@
             "$ref": "#/components/responses/GatewayTimeout"
           }
         },
+        "x-junctura-source": "src/modules/workflow/workflow.mjs",
+        "x-junctura-test-suite": "workflow-tasks"
+      }
+    },
+    "/v1/workflows/executions/{executionId}/complete": {
+      "post": {
+        "operationId": "completeWorkflowTask",
+        "summary": "Complete a specific workflow task",
+        "description": "Business workflows require taskId. Core checks execution, tenant, unit and candidate-group membership before accepting the command, including replays. A task claimed by another caller returns 409 task_claimed; a completed task returns 409 task_already_completed for a new attempt. A valid claim by the caller or an unclaimed task can be completed. variables supplies primitive BPMN routing values and replaces the proposed output field. Optional records are creates owned by the calling app; using them requires an active binding for that app and a verified user context. Core validates and commits them with a durable completion outbox entry. A 202 means the task transition is still pending. An identical replay with the original Idempotency-Key returns the first result even if the task has since completed. Read execution state and history after a 202. Other parallel tasks remain pending. While an accepted completion is pending, cancellation conflicts. The empty object retains synchronous compatibility for the technical checkpoint and executions started before workflow task policy was introduced.",
+        "tags": [
+          "tenant"
+        ],
+        "x-junctura-query-policy": "closed",
+        "security": [
+          {
+            "coreBearer": []
+          }
+        ],
         "x-junctura-core-roles": [
           "core-reader",
           "core-writer"
@@ -6649,86 +6556,56 @@
         "parameters": [
           {
             "$ref": "#/components/parameters/ExecutionId"
-          }
-        ],
-        "x-junctura-test-suite": "core",
-        "x-junctura-planned-operation": {
-          "operationId": "cancelWorkflowWithPendingCheck",
-          "summary": "Cancel a workflow execution",
-          "description": "Cancel a running execution in the caller tenant. Repeated cancellation returns 204. A completed execution or an accepted task completion still pending reconciliation returns 409. Cancellation and completion are serialized for the execution.",
-          "tags": [
-            "tenant"
-          ],
-          "x-junctura-status": "planned",
-          "x-junctura-query-policy": "closed",
-          "security": [
-            {
-              "coreBearer": []
-            }
-          ],
-          "x-junctura-core-roles": [
-            "core-reader",
-            "core-writer"
-          ],
-          "x-junctura-authority": "tenant",
-          "parameters": [
-            {
-              "$ref": "#/components/parameters/ExecutionId"
-            }
-          ],
-          "responses": {
-            "204": {
-              "$ref": "#/components/responses/NoContent"
-            },
-            "400": {
-              "$ref": "#/components/responses/PlannedBadRequest"
-            },
-            "401": {
-              "$ref": "#/components/responses/Unauthorized"
-            },
-            "403": {
-              "$ref": "#/components/responses/PlannedForbidden"
-            },
-            "404": {
-              "$ref": "#/components/responses/NotFound"
-            },
-            "409": {
-              "$ref": "#/components/responses/PlannedConflict"
-            },
-            "429": {
-              "$ref": "#/components/responses/PlannedRateLimited"
-            },
-            "502": {
-              "$ref": "#/components/responses/BadGateway"
-            },
-            "503": {
-              "$ref": "#/components/responses/Unavailable"
-            },
-            "504": {
-              "$ref": "#/components/responses/GatewayTimeout"
-            }
-          }
-        }
-      }
-    },
-    "/v1/workflows/executions/{executionId}/complete": {
-      "post": {
-        "operationId": "completeWorkflow",
-        "summary": "Complete workflow",
-        "description": "Workflow resources remain TENANT scoped, not app-private. App suspension is not a workflow permission check. Keep private payloads out of tenant-visible variables. Empty object only. Completes exactly one active user task. Already completed is replayed; cancelled or multiple active tasks conflict. No task-assignee/business approval policy is inferred.",
-        "tags": [
-          "tenant"
-        ],
-        "x-junctura-query-policy": "closed",
-        "x-junctura-source": "src/modules/workflow/workflow.mjs",
-        "security": [
+          },
           {
-            "coreBearer": []
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/Uuid"
+            },
+            "example": "11111111-1111-4111-8111-111111111111",
+            "description": "Lowercase UUID required for completion by taskId. Retry with the same key and logical request to replay the first recorded response for 24 hours."
           }
         ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/WorkflowTaskCompletion"
+                  },
+                  {
+                    "$ref": "#/components/schemas/EmptyObject"
+                  }
+                ]
+              },
+              "example": {
+                "taskId": "task-23",
+                "variables": {
+                  "decision": "approved",
+                  "reason": "Criteria met",
+                  "approved": true
+                },
+                "records": [
+                  {
+                    "collection": "entries",
+                    "data": {
+                      "code": "REF-0002",
+                      "status": "open"
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "x-max-body-bytes": 671744,
         "responses": {
           "200": {
-            "description": "Successful response",
+            "description": "Synchronous completion of a technical checkpoint or an execution started before workflow task policy was introduced.",
             "headers": {
               "Cache-Control": {
                 "$ref": "#/components/headers/CacheControl"
@@ -6745,32 +6622,102 @@
               }
             }
           },
+          "202": {
+            "description": "Records and outbox committed; task transition pending.",
+            "headers": {
+              "Cache-Control": {
+                "$ref": "#/components/headers/CacheControl"
+              },
+              "X-Content-Type-Options": {
+                "$ref": "#/components/headers/NoSniff"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkflowPendingCompletion"
+                },
+                "example": {
+                  "taskId": "task-23",
+                  "completionStatus": "pending",
+                  "execution": {
+                    "id": "exec-17",
+                    "definitionId": "process_a:1:42",
+                    "status": "running",
+                    "input": {},
+                    "dueAt": "2030-01-12T12:00:00Z"
+                  }
+                }
+              }
+            }
+          },
           "400": {
-            "$ref": "#/components/responses/BadRequest"
+            "description": "Invalid execution or completion request. An invalid record may include its JSON Pointer.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/PlannedRequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/responses/BadRequest/content/application~1json/schema"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "error": {
+                          "const": "invalid_request"
+                        },
+                        "requestId": {
+                          "$ref": "#/components/schemas/Uuid"
+                        },
+                        "issues": {
+                          "$ref": "#/components/schemas/SchemaViolation/properties/issues"
+                        }
+                      },
+                      "required": [
+                        "error",
+                        "requestId",
+                        "issues"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
+                }
+              },
+              "text/html": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
           },
           "403": {
-            "$ref": "#/components/responses/Forbidden"
+            "$ref": "#/components/responses/TaskGroupRequired"
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
           },
-          "405": {
-            "$ref": "#/components/responses/MethodNotAllowed"
-          },
           "409": {
-            "$ref": "#/components/responses/Conflict"
+            "$ref": "#/components/responses/WorkflowTaskConflict"
           },
           "413": {
-            "$ref": "#/components/responses/TooLarge"
+            "$ref": "#/components/responses/PlannedTooLarge"
           },
           "415": {
             "$ref": "#/components/responses/UnsupportedMedia"
           },
+          "422": {
+            "$ref": "#/components/responses/RecordWriteUnprocessable"
+          },
           "429": {
-            "$ref": "#/components/responses/RateLimited"
+            "$ref": "#/components/responses/PlannedRateLimited"
           },
           "502": {
             "$ref": "#/components/responses/BadGateway"
@@ -6782,194 +6729,8 @@
             "$ref": "#/components/responses/GatewayTimeout"
           }
         },
-        "x-junctura-core-roles": [
-          "core-reader",
-          "core-writer"
-        ],
-        "x-junctura-authority": "tenant",
-        "parameters": [
-          {
-            "$ref": "#/components/parameters/ExecutionId"
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/EmptyObject"
-              }
-            }
-          }
-        },
-        "x-max-body-bytes": 65536,
-        "x-junctura-test-suite": "core",
-        "x-junctura-planned-operation": {
-          "operationId": "completeWorkflowTask",
-          "summary": "Complete a specific workflow task",
-          "description": "Business workflows require taskId. Core checks execution, tenant, unit and candidate-group membership before accepting the command, including replays. A task claimed by another caller returns 409 task_claimed; a completed task returns 409 task_already_completed for a new attempt. A valid claim by the caller or an unclaimed task can be completed. variables supplies primitive BPMN routing values and replaces the proposed output field. Optional records are creates owned by the calling app; using them requires an active binding for that app and a verified user context. Core validates and commits them with a durable completion outbox entry. A 202 means the task transition is still pending. An identical replay with the original Idempotency-Key returns the first result even if the task has since completed. Read execution state and history after a 202. Other parallel tasks remain pending. While an accepted completion is pending, cancellation conflicts. The empty object is reserved for the legacy technical checkpoint and returns the execution representation.",
-          "tags": [
-            "tenant"
-          ],
-          "x-junctura-status": "planned",
-          "x-junctura-query-policy": "closed",
-          "security": [
-            {
-              "coreBearer": []
-            }
-          ],
-          "x-junctura-core-roles": [
-            "core-reader",
-            "core-writer"
-          ],
-          "x-junctura-authority": "tenant",
-          "parameters": [
-            {
-              "$ref": "#/components/parameters/ExecutionId"
-            },
-            {
-              "$ref": "#/components/parameters/PlannedIdempotencyKey"
-            }
-          ],
-          "requestBody": {
-            "required": true,
-            "content": {
-              "application/json": {
-                "schema": {
-                  "oneOf": [
-                    {
-                      "$ref": "#/components/schemas/WorkflowTaskCompletion"
-                    },
-                    {
-                      "$ref": "#/components/schemas/EmptyObject"
-                    }
-                  ]
-                },
-                "example": {
-                  "taskId": "task-23",
-                  "variables": {
-                    "decision": "approved",
-                    "reason": "Criteria met",
-                    "approved": true
-                  },
-                  "records": [
-                    {
-                      "collection": "entries",
-                      "data": {
-                        "code": "REF-0002",
-                        "status": "open"
-                      }
-                    }
-                  ]
-                }
-              }
-            }
-          },
-          "x-max-body-bytes": 716800,
-          "responses": {
-            "200": {
-              "description": "Selected task completed or an identical completion was replayed.",
-              "headers": {
-                "Cache-Control": {
-                  "$ref": "#/components/headers/CacheControl"
-                },
-                "X-Content-Type-Options": {
-                  "$ref": "#/components/headers/NoSniff"
-                }
-              },
-              "content": {
-                "application/json": {
-                  "schema": {
-                    "oneOf": [
-                      {
-                        "$ref": "#/components/schemas/WorkflowCompletionResult"
-                      },
-                      {
-                        "$ref": "#/components/schemas/WorkflowExecutionWithDeadline"
-                      }
-                    ]
-                  },
-                  "example": {
-                    "taskId": "task-23",
-                    "completionStatus": "applied",
-                    "execution": {
-                      "id": "exec-17",
-                      "definitionId": "process_a:1:42",
-                      "status": "running",
-                      "input": {},
-                      "dueAt": "2030-01-12T12:00:00Z"
-                    }
-                  }
-                }
-              }
-            },
-            "202": {
-              "description": "Records and outbox committed; task transition pending.",
-              "headers": {
-                "Cache-Control": {
-                  "$ref": "#/components/headers/CacheControl"
-                },
-                "X-Content-Type-Options": {
-                  "$ref": "#/components/headers/NoSniff"
-                }
-              },
-              "content": {
-                "application/json": {
-                  "schema": {
-                    "$ref": "#/components/schemas/WorkflowPendingCompletion"
-                  },
-                  "example": {
-                    "taskId": "task-23",
-                    "completionStatus": "pending",
-                    "execution": {
-                      "id": "exec-17",
-                      "definitionId": "process_a:1:42",
-                      "status": "running",
-                      "input": {},
-                      "dueAt": "2030-01-12T12:00:00Z"
-                    }
-                  }
-                }
-              }
-            },
-            "400": {
-              "$ref": "#/components/responses/PlannedBadRequest"
-            },
-            "401": {
-              "$ref": "#/components/responses/Unauthorized"
-            },
-            "403": {
-              "$ref": "#/components/responses/TaskGroupRequired"
-            },
-            "404": {
-              "$ref": "#/components/responses/NotFound"
-            },
-            "409": {
-              "$ref": "#/components/responses/WorkflowTaskConflict"
-            },
-            "413": {
-              "$ref": "#/components/responses/PlannedTooLarge"
-            },
-            "415": {
-              "$ref": "#/components/responses/UnsupportedMedia"
-            },
-            "422": {
-              "$ref": "#/components/responses/RecordWriteUnprocessable"
-            },
-            "429": {
-              "$ref": "#/components/responses/PlannedRateLimited"
-            },
-            "502": {
-              "$ref": "#/components/responses/BadGateway"
-            },
-            "503": {
-              "$ref": "#/components/responses/Unavailable"
-            },
-            "504": {
-              "$ref": "#/components/responses/GatewayTimeout"
-            }
-          }
-        }
+        "x-junctura-source": "src/modules/workflow/workflow.mjs",
+        "x-junctura-test-suite": "workflow-tasks"
       }
     },
     "/identity/realms/junctura/.well-known/openid-configuration": {
@@ -6994,12 +6755,6 @@
               }
             }
           },
-          "502": {
-            "$ref": "#/components/responses/BadGateway"
-          },
-          "504": {
-            "$ref": "#/components/responses/GatewayTimeout"
-          },
           "400": {
             "description": "Provider protocol/client error.",
             "content": {
@@ -7044,6 +6799,12 @@
                 }
               }
             }
+          },
+          "502": {
+            "$ref": "#/components/responses/BadGateway"
+          },
+          "504": {
+            "$ref": "#/components/responses/GatewayTimeout"
           }
         },
         "x-junctura-upstream": "Keycloak 26.8.1",
@@ -7072,11 +6833,13 @@
               }
             }
           },
-          "502": {
-            "$ref": "#/components/responses/BadGateway"
-          },
-          "504": {
-            "$ref": "#/components/responses/GatewayTimeout"
+          "302": {
+            "description": "Authorization redirect.",
+            "headers": {
+              "Location": {
+                "$ref": "#/components/headers/Location"
+              }
+            }
           },
           "400": {
             "description": "Provider protocol/client error.",
@@ -7123,13 +6886,11 @@
               }
             }
           },
-          "302": {
-            "description": "Authorization redirect.",
-            "headers": {
-              "Location": {
-                "$ref": "#/components/headers/Location"
-              }
-            }
+          "502": {
+            "$ref": "#/components/responses/BadGateway"
+          },
+          "504": {
+            "$ref": "#/components/responses/GatewayTimeout"
           }
         },
         "x-junctura-upstream": "Keycloak 26.8.1",
@@ -7229,12 +6990,6 @@
               }
             }
           },
-          "502": {
-            "$ref": "#/components/responses/BadGateway"
-          },
-          "504": {
-            "$ref": "#/components/responses/GatewayTimeout"
-          },
           "400": {
             "description": "Provider protocol/client error.",
             "content": {
@@ -7279,6 +7034,12 @@
                 }
               }
             }
+          },
+          "502": {
+            "$ref": "#/components/responses/BadGateway"
+          },
+          "504": {
+            "$ref": "#/components/responses/GatewayTimeout"
           }
         },
         "requestBody": {
@@ -7317,12 +7078,6 @@
               }
             }
           },
-          "502": {
-            "$ref": "#/components/responses/BadGateway"
-          },
-          "504": {
-            "$ref": "#/components/responses/GatewayTimeout"
-          },
           "400": {
             "description": "Provider protocol/client error.",
             "content": {
@@ -7367,6 +7122,12 @@
                 }
               }
             }
+          },
+          "502": {
+            "$ref": "#/components/responses/BadGateway"
+          },
+          "504": {
+            "$ref": "#/components/responses/GatewayTimeout"
           }
         },
         "x-junctura-upstream": "Keycloak 26.8.1",
@@ -7399,12 +7160,6 @@
               }
             }
           },
-          "502": {
-            "$ref": "#/components/responses/BadGateway"
-          },
-          "504": {
-            "$ref": "#/components/responses/GatewayTimeout"
-          },
           "400": {
             "description": "Provider protocol/client error.",
             "content": {
@@ -7449,6 +7204,12 @@
                 }
               }
             }
+          },
+          "502": {
+            "$ref": "#/components/responses/BadGateway"
+          },
+          "504": {
+            "$ref": "#/components/responses/GatewayTimeout"
           }
         },
         "x-junctura-upstream": "Keycloak 26.8.1",
@@ -7479,12 +7240,6 @@
               }
             }
           },
-          "502": {
-            "$ref": "#/components/responses/BadGateway"
-          },
-          "504": {
-            "$ref": "#/components/responses/GatewayTimeout"
-          },
           "400": {
             "description": "Provider protocol/client error.",
             "content": {
@@ -7529,6 +7284,12 @@
                 }
               }
             }
+          },
+          "502": {
+            "$ref": "#/components/responses/BadGateway"
+          },
+          "504": {
+            "$ref": "#/components/responses/GatewayTimeout"
           }
         },
         "x-junctura-upstream": "Keycloak 26.8.1",
@@ -7550,12 +7311,6 @@
           "204": {
             "$ref": "#/components/responses/NoContent"
           },
-          "502": {
-            "$ref": "#/components/responses/BadGateway"
-          },
-          "504": {
-            "$ref": "#/components/responses/GatewayTimeout"
-          },
           "400": {
             "description": "Provider protocol/client error.",
             "content": {
@@ -7600,6 +7355,12 @@
                 }
               }
             }
+          },
+          "502": {
+            "$ref": "#/components/responses/BadGateway"
+          },
+          "504": {
+            "$ref": "#/components/responses/GatewayTimeout"
           }
         },
         "requestBody": {
@@ -7636,11 +7397,13 @@
               }
             }
           },
-          "502": {
-            "$ref": "#/components/responses/BadGateway"
-          },
-          "504": {
-            "$ref": "#/components/responses/GatewayTimeout"
+          "302": {
+            "description": "Provider post-logout redirect.",
+            "headers": {
+              "Location": {
+                "$ref": "#/components/headers/Location"
+              }
+            }
           },
           "400": {
             "description": "Provider protocol/client error.",
@@ -7687,13 +7450,11 @@
               }
             }
           },
-          "302": {
-            "description": "Provider post-logout redirect.",
-            "headers": {
-              "Location": {
-                "$ref": "#/components/headers/Location"
-              }
-            }
+          "502": {
+            "$ref": "#/components/responses/BadGateway"
+          },
+          "504": {
+            "$ref": "#/components/responses/GatewayTimeout"
           }
         },
         "x-junctura-upstream": "Keycloak 26.8.1",
@@ -8217,7 +7978,11 @@
                   "type": "string",
                   "enum": [
                     "task_group_required",
-                    "forbidden"
+                    "forbidden",
+                    "write_forbidden",
+                    "verified_client_required",
+                    "verified_subject_required",
+                    "application_access_required"
                   ]
                 },
                 "requestId": {
@@ -9178,15 +8943,12 @@
         "content": {
           "application/json": {
             "schema": {
-              "oneOf": [
+              "anyOf": [
                 {
-                  "$ref": "#/components/responses/PlannedConflict/content/application~1json/schema"
+                  "$ref": "#/components/schemas/ApplicationError"
                 },
                 {
                   "$ref": "#/components/responses/TaskClaimed/content/application~1json/schema"
-                },
-                {
-                  "$ref": "#/components/responses/TaskAlreadyCompleted/content/application~1json/schema"
                 }
               ]
             },
@@ -10312,7 +10074,13 @@
         "type": "object",
         "propertyNames": {
           "type": "string",
-          "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,63}$"
+          "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,63}$",
+          "not": {
+            "enum": [
+              "input",
+              "__junctura_completion"
+            ]
+          }
         },
         "additionalProperties": {
           "type": [
@@ -10334,7 +10102,7 @@
           }
         },
         "x-max-utf8-bytes": 4096,
-        "description": "Maximum 4,096 bytes when compactly encoded as UTF-8 JSON. input is reserved by Core. decision and reason are optional history fields. Keep sensitive data out of variables."
+        "description": "Maximum 4,096 bytes when compactly encoded as UTF-8 JSON. Core reserves input and __junctura_completion. decision and reason are optional history fields. Keep sensitive data out of variables."
       },
       "WorkflowTaskCompletion": {
         "type": "object",
@@ -10357,27 +10125,6 @@
         },
         "required": [
           "taskId"
-        ],
-        "additionalProperties": false
-      },
-      "WorkflowCompletionResult": {
-        "type": "object",
-        "properties": {
-          "taskId": {
-            "type": "string",
-            "pattern": "^[A-Za-z0-9:_-]{1,128}$"
-          },
-          "execution": {
-            "$ref": "#/components/schemas/WorkflowExecutionWithDeadline"
-          },
-          "completionStatus": {
-            "const": "applied"
-          }
-        },
-        "required": [
-          "taskId",
-          "execution",
-          "completionStatus"
         ],
         "additionalProperties": false
       },

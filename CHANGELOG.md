@@ -8,6 +8,11 @@ All notable changes to Junctura are recorded here. Versions follow
 
 ## Unreleased
 
+- Business workflows now bind tasks to directory units and candidate groups. The task inbox supports
+  execution and per-step deadlines, parallel tasks, and expiring claims. Workflow completion accepts
+  optional app-owned records with a durable outbox and replays the original `202`. The Flowable worker
+  confirms each task before publishing its actor, decision and reason in history. Migrations 039–040
+  add workflow policies and state. The SDK and Console API reference cover the new operations.
 - **Identity review hardening (issue #65, round 1):** migrations 036–038 write their ledger under the
   migration role; tenant membership now names the tenant root group by full path (`/{tenant}`), so a
   leaf group name can no longer prove membership in another tenant; the directory sync client imports

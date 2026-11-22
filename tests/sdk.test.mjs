@@ -201,3 +201,37 @@ test("consent calls carry the caller-provided user token, never the service toke
   assert.deepEqual(authorizations, ["Bearer user-oidc-token", "Bearer user-oidc-token"],
     "no client-credentials token ever reaches a consent route");
 });
+
+test("SDK workflow task calls use the supplied verified token, filters and stable retry key", async () => {
+  const calls = [];
+  const client = createJuncturaClient({ ...options, fetcher: async (url, init) => {
+    assert.equal(init.headers.get("Authorization"), "Bearer workflow-user");
+    calls.push([init.method, url.pathname + url.search, init.body && JSON.parse(init.body),
+      init.headers.get("Idempotency-Key")]);
+    if (init.method === "DELETE" || url.pathname.endsWith("/release")) return new Response(null, { status: 204 });
+    return json(url.pathname.endsWith("/complete") ? { completionStatus: "pending" } : {}, url.pathname.endsWith("/complete") ? 202 : 200);
+  } });
+  const user = { userToken: "workflow-user" };
+  const start = { definitionId: "process:1:42", taskDueAt: { review: "2030-01-01T01:00:00Z" } };
+  const body = { taskId: "task:1", variables: { decision: "approved" }, records: [{ collection: "entries", data: {} }] };
+  await client.startWorkflowWithDeadlines(start, { ...user, idempotencyKey: "start-key" });
+  await client.getWorkflowWithDeadline("exec:1", user);
+  await client.listWorkflowTasks({ ...user, overdue: false, unit: "unit-a", candidateGroup: "reviewers", limit: 2 });
+  await client.claimWorkflowTask("task:1", { ...user, ttlSeconds: 60 });
+  await client.releaseWorkflowTask("task:1", user);
+  assert.deepEqual(await client.completeWorkflowTask("exec:1", body, { ...user, idempotencyKey: "complete-key" }), {
+    completionStatus: "pending",
+  });
+  await client.cancelWorkflowWithPendingCheck("exec:1", user);
+  await client.listWorkflowTaskHistory("exec:1", { ...user, cursor: "next" });
+  assert.deepEqual(calls, [
+    ["POST", "/v1/workflows/executions", start, "start-key"],
+    ["GET", "/v1/workflows/executions/exec%3A1", undefined, null],
+    ["GET", "/v1/workflows/tasks?limit=2&unit=unit-a&candidateGroup=reviewers&overdue=false", undefined, null],
+    ["POST", "/v1/workflows/tasks/task%3A1/claim", { ttlSeconds: 60 }, null],
+    ["POST", "/v1/workflows/tasks/task%3A1/release", undefined, null],
+    ["POST", "/v1/workflows/executions/exec%3A1/complete", body, "complete-key"],
+    ["DELETE", "/v1/workflows/executions/exec%3A1", undefined, null],
+    ["GET", "/v1/workflows/executions/exec%3A1/history?cursor=next", undefined, null],
+  ]);
+});

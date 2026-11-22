@@ -379,6 +379,261 @@
     "successHasBody": true
   },
   {
+    "path": "/v1/workflows/tasks",
+    "method": "GET",
+    "operationId": "listWorkflowTasks",
+    "summary": "List the caller's pending group tasks",
+    "description": "Return each eligible parallel task separately. The verified group path must match the task's unit and one of its candidate groups. All filters narrow that authorized set. overdue is true if dueAt is past at response time. Sort by deadline ascending with undated tasks last, then taskId. claimedBy and claimedUntil describe the active claim and are both null when the task is unclaimed or the claim has expired.",
+    "tags": [
+      "tenant"
+    ],
+    "security": [
+      {
+        "coreBearer": []
+      }
+    ],
+    "responses": [
+      "200",
+      "400",
+      "401",
+      "403",
+      "404",
+      "429",
+      "502",
+      "503",
+      "504"
+    ],
+    "hasRequestBody": false,
+    "requestContentTypes": [],
+    "pathParameters": [],
+    "queryParameters": [
+      {
+        "name": "limit",
+        "required": false,
+        "schema": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100,
+          "default": 20
+        },
+        "description": ""
+      },
+      {
+        "name": "cursor",
+        "required": false,
+        "schema": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1024,
+          "description": "Opaque cursor. Reuse with the same filters and sort."
+        },
+        "description": ""
+      },
+      {
+        "name": "definitionKey",
+        "required": false,
+        "schema": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{2,63}$"
+        },
+        "description": ""
+      },
+      {
+        "name": "unit",
+        "required": false,
+        "schema": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]{1,63}$"
+        },
+        "description": ""
+      },
+      {
+        "name": "overdue",
+        "required": false,
+        "schema": {
+          "type": "boolean"
+        },
+        "description": ""
+      },
+      {
+        "name": "candidateGroup",
+        "required": false,
+        "schema": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]{1,63}$"
+        },
+        "description": "Optional task group filter. It cannot grant access to a group."
+      }
+    ],
+    "headerParameters": [],
+    "successStatus": "200",
+    "successContentType": "application/json",
+    "successHasBody": true
+  },
+  {
+    "path": "/v1/workflows/tasks/{taskId}/claim",
+    "method": "POST",
+    "operationId": "claimWorkflowTask",
+    "summary": "Claim a waiting workflow task",
+    "description": "An eligible member of a candidate group in the task unit may claim the task. The claim expires after 1800 seconds by default and may last up to 28800 seconds. Repeating a claim as the current holder returns the existing expiry without extending it. A claim held by another caller or a completed task returns 409. Core serializes claims and releases with completion. An accepted completion in progress prevents a new claim.",
+    "tags": [
+      "tenant"
+    ],
+    "security": [
+      {
+        "coreBearer": []
+      }
+    ],
+    "responses": [
+      "200",
+      "400",
+      "401",
+      "403",
+      "404",
+      "409",
+      "413",
+      "415",
+      "429",
+      "502",
+      "503",
+      "504"
+    ],
+    "hasRequestBody": true,
+    "requestContentTypes": [
+      "application/json"
+    ],
+    "pathParameters": [
+      {
+        "name": "taskId",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9:_-]{1,128}$"
+        },
+        "description": ""
+      }
+    ],
+    "queryParameters": [],
+    "headerParameters": [],
+    "successStatus": "200",
+    "successContentType": "application/json",
+    "successHasBody": true
+  },
+  {
+    "path": "/v1/workflows/tasks/{taskId}/release",
+    "method": "POST",
+    "operationId": "releaseWorkflowTask",
+    "summary": "Release a workflow task claim",
+    "description": "An eligible current holder may release their claim. Repeating release while the waiting task is unclaimed returns 204. An active claim of another caller or an already completed task returns 409.",
+    "tags": [
+      "tenant"
+    ],
+    "security": [
+      {
+        "coreBearer": []
+      }
+    ],
+    "responses": [
+      "204",
+      "400",
+      "401",
+      "403",
+      "404",
+      "409",
+      "413",
+      "415",
+      "429",
+      "502",
+      "503",
+      "504"
+    ],
+    "hasRequestBody": false,
+    "requestContentTypes": [],
+    "pathParameters": [
+      {
+        "name": "taskId",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9:_-]{1,128}$"
+        },
+        "description": ""
+      }
+    ],
+    "queryParameters": [],
+    "headerParameters": [],
+    "successStatus": "204",
+    "successContentType": null,
+    "successHasBody": false
+  },
+  {
+    "path": "/v1/workflows/executions/{executionId}/history",
+    "method": "GET",
+    "operationId": "listWorkflowTaskHistory",
+    "summary": "List completed workflow tasks",
+    "description": "Read completed steps newest first by completedAt and taskId. Access requires a verified group eligible on the execution or an enrolled audit.read principal. Core stamps the actor and the matching group used for authorization. If several groups match, use the first in the definition's candidateGroups order. Pending transitions are absent.",
+    "tags": [
+      "tenant"
+    ],
+    "security": [
+      {
+        "coreBearer": []
+      }
+    ],
+    "responses": [
+      "200",
+      "400",
+      "401",
+      "403",
+      "404",
+      "429",
+      "502",
+      "503",
+      "504"
+    ],
+    "hasRequestBody": false,
+    "requestContentTypes": [],
+    "pathParameters": [
+      {
+        "name": "executionId",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9:_-]{1,128}$"
+        },
+        "description": ""
+      }
+    ],
+    "queryParameters": [
+      {
+        "name": "limit",
+        "required": false,
+        "schema": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100,
+          "default": 20
+        },
+        "description": ""
+      },
+      {
+        "name": "cursor",
+        "required": false,
+        "schema": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1024,
+          "description": "Opaque cursor. Reuse with the same filters and sort."
+        },
+        "description": ""
+      }
+    ],
+    "headerParameters": [],
+    "successStatus": "200",
+    "successContentType": "application/json",
+    "successHasBody": true
+  },
+  {
     "path": "/v1/directory/unit-types",
     "method": "GET",
     "operationId": "listDirectoryUnitType",
@@ -2872,9 +3127,9 @@
   {
     "path": "/v1/workflows/executions",
     "method": "POST",
-    "operationId": "startWorkflow",
-    "summary": "Start workflow",
-    "description": "Workflow resources remain TENANT scoped, not app-private. App suspension is not a workflow permission check. Keep private payloads out of tenant-visible variables. UUID key reserves tenant/definition/canonical input. Identical replay returns 200, changed input 409. Uncertain start reconciles history or remains pending; never blindly starts again. Not exactly-once external effects. JSON wire limit 64 KiB and input depth at most 32.",
+    "operationId": "startWorkflowWithDeadlines",
+    "summary": "Start a workflow with deadlines",
+    "description": "unit is the business execution's default task unit and defaults to the deployment binding. taskUnits overrides it for selected BPMN userTask element IDs. The caller must be authorized by the deployed workflow policy for all named units. A business execution needs a resolved unit for every task. dueAt is the optional execution deadline and default for its steps. taskDueAt overrides it for the listed BPMN userTask element IDs each time they activate. Unknown element IDs are invalid. Deadlines mark work overdue without preventing completion. The start key binds definition, input, unit assignments and deadlines. An identical retry replays the original 201 result. Core keeps the start reservation beyond the 24-hour replay window. Checkpoint starts with only definitionId and input retain a 200 on replay and 409 on changed input.",
     "tags": [
       "tenant"
     ],
@@ -2893,6 +3148,7 @@
       "409",
       "413",
       "415",
+      "422",
       "429",
       "502",
       "503",
@@ -2912,7 +3168,7 @@
           "type": "string",
           "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
         },
-        "description": "Tenant-scoped workflow key; identical definition/input returns existing execution, changed logical input conflicts."
+        "description": "Lowercase UUID. Business starts and deadline-aware starts replay 201. Technical checkpoint starts with only definitionId and input retain legacy key semantics."
       }
     ],
     "successStatus": "200",
@@ -2922,9 +3178,9 @@
   {
     "path": "/v1/workflows/executions/{executionId}",
     "method": "GET",
-    "operationId": "getWorkflow",
-    "summary": "Get workflow",
-    "description": "Workflow resources remain TENANT scoped, not app-private. App suspension is not a workflow permission check. Keep private payloads out of tenant-visible variables. State from durable engine history.",
+    "operationId": "getWorkflowWithDeadline",
+    "summary": "Get a workflow execution and deadline",
+    "description": "Read the execution in the verified tenant. dueAt is null when no execution deadline was supplied. Use the task inbox for individually authorized pending steps.",
     "tags": [
       "tenant"
     ],
@@ -2939,7 +3195,6 @@
       "401",
       "403",
       "404",
-      "405",
       "429",
       "502",
       "503",
@@ -2967,9 +3222,9 @@
   {
     "path": "/v1/workflows/executions/{executionId}",
     "method": "DELETE",
-    "operationId": "cancelWorkflow",
-    "summary": "Cancel workflow",
-    "description": "Workflow resources remain TENANT scoped, not app-private. App suspension is not a workflow permission check. Keep private payloads out of tenant-visible variables. Repeated cancellation returns 204; completed execution returns 409. No rollback of external effects is implied.",
+    "operationId": "cancelWorkflowWithPendingCheck",
+    "summary": "Cancel a workflow execution",
+    "description": "Cancel a running execution in the caller tenant. Repeated cancellation returns 204. A completed execution or an accepted task completion still pending reconciliation returns 409. Cancellation and completion are serialized for the execution.",
     "tags": [
       "tenant"
     ],
@@ -2984,7 +3239,6 @@
       "401",
       "403",
       "404",
-      "405",
       "409",
       "429",
       "502",
@@ -3013,9 +3267,9 @@
   {
     "path": "/v1/workflows/executions/{executionId}/complete",
     "method": "POST",
-    "operationId": "completeWorkflow",
-    "summary": "Complete workflow",
-    "description": "Workflow resources remain TENANT scoped, not app-private. App suspension is not a workflow permission check. Keep private payloads out of tenant-visible variables. Empty object only. Completes exactly one active user task. Already completed is replayed; cancelled or multiple active tasks conflict. No task-assignee/business approval policy is inferred.",
+    "operationId": "completeWorkflowTask",
+    "summary": "Complete a specific workflow task",
+    "description": "Business workflows require taskId. Core checks execution, tenant, unit and candidate-group membership before accepting the command, including replays. A task claimed by another caller returns 409 task_claimed; a completed task returns 409 task_already_completed for a new attempt. A valid claim by the caller or an unclaimed task can be completed. variables supplies primitive BPMN routing values and replaces the proposed output field. Optional records are creates owned by the calling app; using them requires an active binding for that app and a verified user context. Core validates and commits them with a durable completion outbox entry. A 202 means the task transition is still pending. An identical replay with the original Idempotency-Key returns the first result even if the task has since completed. Read execution state and history after a 202. Other parallel tasks remain pending. While an accepted completion is pending, cancellation conflicts. The empty object retains synchronous compatibility for the technical checkpoint and executions started before workflow task policy was introduced.",
     "tags": [
       "tenant"
     ],
@@ -3026,14 +3280,15 @@
     ],
     "responses": [
       "200",
+      "202",
       "400",
       "401",
       "403",
       "404",
-      "405",
       "409",
       "413",
       "415",
+      "422",
       "429",
       "502",
       "503",
@@ -3055,7 +3310,17 @@
       }
     ],
     "queryParameters": [],
-    "headerParameters": [],
+    "headerParameters": [
+      {
+        "name": "Idempotency-Key",
+        "required": false,
+        "schema": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        },
+        "description": "Lowercase UUID required for completion by taskId. Retry with the same key and logical request to replay the first recorded response for 24 hours."
+      }
+    ],
     "successStatus": "200",
     "successContentType": "application/json",
     "successHasBody": true

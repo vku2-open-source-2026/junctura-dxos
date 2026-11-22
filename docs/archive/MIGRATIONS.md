@@ -275,3 +275,21 @@ checks during capability execution resolve the named person through the same
 one-way join, so consents granted before verified subjects keep their
 authority, and the data subject's access log shows calls recorded under either
 of their identifiers.
+
+## Workflow deadlines and completion (039–040)
+
+Migration 039 creates operator-managed definition policies keyed by tenant and exact Flowable definition ID.
+Managed starts keep their reservation, effective unit assignments and deadlines in a private execution table
+and record the first response in the shared idempotency ledger. Existing checkpoint reservations remain
+in `core.workflow_requests`. Install bindings for each business definition version before starting it.
+
+Migration 040 adds expiring claims and a completion outbox. The tenant-scoped workflow RPC checks the task
+unit, candidate groups and active claim before committing records, the outbox and the replay receipt.
+A separate internal worker role leases pending entries. It publishes task history only after seeing the
+matching task-local marker and successful end in Flowable history. Both roles use RPC grants and the private
+tables enforce tenant RLS.
+
+Keep the PostgreSQL execution/outbox data and Flowable history together during backup and restore. An
+unconfirmed engine outcome stays pending and retries with a capped delay. A task ended by external deletion
+is marked `cancelled`. A task ended by a different command is marked `unconfirmed`. History contains
+confirmed completions. Use the stored execution and task IDs to reconcile committed records with Flowable.

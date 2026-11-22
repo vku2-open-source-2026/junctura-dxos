@@ -60,6 +60,7 @@ PostgreSQL/PostgREST, SeaweedFS, Flowable, ClamAV and OpenBao remain private.
 | `src/modules/consent/consent.mjs` | Subject consents and emergency-access reviews. |
 | `src/modules/data/data.mjs` | Structured records through `/v1/data/*` and `/v2/data/*`. |
 | `src/modules/directory/directory.mjs` | Tenant principals and organization tree plus operator-managed directory desired state. |
+| `src/modules/workflow/workflow.mjs` | Tenant workflow API and startup entry point for the completion reconciler. |
 | `src/modules/metrics/metrics.mjs` | Per-process request counters and bounded recent traffic. |
 | `src/modules/objects/objects.mjs`, `src/modules/objects/malware-scan.mjs` | Object routes, storage adapter and fail-closed ClamAV scanning. |
 | `src/modules/resources/resources.mjs` | Verified application context, resource authority and read shares. |
@@ -182,7 +183,7 @@ See [CI](../.github/workflows/ci.yml).
 
 Run [infra/postgres/migrate.sh](../infra/postgres/migrate.sh) with `docker compose run --rm data-migrate`;
 Compose gates `data` and then Core on success. Number after the highest `infra/postgres/NNN-*.sql`:
-currently `038`. Mount new files in `compose.yaml`'s `data-migrate` service.
+currently `040`. Mount new files in `compose.yaml`'s `data-migrate` service.
 **All applied files are immutable**: preserve their exact bytes and add forward migrations.
 
 SHA-256 enters `core.schema_migration_checksums` in the applying transaction
@@ -260,6 +261,8 @@ The runner strips CRLF delimiters for execution but hashes original bytes;
 | 036 | Operator-bound verified subject identifiers per tenant and issuer. |
 | 037 | Directory desired state (unit types, flat units, groups, members) with generations and the `directory.write` permission. |
 | 038 | Consent under the verified subject identity with legacy mapping through subject bindings. |
+| 039 | Exact-version workflow unit policies, durable start reservations and deadlines. |
+| 040 | Expiring task claims, completion outbox, worker leases and confirmed task history. |
 
 Set `STRICT_RECORD_WRITES=true` on every Core replica after updating callers to
 send idempotency keys and record preconditions. The default is `false`.
@@ -305,6 +308,10 @@ node --env-file=.env examples/foundation-http.mjs
 5. Create a ten-minute record read share; with grantee credentials, confirm access succeeds afterward.
 
 Grantee credentials are optional but must be paired; omitting them skips before/after checks.
+Run `npm run test:workflow-tasks` on the isolated Compose test stack to exercise business workflow policy,
+claims and outbox reconciliation against the pinned Flowable engine. The suite creates and removes its own
+BPMN deployment, identity fixtures and directory bindings.
+
 Workflow variables are tenant-visible: exclude private record/object content. The CLI prints IDs
 and keeps resources; failed POST outcomes may be ambiguous, so never blindly rerun.
 For cleanup, use an owner backend token in `$TOKEN`, set `$PUBLIC_URL` and substitute printed IDs:

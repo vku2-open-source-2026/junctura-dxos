@@ -69,7 +69,7 @@ test("pg_dump/pg_restore preserves real data and tenant RLS in an isolated tempo
     }
     assert.ok(ready, "Isolated PostgreSQL completed initialization");
     await docker(["exec", target, "createdb", "-U", "junctura_admin", "recovered"]);
-    await docker(["exec", target, "psql", "-U", "junctura_admin", "-d", "recovered", "-v", "ON_ERROR_STOP=1", "-c", "CREATE ROLE junctura_api NOLOGIN NOBYPASSRLS; CREATE ROLE junctura_app_api NOLOGIN NOBYPASSRLS; CREATE ROLE junctura_app_owner NOLOGIN NOBYPASSRLS; CREATE ROLE junctura_resource_api NOLOGIN NOBYPASSRLS; CREATE ROLE junctura_record_api NOLOGIN NOBYPASSRLS; ALTER ROLE junctura_record_api SET statement_timeout='4s'; CREATE ROLE junctura_audit_api NOLOGIN NOBYPASSRLS; CREATE ROLE junctura_capability_api NOLOGIN NOBYPASSRLS; CREATE ROLE junctura_trust_api NOLOGIN NOBYPASSRLS; CREATE ROLE junctura_execution_api NOLOGIN NOBYPASSRLS; CREATE ROLE junctura_composition_api NOLOGIN NOBYPASSRLS; CREATE ROLE junctura_subject_api NOLOGIN NOBYPASSRLS; CREATE ROLE junctura_directory_api NOLOGIN NOBYPASSRLS; CREATE ROLE junctura_directory_worker NOLOGIN NOBYPASSRLS; CREATE ROLE junctura_storage_api NOLOGIN NOBYPASSRLS; CREATE ROLE junctura_storage_collections_api NOLOGIN NOBYPASSRLS; CREATE ROLE junctura_workflow_audit_api NOLOGIN NOBYPASSRLS; CREATE ROLE junctura_application_stats_api NOLOGIN NOBYPASSRLS;"]);
+    await docker(["exec", target, "psql", "-U", "junctura_admin", "-d", "recovered", "-v", "ON_ERROR_STOP=1", "-c", "CREATE ROLE junctura_api NOLOGIN NOBYPASSRLS; CREATE ROLE junctura_app_api NOLOGIN NOBYPASSRLS; CREATE ROLE junctura_app_owner NOLOGIN NOBYPASSRLS; CREATE ROLE junctura_resource_api NOLOGIN NOBYPASSRLS; CREATE ROLE junctura_record_api NOLOGIN NOBYPASSRLS; ALTER ROLE junctura_record_api SET statement_timeout='4s'; CREATE ROLE junctura_audit_api NOLOGIN NOBYPASSRLS; CREATE ROLE junctura_capability_api NOLOGIN NOBYPASSRLS; CREATE ROLE junctura_trust_api NOLOGIN NOBYPASSRLS; CREATE ROLE junctura_execution_api NOLOGIN NOBYPASSRLS; CREATE ROLE junctura_composition_api NOLOGIN NOBYPASSRLS; CREATE ROLE junctura_subject_api NOLOGIN NOBYPASSRLS; CREATE ROLE junctura_directory_api NOLOGIN NOBYPASSRLS; CREATE ROLE junctura_directory_worker NOLOGIN NOBYPASSRLS; CREATE ROLE junctura_storage_api NOLOGIN NOBYPASSRLS; CREATE ROLE junctura_storage_collections_api NOLOGIN NOBYPASSRLS; CREATE ROLE junctura_workflow_audit_api NOLOGIN NOBYPASSRLS; CREATE ROLE junctura_workflow_api NOLOGIN NOBYPASSRLS; CREATE ROLE junctura_workflow_worker NOLOGIN NOBYPASSRLS; CREATE ROLE junctura_application_stats_api NOLOGIN NOBYPASSRLS;"]);
     await sourceSql(`INSERT INTO app_private.subject_bindings(tenant_id,issuer,subject_id,login_subject)
       VALUES('tenant-a','https://recovery.example.invalid','subject-${id}','recovery-${id}');`);
     bindingSeeded = true;
@@ -126,6 +126,19 @@ test("pg_dump/pg_restore preserves real data and tenant RLS in an isolated tempo
           OR c.oid='app_private.subject_binding_scopes'::regclass);`]);
     assert.equal(subjectDirectoryAcl.stdout.trim(), "t|t|t|t|t|f|f|f|f|t",
       "Restore preserves subject/directory RPC grants, private ACLs and forced tenant RLS");
+    const workflowAcl = await docker(["exec", target, "psql", "-U", "junctura_admin", "-d", "recovered", "-Atc",
+      `SELECT has_function_privilege('junctura_workflow_api','core.workflow_execution_command(text,jsonb)','EXECUTE'),
+        has_function_privilege('junctura_workflow_api','core.workflow_task_command(text,jsonb)','EXECUTE'),
+        has_function_privilege('junctura_workflow_worker','core.workflow_worker_command(text,jsonb)','EXECUTE'),
+        has_function_privilege('junctura_workflow_api','core.workflow_worker_command(text,jsonb)','EXECUTE'),
+        has_table_privilege('junctura_workflow_api','app_private.workflow_executions','SELECT'),
+        has_table_privilege('junctura_workflow_worker','app_private.workflow_completion_outbox','UPDATE'),
+        count(*), bool_and(relrowsecurity AND relforcerowsecurity)
+        FROM pg_class WHERE oid IN ('app_private.workflow_definition_policies'::regclass,
+          'app_private.workflow_executions'::regclass, 'app_private.workflow_task_claims'::regclass,
+          'app_private.workflow_completion_outbox'::regclass);`]);
+    assert.equal(workflowAcl.stdout.trim(), "t|t|t|f|f|f|4|t",
+      "Restore preserves workflow RPC grants, private ACLs and forced tenant RLS");
     for (const [tenant, expected] of [["tenant-a", "1"], ["tenant-b", "0"]]) {
       const guarded = await docker(["exec", target, "psql", "-U", "junctura_admin", "-d", "recovered", "-Atc",
         `SET ROLE junctura_app_owner; SELECT set_config('request.jwt.claims','{"tenant_id":"${tenant}"}',false);

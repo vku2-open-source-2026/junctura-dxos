@@ -2,12 +2,13 @@
 // SPDX-License-Identifier: Apache-2.0
 import { createHash } from "node:crypto";
 import { applicationToken } from "../applications/applications.mjs";
-import { dataRequest } from "../data/data.mjs";
-import { HttpError, json, readJson, requireWriter, uuidPattern } from "../../platform/http/http.mjs";
+import { dataRequest, sendRecordResult } from "../data/data.mjs";
+import { HttpError, json, jsonObject, readRecordJson, requireWriter, uuidPattern } from "../../platform/http/http.mjs";
 import { workflowRequest } from "./client.mjs";
 import { workflowSummary } from "./summary.mjs";
+import { completeTask, engineId, executionPolicy, handleClaim, managedStart, reserveCancellation, workflowTaskPage } from "./tasks.mjs";
 
-const engineId = /^[A-Za-z0-9:_-]{1,128}$/;
+export { startWorkflowReconciler } from "./tasks.mjs";
 const executionStatuses = new Set(["running", "completed", "cancelled"]);
 
 export function canonicalInput(value, depth = 0) {
@@ -26,7 +27,7 @@ async function execution(config, tenantId, id) {
   const item = result.data[0];
   if (!item || item.tenantId !== tenantId || item.id !== id) throw new HttpError(404, "not_found");
   const definition = await workflowRequest(config, `repository/process-definitions/${encodeURIComponent(item.processDefinitionId)}`);
-  if (definition.key === "junctura_c4a_single") throw new HttpError(404, "not_found");
+  if (definition.tenantId !== tenantId || definition.key === "junctura_c4a_single") throw new HttpError(404, "not_found");
   const input = item.variables?.find((variable) => variable.name === "input")?.value;
   return { id: item.id, definitionId: item.processDefinitionId,
     status: item.endTime ? (item.deleteReason ? "cancelled" : "completed") : "running",
@@ -211,15 +212,40 @@ async function start(request, identity, config) {
   requireWriter(identity);
   const key = request.headers["idempotency-key"];
   if (typeof key !== "string" || !uuidPattern.test(key)) throw new HttpError(400, "uuid_idempotency_key_required");
-  const body = await readJson(request);
-  if (Object.keys(body).some((name) => !["definitionId", "input"].includes(name)) ||
+  const body = await readRecordJson(request);
+  if (!jsonObject(body) || Object.keys(body).some((name) => !["definitionId", "input", "unit", "taskUnits", "dueAt", "taskDueAt"].includes(name)) ||
       typeof body.definitionId !== "string" || !engineId.test(body.definitionId) ||
-      (body.input !== undefined && (!body.input || typeof body.input !== "object" || Array.isArray(body.input)))) {
+      (body.input !== undefined && !jsonObject(body.input))) {
     throw new HttpError(400, "invalid_workflow_request");
   }
   const input = canonicalInput(body.input ?? {});
   const definition = await workflowRequest(config, `repository/process-definitions/${encodeURIComponent(body.definitionId)}`);
-  if (definition.tenantId !== identity.tenantId || definition.key === "junctura_c4a_single") throw new HttpError(404, "not_found");
+  if (definition.id !== body.definitionId || definition.tenantId !== identity.tenantId || definition.key === "junctura_c4a_single") {
+    throw new HttpError(404, "not_found");
+  }
+  const startEngine = async (businessKey) => {
+    const result = await workflowRequest(config, "runtime/process-instances", { method: "POST", body: JSON.stringify({
+      // Flowable derives the tenant from this already-authorized definition ID.
+      processDefinitionId: body.definitionId, businessKey,
+      variables: [{ name: "input", type: "string", value: JSON.stringify(input) }],
+    }) });
+    if (result?.tenantId !== identity.tenantId || result.processDefinitionId !== body.definitionId ||
+        typeof result.id !== "string" || !engineId.test(result.id)) throw new HttpError(503, "workflow_unavailable");
+    return result.id;
+  };
+  const findEngine = async (businessKey) => {
+    const prior = await history(config, identity.tenantId, { businessKey });
+    const [item] = prior.data;
+    if (prior.data.length !== 1 || item.tenantId !== identity.tenantId || item.businessKey !== businessKey ||
+        item.processDefinitionId !== body.definitionId || !engineId.test(item.id ?? "")) {
+      throw new HttpError(409, "execution_pending_reconciliation");
+    }
+    return item.id;
+  };
+  const readExecution = (id) => execution(config, identity.tenantId, id);
+  if (definition.key !== "junctura_checkpoint" || Object.keys(body).some(name => name !== "definitionId" && name !== "input")) {
+    return managedStart(config, identity, definition, body, key, startEngine, findEngine, readExecution);
+  }
   const hash = createHash("sha256").update(JSON.stringify({ definitionId: body.definitionId, input })).digest("hex");
   const query = new URLSearchParams({ key: `eq.${key}` });
   const ledger = (options) => dataRequest(config, identity.tenantId, query, options, "workflow_requests");
@@ -233,23 +259,24 @@ async function start(request, identity, config) {
     [row] = await ledger();
   }
   if (!row || row.definition_id !== body.definitionId || row.input_hash !== hash) throw new HttpError(409, "idempotency_conflict");
-  if (row.engine_id) return { created: false, value: await execution(config, identity.tenantId, row.engine_id) };
+  if (row.engine_id) return { status: 200, value: await readExecution(row.engine_id) };
   const businessKey = `${identity.tenantId}:${key}`;
-  let id;
-  if (reserved) {
-    const result = await workflowRequest(config, "runtime/process-instances", { method: "POST", body: JSON.stringify({
-      // Flowable derives the tenant from this already-authorized definition ID.
-      processDefinitionId: body.definitionId, businessKey,
-      variables: [{ name: "input", type: "string", value: JSON.stringify(input) }],
-    }) });
-    id = result.id;
-  } else {
-    const prior = await history(config, identity.tenantId, { businessKey });
-    if (prior.data.length !== 1) throw new HttpError(409, "execution_pending_reconciliation");
-    id = prior.data[0].id;
-  }
+  const id = reserved ? await startEngine(businessKey) : await findEngine(businessKey);
   await ledger({ method: "PATCH", body: JSON.stringify({ engine_id: id }) });
-  return { created: reserved, value: await execution(config, identity.tenantId, id) };
+  return { status: reserved ? 201 : 200, value: await readExecution(id) };
+}
+
+function decodeEngineId(raw, error) {
+  let id;
+  try { id = decodeURIComponent(raw); } catch { throw new HttpError(400, error); }
+  if (!engineId.test(id)) throw new HttpError(400, error);
+  return id;
+}
+
+function requireMethod(request, response, methods) {
+  if (methods.includes(request.method)) return;
+  response.setHeader("Allow", methods.join(", "));
+  throw new HttpError(405, "method_not_allowed");
 }
 
 export async function handleWorkflow(request, response, identity, config, url) {
@@ -268,39 +295,67 @@ export async function handleWorkflow(request, response, identity, config, url) {
     await requireWorkflowAudit(identity, config);
     return json(response, 200, await listExecutions(config, identity.tenantId, options));
   }
+  if (url.pathname === "/v1/workflows/tasks") {
+    requireMethod(request, response, ["GET"]);
+    return json(response, 200, await workflowTaskPage(config, identity, url));
+  }
+  const historyRoute = url.pathname.match(/^\/v1\/workflows\/executions\/([^/]+)\/history$/);
+  if (historyRoute) {
+    requireMethod(request, response, ["GET"]);
+    const id = decodeEngineId(historyRoute[1], "invalid_execution_id");
+    await execution(config, identity.tenantId, id);
+    return json(response, 200, await workflowTaskPage(config, identity, url, id));
+  }
   if (url.search) throw new HttpError(400, "invalid_query");
+  const claim = url.pathname.match(/^\/v1\/workflows\/tasks\/([^/]+)\/(claim|release)$/);
+  if (claim) {
+    requireMethod(request, response, ["POST"]);
+    return handleClaim(request, response, identity, config, decodeEngineId(claim[1], "invalid_task_id"), claim[2]);
+  }
   if (url.pathname === "/v1/workflows/definitions" && request.method === "GET") {
     const result = await workflowRequest(config, `repository/process-definitions?${new URLSearchParams({ tenantId: identity.tenantId, latest: "true", size: "100" })}`);
     return json(response, 200, { items: result.data.filter(item => item.key !== "junctura_c4a_single").map(({ id, key, version, name }) => ({ id, key, version, name })) });
   }
   if (url.pathname === "/v1/workflows/executions" && request.method === "POST") {
-    const result = await start(request, identity, config);
-    return json(response, result.created ? 201 : 200, result.value);
+    return sendRecordResult(response, await start(request, identity, config));
   }
   const match = url.pathname.match(/^\/v1\/workflows\/executions\/([^/]+)(\/complete)?$/);
   if (!match) throw new HttpError(404, "not_found");
-  let id;
-  try { id = decodeURIComponent(match[1]); } catch { throw new HttpError(400, "invalid_execution_id"); }
-  if (!engineId.test(id)) throw new HttpError(400, "invalid_execution_id");
-  const current = await execution(config, identity.tenantId, id);
-  if (request.method === "GET" && !match[2]) return json(response, 200, current);
+  requireMethod(request, response, match[2] ? ["POST"] : ["GET", "DELETE"]);
+  const id = decodeEngineId(match[1], "invalid_execution_id");
+  const readExecution = () => execution(config, identity.tenantId, id);
+  if (request.method === "GET") {
+    const current = await readExecution();
+    const policy = await executionPolicy(config, identity, id);
+    return json(response, 200, { ...current, dueAt: policy?.dueAt ?? null });
+  }
   requireWriter(identity);
-  if (request.method === "POST" && match[2]) {
-    if (Object.keys(await readJson(request)).length) throw new HttpError(400, "empty_object_required");
+  if (request.method === "POST") {
+    const body = await readRecordJson(request, 10 * 65536 + 16384);
+    if (!jsonObject(body)) throw new HttpError(400, "invalid_request");
+    if (Object.keys(body).length) return completeTask(request, response, identity, config, id, body, readExecution);
+    const current = await readExecution();
+    const policy = await executionPolicy(config, identity, id);
+    if (policy && !policy.technical) throw new HttpError(400, "invalid_request");
     if (current.status === "cancelled") throw new HttpError(409, "already_cancelled");
     if (current.status === "running") {
       const tasks = await workflowRequest(config, `runtime/tasks?${new URLSearchParams({ processInstanceId: id, tenantId: identity.tenantId, size: "2" })}`);
       if (tasks.data.length !== 1) throw new HttpError(409, "workflow_conflict");
       await workflowRequest(config, `runtime/tasks/${encodeURIComponent(tasks.data[0].id)}`, { method: "POST", body: JSON.stringify({ action: "complete" }) });
     }
-    return json(response, 200, await execution(config, identity.tenantId, id));
+    return json(response, 200, await readExecution());
   }
-  if (request.method === "DELETE" && !match[2]) {
-    if (current.status === "completed") throw new HttpError(409, "already_completed");
-    if (current.status === "running") await workflowRequest(config, `runtime/process-instances/${encodeURIComponent(id)}?deleteReason=cancelled`, { method: "DELETE" });
-    response.writeHead(204);
-    return response.end();
+  const current = await readExecution();
+  await reserveCancellation(config, identity, current);
+  if (current.status === "completed") throw new HttpError(409, "already_completed");
+  if (current.status === "running") {
+    try {
+      await workflowRequest(config, `runtime/process-instances/${encodeURIComponent(id)}?deleteReason=cancelled`, { method: "DELETE" });
+    } catch (error) {
+      const latest = await readExecution();
+      if (latest.status === "completed") throw new HttpError(409, "already_completed");
+      if (latest.status !== "cancelled") throw error;
+    }
   }
-  response.setHeader("Allow", match[2] ? "POST" : "GET, DELETE");
-  throw new HttpError(405, "method_not_allowed");
+  return sendRecordResult(response, { status: 204 });
 }

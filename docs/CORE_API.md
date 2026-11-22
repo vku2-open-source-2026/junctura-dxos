@@ -312,28 +312,63 @@ reconcile an ambiguous outcome before retrying. No upstream call is blindly retr
 
 | Route | Methods | Contract |
 | --- | --- | --- |
-| `/v1/workflows/definitions` | GET | Up to 100 latest tenant definitions: `{items:[{id,key,version,name}]}`; excludes `junctura_c4a_single` |
-| `/v1/workflows/executions` | POST | `{definitionId,input?:{...}}` and lowercase UUID `Idempotency-Key`; `201` created or `200` replayed |
-| `/v1/workflows/executions/{id}` | GET | Durable engine history: `{id,definitionId,status,input}` |
-| `/v1/workflows/executions/{id}/complete` | POST | Empty JSON object; completes exactly one active user task; already-completed executions return their state |
-| `/v1/workflows/executions/{id}` | DELETE | Cancel running execution; repeated cancellation `204`; completed execution `409` |
+| `/v1/workflows/definitions` | GET | Up to 100 latest tenant definitions with ID, key, version and name. |
+| `/v1/workflows/executions` | POST | Start by exact `definitionId` with optional `input`, `unit`, `taskUnits`, `dueAt` and `taskDueAt`. Requires a UUID `Idempotency-Key`. |
+| `/v1/workflows/executions/{executionId}` | GET | `{id,definitionId,status,input,dueAt}`. Status is `running`, `completed` or `cancelled`. |
+| `/v1/workflows/tasks` | GET | `{items,nextCursor}` for waiting tasks in the caller's candidate groups. |
+| `/v1/workflows/tasks/{taskId}/claim` | POST | Optional `{ttlSeconds}`. Returns `{taskId,claimedBy,claimedUntil}`. |
+| `/v1/workflows/tasks/{taskId}/release` | POST | Returns `204` when the caller's claim is released or the task is already unclaimed. |
+| `/v1/workflows/executions/{executionId}/complete` | POST | Business completion by `{taskId,variables?,records?}` with a UUID `Idempotency-Key`. Returns `202` and `{taskId,completionStatus:"pending",execution}`. |
+| `/v1/workflows/executions/{executionId}/history` | GET | `{items,nextCursor}` for confirmed task completions, newest first. |
+| `/v1/workflows/executions/{executionId}` | DELETE | Cancel a running execution. Returns `204` on cancellation and on repetition. A pending completion or a completed execution conflicts with `409`. |
 
-Reads require reader; writes require writer. Foreign tenant definition/execution IDs return `404`.
-Input uses a 64 KiB JSON request limit and nesting depth at most 32; unknown envelope/query fields are rejected. Caller fields cannot select the tenant. Engine URLs/credentials are not returned. Status is `running`, `completed` or `cancelled`.
-The internal C4A definition cannot be started or inspected through this lifecycle API.
+Reads require `core-reader`. Writes also require `core-writer`. Foreign tenant definitions, executions
+and tasks return `404`. The internal C4A definition is excluded. Keep private data out of workflow
+variables, which are visible within the tenant. Start JSON is limited to 64 KiB with input nesting at most 32.
 
-Flowable owns BPMN execution, tasks, variables and history in a separate database/role, using a private REST boundary
-and random administrative credential. Core and the one-shot initializer share the engine network; no engine port is published. The initializer installs the technical `junctura_checkpoint` per selected tenant: start, one user task, end, without
-business rules or external effects. Public callers cannot upload BPMN, scripts or network targets. The completion adapter
-supports one active user task; other installed definitions can still be started, observed and cancelled.
+### Deadlines, task routing and claims
 
-The RLS-protected SQL ledger uniquely reserves `(tenant_id,key)`; only the reservation owner calls engine start.
-Changing definition/input on retry returns `409`; object-key order does not change input identity.
-If no result was recorded, Core reconciles by tenant-scoped business key in durable engine history.
-Without one unique outcome it returns `409 execution_pending_reconciliation` and never starts again for that key.
-Operators resolve stuck reservations after checking history/in-flight work; there is no expiry, deletion or blind retry.
-Retain definitions, history and ledger for the retry window. Duplicate start prevention does not guarantee exactly-once external effects.
-Flowable initializes its own schema on first boot; review migrations/backups before engine upgrades. Ledger changes use versioned SQL.
+An operator binds each business definition version to a default unit and allowed units. The caller needs
+verified membership in the resolved default unit and every per-step override. `taskUnits` and `taskDueAt`
+use BPMN user-task element IDs. An unknown ID is invalid. A step uses the execution deadline unless it has
+an override, including when a step is revisited. Deadlines use absolute timestamps and mark work overdue.
+
+The inbox supports `definitionKey`, `unit`, `candidateGroup` and `overdue=true|false`. Eligibility
+requires a verified path for the task's unit and one of the definition's candidate groups. Filters narrow
+that set. Tasks sort by deadline ascending, then task ID, with undated tasks last. Each parallel step has its
+own task ID. Both inbox and history accept `limit` from 1 to 100, default 20, and an opaque `cursor` from the
+previous page with the same filters.
+
+An eligible writer can claim a waiting task for 1800 seconds by default or up to 28800 seconds.
+A repeated claim by the holder returns its existing expiry. An expired claim becomes available again.
+An active claim belonging to another writer returns `409 task_claimed` with its display name and expiry.
+Completion requires a matching group (`403 task_group_required`) and either an unclaimed task or the
+caller's own claim. A new attempt to complete the same finished task returns `409 task_already_completed`.
+
+### Completion, history and retries
+
+`variables` accepts strings, numbers and booleans up to 4096 bytes as compact UTF-8 JSON.
+`input` and `__junctura_completion` are reserved. `records` can create up to ten records in collections
+owned by the caller's enrolled, active app. The token must also carry an operator-bound verified subject
+for record-bearing requests. Core commits all records, the completion outbox entry and the replay receipt
+in one PostgreSQL transaction. Each parallel task can be completed by its own ID.
+
+Within the 24-hour receipt window the same key and logical request return the original response, including
+the original `202` after confirmation. Current authorization is checked on each request. A changed
+logical request with the same key returns `422 idempotency_key_reused`. The worker retries pending
+engine transitions and checks Flowable's tenant, process instance, execution, task and task-local completion
+marker before publishing history. History shows the actor, unit, first matching candidate group in BPMN
+order, optional decision and reason, and engine completion time. It is available to eligible execution
+members and enrolled `audit.read` principals.
+
+A business start replays its original `201`. The permanent start reservation protects against duplicate
+engine instances even after receipt expiry. If start is uncertain, retry with the same key. Core looks up
+the exact tenant, definition and business key in Flowable history. It returns `409 execution_pending_reconciliation`
+until there is a unique result. Operators resolve stranded reservations after checking engine history.
+
+The technical `junctura_checkpoint` retains its empty-object completion with `200`, including repetition
+after completion. Earlier executions without task policy can drain through the same single-task path.
+A checkpoint started with just definition and input retains the original `200` replay and `409` key conflict.
 
 ## Business workflow definitions
 
@@ -375,6 +410,16 @@ After configuring `.env`, run `docker compose run --rm workflow-init`.
 For every key/tenant, the initializer queries the latest definition: new keys deploy; existing keys skip only when
 original resource XML exactly equals the supplied file; changed XML creates a new deployment.
 The final line reports business/technical file counts, tenants and deployments. Engine failures use a generic message without private configuration.
+
+After deployment, an operator inserts or updates a row in `app_private.workflow_definition_policies` using the
+exact `(tenant_id, definition_id)` from the deployed version. Set `default_unit` and `allowed_units` to
+operator-managed directory units. Define at least one `flowable:candidateGroups` entry on every business user
+task, and register those groups in each unit where the step will run. Core captures the assignments at start.
+Create a binding for each newly deployed version before accepting business starts for that version.
+
+Flowable owns process execution and durable task history. Core holds the deadlines, claims and completion
+outbox in PostgreSQL. Inspect the private outbox for `cancelled` or `unconfirmed` rows when reconciling
+records accepted before an external engine change.
 
 ### Workflow display metadata
 
@@ -567,33 +612,6 @@ To build a mock API document, replace each operation carrying that extension wit
 top-level planned operations. Keep both contract files together so relative references resolve.
 Use the current route index for calls to a deployed Core.
 
-### Workflows
-
-- `GET /v1/workflows/tasks` lists waiting tasks from verified group memberships. Filter by `definitionKey`,
-  `unit`, `overdue` or `candidateGroup`. The group filter proposed in issue #49 narrows the
-  caller's authorized inbox. Each parallel step has its own `taskId`. The inbox includes the
-  holder's display name in `claimedBy` and the expiry in `claimedUntil`. Both fields are null
-  when the task is unclaimed.
-- `POST /v1/workflows/executions` accepts an execution `dueAt` and optional `taskDueAt`
-  overrides keyed by BPMN user-task ID. The inbox reports the effective deadline and whether it has passed.
-  Business steps use the execution's `unit` or a per-step `taskUnits` override, subject to the deployed
-  workflow's unit policy.
-  `GET /v1/workflows/executions/{executionId}/history` returns finished steps with the verified actor,
-  unit and group, the decision and reason if supplied, and the completion time.
-- `POST /v1/workflows/executions/{executionId}/complete` accepts `{taskId, variables?, records?}`
-  for business workflows. Use `variables` for the primitive BPMN values proposed as `output` in
-  issue #49. The UTF-8 JSON limit for variables is 4 KiB. Completion requires membership in a
-  candidate group in the task's unit. `records` can create up to ten records owned by the calling
-  app. Core saves them with a durable outbox entry, and `202` means the workflow transition is
-  pending. A retry with the same key replays the original response, including a `202`. Read the
-  execution and its history to check progress. Cancellation returns `409` while an accepted
-  completion remains pending. The technical checkpoint retains its empty-object request.
-- `POST /v1/workflows/tasks/{taskId}/claim` reserves a waiting task for an eligible group member
-  for 30 minutes by default and up to 8 hours with `ttlSeconds`. A repeat by the holder keeps the
-  original expiry. The holder can release it with `POST /v1/workflows/tasks/{taskId}/release`.
-  An eligible caller may complete an unclaimed task or a task they hold. A new completion attempt
-  on a finished task returns `409 task_already_completed`.
-
 ### Concurrent writes and retries
 
 Before a record replacement or deletion, GET the individual record and copy its
@@ -756,5 +774,4 @@ Pointer paths into the request and, for NDJSON, one-based line numbers.
 
 This is a local single-node stack, without production TLS/deployment or replicated storage configuration.
 Generic storage has no domain schema; v1 legacy and v2 private resources remain separate.
-Workflows remain tenant-scoped, and public task interaction is limited to single-task completion.
 Contracts and positive operation coverage do not prove exhaustive faults, external exactly-once effects or full provider conformance.

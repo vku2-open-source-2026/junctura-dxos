@@ -128,6 +128,12 @@ export function createJuncturaClient({ baseUrl, clientId, clientSecret, timeoutM
     return request(`${path}${query.size ? `?${query}` : ""}`);
   };
   const finish = response => response.body?.cancel();
+  const workflowPath = id => `/v1/workflows/executions/${segment(id)}`;
+  const workflowRead = (path, filters, bearer) => {
+    const query = new URLSearchParams(Object.entries(filters)
+      .filter(([, value]) => value !== undefined).map(([key, value]) => [key, String(value)]));
+    return request(`${path}${query.size ? `?${query}` : ""}`, { bearer });
+  };
   const client = {
     request,
     async identity() { return (await request("/v1/identity")).json(); },
@@ -262,6 +268,32 @@ export function createJuncturaClient({ baseUrl, clientId, clientSecret, timeoutM
     async workflowDefinitions() { return (await request("/v1/workflows/definitions")).json(); },
     async startWorkflow(definitionId, input, idempotencyKey = randomUUID()) {
       return (await request("/v1/workflows/executions", { method: "POST", json: { definitionId, input }, idempotencyKey })).json();
+    },
+    async startWorkflowWithDeadlines(body, { idempotencyKey = randomUUID(), userToken } = {}) {
+      return (await request("/v1/workflows/executions", { method: "POST", json: body, idempotencyKey, bearer: userToken })).json();
+    },
+    async getWorkflowWithDeadline(executionId, { userToken } = {}) {
+      return (await request(workflowPath(executionId), { bearer: userToken })).json();
+    },
+    async listWorkflowTasks({ limit, cursor, definitionKey, unit, candidateGroup, overdue, userToken } = {}) {
+      return (await workflowRead("/v1/workflows/tasks", { limit, cursor, definitionKey, unit, candidateGroup, overdue }, userToken)).json();
+    },
+    async claimWorkflowTask(taskId, { ttlSeconds, userToken } = {}) {
+      return (await request(`/v1/workflows/tasks/${segment(taskId)}/claim`, {
+        method: "POST", json: ttlSeconds === undefined ? undefined : { ttlSeconds }, bearer: userToken,
+      })).json();
+    },
+    async releaseWorkflowTask(taskId, { userToken } = {}) {
+      await finish(await request(`/v1/workflows/tasks/${segment(taskId)}/release`, { method: "POST", bearer: userToken }));
+    },
+    async completeWorkflowTask(executionId, body, { idempotencyKey = randomUUID(), userToken } = {}) {
+      return (await request(`${workflowPath(executionId)}/complete`, { method: "POST", json: body, idempotencyKey, bearer: userToken })).json();
+    },
+    async cancelWorkflowWithPendingCheck(executionId, { userToken } = {}) {
+      await finish(await request(workflowPath(executionId), { method: "DELETE", bearer: userToken }));
+    },
+    async listWorkflowTaskHistory(executionId, { limit, cursor, userToken } = {}) {
+      return (await workflowRead(`${workflowPath(executionId)}/history`, { limit, cursor }, userToken)).json();
     },
     async discover({ limit, cursor } = {}) {
       const query = new URLSearchParams();
