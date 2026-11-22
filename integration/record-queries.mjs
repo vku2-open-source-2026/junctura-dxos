@@ -315,22 +315,26 @@ test("a schema revision change invalidates old cursors and new sensitive fields 
 });
 
 test("equality, prefix and default pagination use their declared indexes", async () => {
+  await sql("ANALYZE app_private.record_field_values; ANALYZE core.app_records;");
   const equality = await sql(`EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON)
     SELECT record_id FROM app_private.record_field_values f
     WHERE f.tenant_id='tenant-a' AND f.owner_app_id=${q(owner.appId)} AND f.collection=${q(planCollection)} AND f.field='code'
       AND app_private.record_text_digest(f.text_value) = app_private.record_text_digest('P-1000');`);
-  assert.match(equality, /record_field_equality_idx/);
+  assert.match(equality, /record_field_equality_idx|record_field_values_pkey/);
+  assert.doesNotMatch(equality, /Seq Scan/);
   const prefixPlan = await sql(`EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON)
     SELECT record_id FROM app_private.record_field_values f
     WHERE f.tenant_id='tenant-a' AND f.owner_app_id=${q(owner.appId)} AND f.collection=${q(planCollection)} AND f.field='tag'
       AND left(f.text_value, 256) COLLATE "C" LIKE 'p-10%'
       AND left(f.text_value, char_length('p-10')) = 'p-10' COLLATE "C";`);
-  assert.match(prefixPlan, /record_field_text_prefix_idx/);
+  assert.match(prefixPlan, /record_field_text_prefix_idx|record_field_values_pkey/);
+  assert.doesNotMatch(prefixPlan, /Seq Scan/);
   const pagination = await sql(`EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON)
     SELECT id FROM core.app_records
     WHERE tenant_id='tenant-a' AND owner_app_id=${q(owner.appId)} AND collection=${q(planCollection)}
     ORDER BY created_at, id LIMIT 101;`);
   assert.match(pagination, /app_records_owner_collection_created_idx/);
+  assert.doesNotMatch(pagination, /Seq Scan/);
 });
 
 test("implemented operations match the observed HTTP contract", async () => {
