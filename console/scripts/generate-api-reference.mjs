@@ -194,6 +194,8 @@ const foundation = {};
 for (const [endpointPath, pathItem] of Object.entries(foundationSpec.paths)) {
   for (const [method, operation] of Object.entries(pathItem)) {
     if (!methods.has(method) || !operation.operationId) continue;
+    // Planned operations have no server yet, so the Console does not offer them.
+    if (operation["x-junctura-status"] === "planned") continue;
     foundation[operation.operationId] = {
       permissions: requiredPermissions(operation),
       responseExample: responseExample(operation, foundationSpec),
@@ -206,6 +208,8 @@ const capability = [];
 for (const [endpointPath, pathItem] of Object.entries(capabilitySpec.paths)) {
   for (const [method, operation] of Object.entries(pathItem)) {
     if (!methods.has(method) || !operation.operationId) continue;
+    // Planned operations have no server yet, so the Console does not offer them.
+    if (operation["x-junctura-status"] === "planned") continue;
     const parameters = parametersFor(pathItem, operation, capabilitySpec);
     const request = requestExample(operation, capabilitySpec);
     const success = successResponse(operation, capabilitySpec);

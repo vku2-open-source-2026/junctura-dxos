@@ -8,6 +8,8 @@ All notable changes to Junctura are recorded here. Versions follow
 
 ## Unreleased
 
+- **Planned Foundation and Capability API contracts** for record storage, workflow tasks, identity, files, events, search, privacy and application audit, including conditional record writes, atomic increments, expiring locks, task claims and idempotent retries.
+
 - **Read-only viewers see every Console page:** migration 029 lets a
   management principal with `audit.read` list and read every capability
   (`GET /v1/capabilities`), read any application of its tenant
