@@ -159,9 +159,13 @@ def describe_error(error):
     def where(item):
         path = '/'.join(str(part) for part in item.absolute_path)
         return '/' + path if path else '/'
+    def token(item):
+        # Server-defined machine codes are safe to show; never show other values.
+        value = item.instance
+        return f'={value}' if item.validator == 'enum' and isinstance(value, str) and re.fullmatch(r'[a-z_]{1,64}', value) else ''
     branches = []
     for item in error.context or []:
-        branches.append(f'branch {item.relative_schema_path[0]} {where(item)} {item.validator}')
+        branches.append(f'branch {item.relative_schema_path[0]} {where(item)} {item.validator}{token(item)}')
     detail = ' at ' + where(error)
     return detail + ('; ' + '; '.join(branches[:8]) if branches else '')
 
