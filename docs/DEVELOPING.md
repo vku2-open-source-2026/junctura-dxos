@@ -263,8 +263,9 @@ send idempotency keys and record preconditions. The default is `false`.
 
 ## Demo data and developer journey
 
-Layer 1 ships no domain scenario; a Layer-2 repository (junctura-health)
-registers its own applications, capabilities, grants and records through the public APIs.
+Layer 1 ships no domain scenario. Authorized setup tooling registers applications, publishes
+capability versions and configures grants through the operator approval flow. Enrolled application
+backends then load demo records through the resource APIs. See [TIER_MODEL.md](TIER_MODEL.md).
 
 `npm run local:demo` runs `setup` when `.env` is missing, then `local:up`, `env:provision`,
 `demo:seed` and `demo:console`. `npm run env:provision` provisions tenant `demo` (read-only

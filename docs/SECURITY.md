@@ -14,7 +14,7 @@ production-certified. See [architecture](ARCHITECTURE.md) and the [Core API](COR
   records/audit. Tenant, owner, app and role headers do not create authority.
 - PostgreSQL superusers, database owners, owner functions and host operators are trusted;
   consistent rewriting of audit rows and chain heads defeats database-local verification.
-- Authorization belongs at the service boundary. Browsers authenticate to a Layer-2
+- Authorization belongs at the service boundary. Browsers authenticate to a Layer-2 or Layer-3
   backend that authorizes the human and uses private service credentials for Core
   resource calls. Never put those credentials or broad writer tokens in a browser.
   Forwarded user/app headers are not delegation; UI/routing restrictions are insufficient.

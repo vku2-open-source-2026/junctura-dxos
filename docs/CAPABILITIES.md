@@ -220,6 +220,7 @@ authority/signing and Flowable configuration must be complete; no approved origi
 Origins come from application enrollment and must match an operator allowlist.
 With both runtimes disabled, execution routes return 404; composition alone returns
 422 `capability_runtime_disabled` for single-capability submissions.
+When capability execution is enabled, Core forwards the request to the provider with a one-time ticket and checks consent when the call names a data subject, under the current policy.
 
 | Environment variable | Value |
 | --- | --- |

@@ -2973,7 +2973,7 @@ export const vi = {
     "navCapabilities": "Nhóm chức năng",
     "layersTitle": "Junctura gồm những gì",
     "layersLead": "Tám chức năng dùng chung ở bên dưới. Ứng dụng của bạn kết nối qua Cổng API để dùng chúng.",
-    "layerTier2": "Ứng dụng của bạn (Tầng 2)",
+    "layerTier2": "Ứng dụng Tầng 2 và Tầng 3",
     "layerTier2Desc": "Phần mềm của đơn vị bạn dùng các chức năng dùng chung qua Cổng API.",
     "layersGateway": "Cổng API",
     "layersHint": "Rê chuột hoặc dùng phím Tab để xem từng khối làm gì.",

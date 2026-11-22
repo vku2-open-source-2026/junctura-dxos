@@ -24,7 +24,7 @@ Authorization boundaries apply independently of schema validation:
   an owner-approved share permits reading one resource until expiry/revocation, with no write or delegation rights.
 - Inactive consumers lose v2 entry; suspended/revoked owners block shared reads. In-flight work may finish.
   Keycloak client administration is separate from application state.
-- Browsers use an application backend, which owns human and domain authorization. Forwarded human headers and descriptors grant no impersonation.
+- Browsers use an application backend, which owns human and domain authorization. Forwarded human headers and descriptors grant no impersonation. On-behalf-of delegation is a design direction; Core does not support it yet.
 - V1 data/objects are a deprecated, separate tenant namespace behind `LEGACY_RESOURCE_CLIENTS`
   (empty by default outside Compose). They never read v2 tables or bytes; migrate deliberately without guessed ownership or fallback.
 - Workflows and their variables remain tenant-scoped; do not put application-private content in variables.
@@ -97,7 +97,7 @@ Methods are included with each family; action suffixes are described in the link
 | `/v2/resource-shares` (POST), `/{shareId}` (DELETE) | Create/revoke exact app or app-group read shares | Active owner backend and writer | [SECURITY.md](SECURITY.md) |
 | `/v2/secrets/{name}` (GET, PUT, DELETE) | Secret metadata/write/delete; GET never returns plaintext | Active bound backend; writer for PUT/DELETE | [OPERATIONS.md](OPERATIONS.md) |
 | `/v1/workflows/*` (GET, POST, DELETE) | Definitions and execution lifecycle/oversight | Writer for lifecycle mutations; management `audit.read` for list/summary | Workflow engine; Storage summary and workflow history below |
-| `/v1/applications` (POST), `/{appId}` (GET), `/{appId}/approve`, `/{appId}/state` (POST) | Register, inspect, activate and change application state | Enrolled owner/admin visibility, `audit.read` reads any (read-only); `applications.register` / `applications.approve` | [CAPABILITIES.md](CAPABILITIES.md) |
+| `/v1/applications` (POST), `/{appId}` (GET), `/{appId}/approve`, `/{appId}/state` (POST) | Register through authorized setup tooling, inspect, activate and change application state | Enrolled owner/admin visibility, `audit.read` reads any (read-only); `applications.register` / `applications.approve` | [CAPABILITIES.md](CAPABILITIES.md) |
 | `/v1/applications/stats` (GET) | Tenant application counts, activity timestamps and IDs | Management `audit.read`; verified client ID | Application statistics below |
 | `/v1/approvals` (POST), `/{approvalId}` (GET), `/{approvalId}/revoke` (POST) | Application, capability, grant and enabled composition decisions | Resource-specific independent approval/visibility; grant writes also require writer | [CAPABILITIES.md](CAPABILITIES.md) |
 | `/v1/capabilities` (GET), `/{capabilityId}/versions/*` (GET, POST, PUT) | Registry and authorized discovery | Management `capabilities.write` / `capabilities.publish`; `audit.read` reads every version (read-only); consumers need exact discover grant | [CAPABILITIES.md](CAPABILITIES.md) |
@@ -636,7 +636,9 @@ Data-subject accounts carry a verified `subjectId` claim. Core uses it, with ten
   emergency access. `POST /v1/me/data-access/{id}/flag` flags a visible access event using its
   `accessId`. Both store a separate report and preserve the original event.
 
-### Application audit log
+### Application audit log (planned)
+
+The business event append API is a planned contract. The implemented `/v1/audit-events` route is read-only for query and verification.
 
 - Register the app-wide `auditActions` catalog with the collection schema operation. Each action
   declares its sensitivity and whether the subject may see it. Supplying a catalog replaces it.

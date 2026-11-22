@@ -69,7 +69,7 @@ the full-stack `npm run healthcheck` deliberately also requires `/ready`.
 
 ### Quick local enrollment (development/demo stacks)
 
-For Layer-2 prototyping on a local stack, one command performs the flow below:
+For Layer-2/3 prototyping on a local stack, one command performs the flow below:
 
 ```sh
 npm run app:enroll -- lichhop --display-name "Lịch họp"

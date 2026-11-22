@@ -5,7 +5,7 @@ SPDX-License-Identifier: Apache-2.0
 
 # Junctura Console — Layer-1 Operator Tool
 
-> The Console is the Core's Layer-1 operator tool (like Supabase Studio): it views platform state and decides **platform access** only (application registration and state, sharing grants; capabilities, consents and emergency accesses are shown read-only, and their decisions use the Core API). It never starts, completes, cancels or approves **business work**, which belongs to Layer-2/3 applications. It is domain-neutral and shows workflow, owner, step and collection names exactly as applications supply them. Core runs fully without the Console.
+> The Console is the Core's Layer-1 operator tool (like Supabase Studio): it views platform state and decides **platform access** only (application registration and state, sharing grants; capabilities, consents and emergency accesses are shown read-only, and their decisions use the Core API). It never starts, completes, cancels or approves **business work**: Layer 2 handles shared administrative processes and Layer 3 makes sector business decisions. It is domain-neutral and shows workflow, owner, step and collection names exactly as applications supply them. Core runs fully without the Console.
 
 In the current screens, the decisions an operator can take are application registration (approve/reject/revoke) and sharing grants (approve/reject/revoke); capabilities and emergency accesses are shown read-only (see [Limitations](#limitations)).
 
