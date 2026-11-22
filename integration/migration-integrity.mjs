@@ -58,13 +58,13 @@ test("fresh install records every checksum atomically", async () => {
   assert.equal(await sql("SELECT last_version FROM core.schema_migration_state WHERE id = 1"), latestVersion);
 });
 
-test("upgrading 029 preserves v1 and app records and backfills the collection counter", async () => {
+test("upgrading 029 preserves records and backfills incarnations without a table rewrite", async () => {
   const database = "record_upgrade";
   const upgradeDir = join(directory, "record-upgrade");
   mkdirSync(upgradeDir);
   const recordId = randomUUID();
   const appId = randomUUID();
-  await sql(`CREATE DATABASE ${database} OWNER TO junctura_data`);
+  await sql(`CREATE DATABASE ${database} OWNER junctura_data`);
   try {
     for (const migration of migrations.filter(file => Number(file.slice(0, 3)) <= 29)) {
       cpSync(join(directory, migration), join(upgradeDir, migration));
@@ -79,15 +79,21 @@ test("upgrading 029 preserves v1 and app records and backfills the collection co
         VALUES('tenant-a','${recordId}','fixture','{"legacy":true}');
       INSERT INTO core.app_records(tenant_id,id,owner_app_id,collection,data,created_at)
         VALUES('tenant-a','${recordId}','${appId}','fixture','{"legacy":false}','2026-01-01T00:00:00Z');`, database);
+    const relationFile = () => sql("SELECT pg_relation_filenode('core.app_records')", database);
+    const before = await relationFile();
     for (const migration of migrations.filter(file => file.startsWith("030-"))) {
       cpSync(join(directory, migration), join(upgradeDir, migration));
     }
     await upgrade();
+    assert.equal(await relationFile(), before);
     assert.equal(await sql(`SELECT version, incarnation IS NOT NULL, owner_app_id, collection,
       created_at ='2026-01-01T00:00:00Z'::timestamptz, data->>'legacy' FROM core.app_records WHERE id = '${recordId}'`, database),
     `1|t|${appId}|fixture|t|false`);
     assert.equal(await sql(`SELECT data->>'legacy' FROM core.records WHERE id = '${recordId}'`, database), "true");
     assert.equal(await sql(`SELECT record_count FROM app_private.record_collections WHERE owner_app_id = '${appId}'`, database), "1");
+    assert.equal(await sql(`INSERT INTO core.app_records(tenant_id,id,owner_app_id,collection,data)
+      VALUES('tenant-a',gen_random_uuid(),'${appId}','fixture','{}')
+      RETURNING incarnation <> (SELECT incarnation FROM core.app_records WHERE id = '${recordId}')`, database), "t");
   } finally {
     await sql(`DROP DATABASE ${database}`);
     rmSync(upgradeDir, { recursive: true, force: true });

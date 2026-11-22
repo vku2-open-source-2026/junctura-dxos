@@ -264,10 +264,10 @@ export function createApi(config) {
         const identity = await resourceIdentity(config, await authorize(request, true));
         return handleData(request, response, identity, config, url);
       }
-      const legacy = path.startsWith("/v2/data/") && !path.endsWith(":lock") && !path.includes("/by-key/") &&
-        !config.strictRecords && request.headers["idempotency-key"] === undefined;
+      const compatibility = path.startsWith("/v2/data/") && !path.endsWith(":lock") && !path.includes("/by-key/") &&
+        !config.strictRecords;
       return presentRecordRequest(request, response, async () =>
-        handleAppRecords(request, response, await authorize(request, true), config, url), legacy);
+        handleAppRecords(request, response, await authorize(request, true), config, url), compatibility);
     }
     if (["/v1/objects", "/v2/objects"].some(prefix => path === prefix || path?.startsWith(`${prefix}/`))) {
       let identity = await authorize(request, true);

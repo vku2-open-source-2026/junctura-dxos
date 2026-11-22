@@ -298,16 +298,19 @@ test("a sensitive-field change committed during an aggregate is seen in the same
 });
 
 test("a schema revision change invalidates old cursors and new sensitive fields are masked", async () => {
-  const first = await jsonResult(await api(listPath(sensitiveCollection, [["limit", "1"]]), owner), 200);
+  const first = await jsonResult(await api(listPath(sensitiveCollection,
+    [["limit", "1"], ["ownerAppId", owner.appId]]), grantOnly), 200);
   assert.ok(first.nextCursor);
   assert.equal(first.items[0].data.status, "open");
   await sql(`UPDATE app_private.record_collections
     SET sensitive_fields = ARRAY['status'], schema_revision = schema_revision + 1
     WHERE tenant_id='tenant-a' AND owner_app_id=${q(owner.appId)} AND collection=${q(sensitiveCollection)};`);
-  const stale = await api(listPath(sensitiveCollection, [["limit", "1"], ["cursor", first.nextCursor]]), owner);
+  const stale = await api(listPath(sensitiveCollection,
+    [["limit", "1"], ["ownerAppId", owner.appId], ["cursor", first.nextCursor]]), grantOnly);
   assert.equal(stale.status, 400);
   assert.equal((await stale.json()).error, "invalid_cursor");
-  const fresh = await jsonResult(await api(listPath(sensitiveCollection, [["limit", "10"]]), owner), 200);
+  const fresh = await jsonResult(await api(listPath(sensitiveCollection,
+    [["limit", "10"], ["ownerAppId", owner.appId]]), grantOnly), 200);
   assert.ok(fresh.items.every(item => item.data.status === undefined));
 });
 

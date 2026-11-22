@@ -6,6 +6,7 @@ import { after, before, test } from "node:test";
 import { jsonResult, recordTestSupport } from "./record-test-support.mjs";
 import { verifyContracts } from "./contract.mjs";
 
+const strict = process.env.STRICT_RECORD_WRITES === "true";
 const prefix = `ags_${randomBytes(6).toString("hex")}`;
 const support = recordTestSupport(prefix);
 const { api, sql, q } = support;
@@ -81,7 +82,7 @@ test("group shares revoke like exact shares, accept only records and stop on sus
   assert.equal(exact.granteeAppId, recipient.appId);
   assert.equal((await api(`/v2/data/${collection}/${recordId}`, recipient)).status, 200);
   await sql(`UPDATE app_private.applications SET state='suspended' WHERE tenant_id='tenant-a' AND app_id='${recipient.appId}';`);
-  assert.equal((await api(`/v2/data/${collection}/${recordId}`, recipient)).status, 403);
+  assert.equal((await api(`/v2/data/${collection}/${recordId}`, recipient)).status, strict ? 404 : 403);
   await sql(`UPDATE app_private.applications SET state='active' WHERE tenant_id='tenant-a' AND app_id='${recipient.appId}';`);
   await sql(`UPDATE app_private.applications SET state='suspended' WHERE tenant_id='tenant-a' AND app_id='${owner.appId}';`);
   assert.equal((await api(`/v2/data/${collection}/${recordId}`, recipient)).status, 404);
@@ -143,7 +144,7 @@ test("suspending a group recipient blocks reads while the share is live", async 
   assert.equal((await groupShare(record.id)).status, 201);
   assert.equal((await api(`/v2/data/${collection}/${record.id}`, recipient)).status, 200);
   await sql(`UPDATE app_private.applications SET state='suspended' WHERE tenant_id='tenant-a' AND app_id='${recipient.appId}';`);
-  assert.equal((await api(`/v2/data/${collection}/${record.id}`, recipient)).status, 403);
+  assert.equal((await api(`/v2/data/${collection}/${record.id}`, recipient)).status, strict ? 404 : 403);
   await sql(`UPDATE app_private.applications SET state='active' WHERE tenant_id='tenant-a' AND app_id='${recipient.appId}';`);
 });
 
@@ -162,12 +163,15 @@ test("group share expiry accepts just under 24 hours and rejects beyond it", asy
 });
 
 test("re-importing a deleted record ID does not revive an old group share", async () => {
-  const record = await jsonResult(await api(`/v2/data/${collection}`, owner, {
+  const created = await api(`/v2/data/${collection}`, owner, {
     method: "POST", body: { data: { code: "R-1", status: "open" } }, headers: { "Idempotency-Key": randomUUID() },
-  }), 201);
+  });
+  const record = await jsonResult(created, 201);
   assert.equal((await groupShare(record.id)).status, 201);
   assert.equal((await api(`/v2/data/${collection}/${record.id}`, recipient)).status, 200);
-  assert.equal((await api(`/v2/data/${collection}/${record.id}`, owner, { method: "DELETE" })).status, 204);
+  assert.equal((await api(`/v2/data/${collection}/${record.id}`, owner, {
+    method: "DELETE", headers: { "If-Match": created.headers.get("etag") },
+  })).status, 204);
   const imported = await importBody({ collection, id: record.id, data: { code: "R-1", status: "open" } });
   assert.equal(imported.status, 200);
   assert.equal((await api(`/v2/data/${collection}/${record.id}`, recipient)).status, 404);

@@ -85,7 +85,7 @@ const legacyErrors = new Set([
   "object_required", "data_object_required",
 ]);
 
-export async function presentRecordRequest(request, response, run, legacy = false) {
+export async function presentRecordRequest(request, response, run, compatibility = false) {
   const requestId = randomUUID();
   response.setHeader("X-Request-Id", requestId);
   try { return await run(); }
@@ -94,11 +94,14 @@ export async function presentRecordRequest(request, response, run, legacy = fals
     const status = error instanceof HttpError ? error.status : 503;
     if (status === 413) response.setHeader("Connection", "close");
     const code = error instanceof HttpError ? error.message : "data_unavailable";
-    if (legacy && legacyErrors.has(code)) {
+    if (compatibility && request.headers["idempotency-key"] === undefined && legacyErrors.has(code)) {
       return json(response, status, { error: code }, request.method);
     }
     const details = Object.fromEntries((Object.hasOwn(errorFields, code) ? errorFields[code] : [])
       .filter(field => Object.hasOwn(error.details ?? {}, field)).map(field => [field, error.details[field]]));
+    if (compatibility && status === 409) {
+      return json(response, status, { error: "conflict", requestId, details: { code, ...details } }, request.method);
+    }
     return json(response, status, { error: code, requestId, ...details }, request.method);
   }
 }

@@ -542,7 +542,7 @@
       "post": {
         "operationId": "writeRecordBatch",
         "summary": "Write a record batch atomically",
-        "description": "Apply 1–50 creates, replacements, deletions or atomic increment operations in request order in one transaction for the calling app. Every replace and delete requires ifMatch with the current record ETag, even for a schemaless collection or its lock holder. Each increment item applies one or more increments to one record using the atomic PATCH rules and may omit ifMatch. The batch key covers all items. Locks held by other callers block edits and deletes, including increments. Each result matches its input position. Deletes have version null. A failure rolls back the entire batch. Schema violation paths point into the matching operation in the request.",
+        "description": "Apply 1–50 creates, replacements, deletions or atomic increment operations in request order in one transaction for the calling app. Every replace and delete requires ifMatch with the current record ETag, even for a schemaless collection or its lock holder. Each increment item applies one or more increments to one record using the atomic PATCH rules and may omit ifMatch. The batch key covers all items. Locks held by other callers block edits and deletes, including increments. Each result matches its input position. Deletes have version null. A failure rolls back the entire batch. Schema violation paths identify record data at /operations/N/data, including the resulting data of increments.",
         "tags": [
           "app-resource"
         ],
@@ -3868,7 +3868,7 @@
             "$ref": "#/components/responses/MethodNotAllowed"
           },
           "409": {
-            "$ref": "#/components/responses/PlannedConflict"
+            "$ref": "#/components/responses/RecordCreateConflict"
           },
           "413": {
             "$ref": "#/components/responses/PlannedTooLarge"
@@ -4002,7 +4002,7 @@
       "patch": {
         "operationId": "replaceVersionedRecord",
         "summary": "Replace record data or increment numeric fields",
-        "description": "The data form replaces the complete data object and checks schema and uniqueness. The operations form is the only edit that may omit If-Match, because it updates server-side without a client read. An If-Match supplied with operations must still match. An Idempotency-Key is required for operations. A lock held by a different caller blocks either form. An increment uses the current value of a declared top-level numeric indexed field. by, min and max are numbers. Bounds are optional and inclusive, and min must be at most max. A nonnumeric or absent value, an ineligible field or inverted bounds returns 400. Process increments in array order and apply them together in one database statement. A bound failure returns 409 limit_exceeded with the field name. A successful write increments the record version once and validates the resulting data against the collection schema. Strict mode requires If-Match for replacements. Compatibility mode accepts its omission and preserves the legacy replacement body. An atomic increment always returns a versioned body.",
+        "description": "The data form replaces the complete data object and checks schema and uniqueness. The operations form is the only edit that may omit If-Match, because it updates server-side without a client read. An If-Match supplied with operations must still match. An Idempotency-Key is required for operations. A lock held by a different caller blocks either form. An increment uses the current value of a declared top-level numeric indexed field. by, min and max are numbers. Bounds are optional and inclusive, and min must be at most max. A nonnumeric or absent value, an ineligible field or inverted bounds returns 400. Process increments in array order and apply them together in one database statement. A bound failure returns 409 with limit_exceeded and the field name. A successful write increments the record version once and validates the resulting data against the collection schema. Strict mode requires If-Match for replacements. Compatibility mode accepts its omission and preserves the legacy replacement body. An atomic increment always returns a versioned body.",
         "tags": [
           "app-resource"
         ],
@@ -4130,7 +4130,7 @@
             "$ref": "#/components/responses/MethodNotAllowed"
           },
           "409": {
-            "$ref": "#/components/responses/RecordWriteConflict"
+            "$ref": "#/components/responses/RecordPatchConflict"
           },
           "412": {
             "$ref": "#/components/responses/RecordPreconditionFailed"
@@ -9115,6 +9115,50 @@
           }
         }
       },
+      "RecordCreateConflict": {
+        "description": "The record create conflicts with existing state. Compatibility mode returns conflict with the specific code in details.code. Strict mode returns the specific code in error.",
+        "headers": {
+          "X-Request-Id": {
+            "$ref": "#/components/headers/PlannedRequestId"
+          }
+        },
+        "content": {
+          "application/json": {
+            "schema": {
+              "oneOf": [
+                {
+                  "$ref": "#/components/responses/PlannedConflict/content/application~1json/schema"
+                },
+                {
+                  "$ref": "#/components/schemas/RecordCompatibilityConflict"
+                }
+              ]
+            }
+          }
+        }
+      },
+      "RecordPatchConflict": {
+        "description": "The record edit conflicts with existing state or an increment exceeds a bound. Compatibility mode returns conflict with the specific code and any field in details. Strict mode returns the specific code and any field at the top level.",
+        "headers": {
+          "X-Request-Id": {
+            "$ref": "#/components/headers/PlannedRequestId"
+          }
+        },
+        "content": {
+          "application/json": {
+            "schema": {
+              "oneOf": [
+                {
+                  "$ref": "#/components/responses/RecordWriteConflict/content/application~1json/schema"
+                },
+                {
+                  "$ref": "#/components/schemas/RecordCompatibilityConflict"
+                }
+              ]
+            }
+          }
+        }
+      },
       "RecordWriteConflict": {
         "description": "The record write conflicts with existing state or an increment exceeds a bound.",
         "headers": {
@@ -12028,6 +12072,32 @@
           "totals",
           "applications"
         ],
+        "additionalProperties": false
+      },
+      "RecordCompatibilityConflict": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "const": "conflict"
+          },
+          "requestId": {
+            "$ref": "#/components/schemas/Uuid"
+          },
+          "details": {
+            "type": "object",
+            "properties": {
+              "code": {
+                "enum": ["unique_key_conflict", "resource_conflict", "limit_exceeded"]
+              },
+              "field": {
+                "$ref": "#/components/schemas/RecordField"
+              }
+            },
+            "required": ["code"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["error", "requestId", "details"],
         "additionalProperties": false
       },
       "RecordETag": {

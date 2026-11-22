@@ -12,8 +12,12 @@ GRANT CREATE ON SCHEMA core TO junctura_app_owner;
 
 ALTER TABLE core.app_records
   ADD COLUMN version bigint NOT NULL DEFAULT 1 CHECK (version BETWEEN 1 AND 9007199254740991),
-  ADD COLUMN incarnation uuid NOT NULL DEFAULT gen_random_uuid(),
-  ADD COLUMN unique_key_value text COLLATE "C" CHECK (unique_key_value ~ '^[A-Za-z0-9_-]{1,128}$'),
+  ADD COLUMN incarnation uuid,
+  ADD COLUMN unique_key_value text COLLATE "C" CHECK (unique_key_value ~ '^[A-Za-z0-9_-]{1,128}$');
+UPDATE core.app_records SET incarnation = gen_random_uuid() WHERE incarnation IS NULL;
+ALTER TABLE core.app_records
+  ALTER COLUMN incarnation SET NOT NULL,
+  ALTER COLUMN incarnation SET DEFAULT gen_random_uuid(),
   ADD CONSTRAINT app_records_scoped_id UNIQUE (tenant_id, owner_app_id, collection, id);
 CREATE INDEX app_records_owner_collection_created_idx
   ON core.app_records (tenant_id, owner_app_id, collection, created_at, id);
@@ -290,25 +294,34 @@ BEGIN
   RETURN metadata;
 END $$;
 
+CREATE FUNCTION app_private.record_project_fields(p_data jsonb, p_indexed_fields text[], p_schema jsonb)
+RETURNS TABLE (field text, kind text, value jsonb, number_value numeric, datetime_value timestamptz,
+               text_value text, boolean_value boolean)
+LANGUAGE sql STABLE SET search_path = pg_catalog, app_private AS $$
+  SELECT field, kind, value,
+    CASE WHEN kind = 'number' THEN value::numeric END,
+    CASE WHEN kind IN ('date','date-time') THEN record_time(kind, value #>> '{}') END,
+    CASE WHEN kind = 'string' THEN value #>> '{}' END,
+    CASE WHEN kind = 'boolean' THEN value::boolean END
+  FROM unnest(p_indexed_fields) AS fields(field)
+  CROSS JOIN LATERAL (SELECT p_data->field AS value) v
+  CROSS JOIN LATERAL (SELECT CASE WHEN jsonb_typeof(value) = 'string'
+    THEN coalesce(p_schema->'properties'->field->>'format', 'string') ELSE jsonb_typeof(value) END AS kind) k
+  WHERE p_data ? field
+$$;
+
 CREATE FUNCTION app_private.record_replace_projection(p_record core.app_records) RETURNS void
 LANGUAGE sql SET search_path = pg_catalog, app_private AS $$
   DELETE FROM record_field_values
     WHERE tenant_id = p_record.tenant_id AND owner_app_id = p_record.owner_app_id
       AND collection = p_record.collection AND record_id = p_record.id;
   INSERT INTO record_field_values
-    (tenant_id, owner_app_id, collection, field, record_id, kind, value, number_value, datetime_value, text_value, boolean_value)
-  SELECT m.tenant_id, m.owner_app_id, m.collection, field, p_record.id, kind, value,
-    CASE WHEN kind = 'number' THEN value::numeric END,
-    CASE WHEN kind IN ('date','date-time') THEN record_time(kind, value #>> '{}') END,
-    CASE WHEN kind = 'string' THEN value #>> '{}' END,
-    CASE WHEN kind = 'boolean' THEN value::boolean END
+    (tenant_id, owner_app_id, collection, record_id, field, kind, value, number_value, datetime_value, text_value, boolean_value)
+  SELECT m.tenant_id, m.owner_app_id, m.collection, p_record.id, v.*
   FROM record_collections m
-  CROSS JOIN LATERAL unnest(m.indexed_fields) AS fields(field)
-  CROSS JOIN LATERAL (SELECT p_record.data->field AS value) v
-  CROSS JOIN LATERAL (SELECT CASE WHEN jsonb_typeof(value) = 'string'
-    THEN coalesce(m.schema_doc->'properties'->field->>'format', 'string') ELSE jsonb_typeof(value) END AS kind) k
+  CROSS JOIN LATERAL record_project_fields(p_record.data, m.indexed_fields, m.schema_doc) v
   WHERE m.tenant_id = p_record.tenant_id AND m.owner_app_id = p_record.owner_app_id
-    AND m.collection = p_record.collection AND p_record.data ? field;
+    AND m.collection = p_record.collection;
 $$;
 
 CREATE FUNCTION app_private.record_error(p_status integer, p_code text, p_details jsonb DEFAULT NULL) RETURNS jsonb
@@ -343,7 +356,7 @@ LANGUAGE plpgsql SET search_path = pg_catalog, app_private AS $$
 DECLARE
   tenant text := record_tenant();
   unique_field text := p_body->>'uniqueKey';
-  r core.app_records;
+  indexed text[] := ARRAY(SELECT jsonb_array_elements_text(p_body->'indexed'));
   catalog jsonb;
 BEGIN
   PERFORM record_compile_patterns(p_body->'schema');
@@ -362,18 +375,25 @@ BEGIN
 
   UPDATE record_collections SET
     schema_doc = p_body->'schema', schema_revision = schema_revision + 1,
-    indexed_fields = ARRAY(SELECT jsonb_array_elements_text(p_body->'indexed')), unique_key_field = unique_field,
+    indexed_fields = indexed, unique_key_field = unique_field,
     searchable_fields = ARRAY(SELECT jsonb_array_elements_text(p_body->'searchable')),
     sensitive_fields = ARRAY(SELECT jsonb_array_elements_text(p_body->'sensitive'))
   WHERE tenant_id = tenant AND owner_app_id = p_owner_app AND collection = p_collection;
-  -- Clear old keys first, since values can move between rows when the configured field changes.
+  -- Clear changed keys first, since values can move between rows when the configured field changes.
   UPDATE core.app_records SET unique_key_value = NULL
-    WHERE tenant_id = tenant AND owner_app_id = p_owner_app AND collection = p_collection AND unique_key_value IS NOT NULL;
-  FOR r IN UPDATE core.app_records SET unique_key_value = data->>unique_field
-    WHERE tenant_id = tenant AND owner_app_id = p_owner_app AND collection = p_collection RETURNING *
-  LOOP
-    PERFORM record_replace_projection(r);
-  END LOOP;
+    WHERE tenant_id = tenant AND owner_app_id = p_owner_app AND collection = p_collection
+      AND unique_key_value IS NOT NULL AND unique_key_value IS DISTINCT FROM data->>unique_field;
+  UPDATE core.app_records SET unique_key_value = data->>unique_field
+    WHERE tenant_id = tenant AND owner_app_id = p_owner_app AND collection = p_collection
+      AND unique_key_value IS DISTINCT FROM data->>unique_field;
+  DELETE FROM record_field_values
+    WHERE tenant_id = tenant AND owner_app_id = p_owner_app AND collection = p_collection;
+  INSERT INTO record_field_values
+    (tenant_id, owner_app_id, collection, record_id, field, kind, value, number_value, datetime_value, text_value, boolean_value)
+  SELECT r.tenant_id, r.owner_app_id, r.collection, r.id, v.*
+  FROM core.app_records r
+  CROSS JOIN LATERAL record_project_fields(r.data, indexed, p_body->'schema') v
+  WHERE r.tenant_id = tenant AND r.owner_app_id = p_owner_app AND r.collection = p_collection;
   IF p_body ? 'auditActions' THEN
     DELETE FROM app_audit_actions WHERE tenant_id = tenant AND app_id = p_owner_app;
     INSERT INTO app_audit_actions (tenant_id, app_id, action, sensitivity, visible_to_subject)
@@ -533,6 +553,8 @@ LANGUAGE sql SET search_path = pg_catalog, app_private AS $$
   SELECT record_tenant(), p_scope, p_method, p_path, p_key, p_digest, (p_result->>'status')::integer,
     p_result - 'status' - 'headers', p_result->'headers', ts, ts + interval '24 hours'
   FROM (SELECT clock_timestamp() AS ts) recorded
+  WHERE (p_result->>'status')::integer BETWEEN 200 AND 299
+    OR (p_result->>'status')::integer IN (409, 412, 422, 429)
 $$;
 
 CREATE FUNCTION app_private.record_apply(p_operation text, p_actor uuid, p_payload jsonb) RETURNS jsonb

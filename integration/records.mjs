@@ -134,22 +134,65 @@ test("schema registration, replay, compatibility, sharing and grant redaction th
   } finally { await sql(`UPDATE app_private.applications SET state = 'active' WHERE app_id = '${owner.appId}';`); }
 });
 
-test("concurrent duplicate keys and quotas preserve counters", async () => {
+test("registering a schema rebuilds projections and can swap existing unique keys", async () => {
+  const name = collection("projection");
+  const firstData = { code: "A", alternate: "B", quantity: 1, timestamp: "2024-02-29T23:01:00-02:30" };
+  const secondData = { code: "B", alternate: "A", quantity: 2 };
+  const first = await create(name, firstData);
+  const second = await create(name, secondData);
+  const records = [await jsonResult(first, 201), await jsonResult(second, 201)];
+  const rows = `tenant_id = 'tenant-a' AND owner_app_id = '${owner.appId}' AND collection = '${name}'`;
+  const declaration = schema();
+  assert.equal((await register(name, declaration)).status, 200);
+  assert.equal(await sql(`SELECT count(*) FROM app_private.record_field_values WHERE ${rows} AND field = 'quantity'`), "2");
+
+  declaration.schema.properties.alternate = { type: "string" };
+  declaration.schema.required.push("alternate");
+  declaration.uniqueKey = "alternate";
+  declaration.indexed = ["alternate", "timestamp"];
+  assert.equal((await register(name, declaration)).status, 200);
+  assert.equal(await sql(`SELECT data->>'code', unique_key_value FROM core.app_records WHERE ${rows}
+    ORDER BY data->>'code'`), "A|B\nB|A");
+  assert.equal(await sql(`SELECT r.data->>'code', f.field, f.text_value, f.datetime_value AT TIME ZONE 'UTC'
+    FROM core.app_records r JOIN app_private.record_field_values f
+      USING (tenant_id, owner_app_id, collection) WHERE ${rows} AND f.record_id = r.id
+    ORDER BY r.data->>'code', f.field`), "A|alternate|B|\nA|timestamp||2024-03-01 01:31:00\nB|alternate|A|");
+  const fetched = await request("GET", `${dataPath(name)}/${records[0].id}`);
+  assert.equal(fetched.headers.get("etag"), first.headers.get("etag"));
+  assert.deepEqual((await jsonResult(fetched, 200)).data, firstData);
+});
+
+test("concurrent duplicate keys and quotas preserve counters and replay finalized errors", async () => {
   const name = collection("contention");
   assert.equal((await register(name)).status, 200);
-  let results = await Promise.all([create(name, { code: "same" }), create(name, { code: "same" })]);
+  const duplicateKeys = [key(), key()];
+  const duplicate = headers => create(name, { code: "same" }, headers, { observe: true });
+  let results = await Promise.all(duplicateKeys.map(duplicate));
   assert.deepEqual(statuses(results), [201, 409]);
-  assert.equal((await jsonResult(results.find(result => result.status === 409), 409)).error, "unique_key_conflict");
+  const conflictIndex = results.findIndex(result => result.status === 409);
+  const conflict = await jsonResult(results[conflictIndex], 409);
+  assert.equal(conflict.error, strict ? "unique_key_conflict" : "conflict");
+  if (!strict) assert.deepEqual(conflict.details, { code: "unique_key_conflict" });
+  const created = results[1 - conflictIndex];
+  const { id } = await jsonResult(created, 201);
+  const item = `${dataPath(name)}/${id}`;
   await sql(`UPDATE app_private.record_collections SET max_records = 2 WHERE owner_app_id = '${owner.appId}' AND collection = '${name}';`);
-  results = await Promise.all([create(name, { code: "second" }), create(name, { code: "third" })]);
+  const quotaWrites = ["second", "third"].map(code => ({ code, headers: key() }));
+  const quotaWrite = ({ code, headers }) => create(name, { code }, headers);
+  results = await Promise.all(quotaWrites.map(quotaWrite));
   assert.deepEqual(statuses(results), [201, 429]);
-  assert.deepEqual((await jsonResult(results.find(result => result.status === 429), 429)).quota, {
-    resource: "collectionRecords", limit: 2, used: 2,
-  });
+  const quotaIndex = results.findIndex(result => result.status === 429);
+  const quota = { resource: "collectionRecords", limit: 2, used: 2 };
+  assert.deepEqual((await jsonResult(results[quotaIndex], 429)).quota, quota);
   assert.equal(await sql(`SELECT record_count FROM app_private.record_collections WHERE owner_app_id = '${owner.appId}' AND collection = '${name}';`), "2");
   await sql(`SET enable_seqscan = off; EXPLAIN (COSTS OFF) SELECT id FROM core.app_records
     WHERE tenant_id='tenant-a' AND owner_app_id='${owner.appId}' AND collection='${name}' AND unique_key_value='same';`)
     .then(plan => assert.match(plan, /app_records_unique_key_idx/));
+  const deleteHeaders = { ...headersFor(created), ...key() };
+  assert.equal((await request("DELETE", item, { headers: deleteHeaders })).status, 204);
+  assert.equal((await request("DELETE", item, { headers: deleteHeaders })).status, 204);
+  assert.equal((await jsonResult(await duplicate(duplicateKeys[conflictIndex]), 409)).error, conflict.error);
+  assert.deepEqual((await jsonResult(await quotaWrite(quotaWrites[quotaIndex]), 429)).quota, quota);
 });
 
 test("an HTTP retry recovers a committed command whose receipt never reached the caller", async () => {
@@ -181,7 +224,7 @@ test("compare-and-swap, atomic increments and live leases serialize on one recor
   assert.deepEqual(statuses(await Promise.all([attempt(), attempt()])), [200, 412]);
   const initialTag = (await request("GET", item)).headers.get("etag");
   const increment = { operations: [{ op: "increment", field: "quantity", by: -1, min: 0 }] };
-  const modify = headers => request("PATCH", item, { body: increment, headers });
+  const modify = headers => request("PATCH", item, { body: increment, headers, observe: true });
   const firstKey = key(), secondKey = key();
   const decrements = await Promise.all([modify(firstKey), modify(secondKey)]);
   assert.deepEqual(statuses(decrements), [200, 409]);
@@ -190,8 +233,13 @@ test("compare-and-swap, atomic increments and live leases serialize on one recor
   assert.equal(changed.version, 3);
   assert.equal(changed.data.quantity, 0);
   assert.deepEqual(await jsonResult(await modify([firstKey, secondKey][winner]), 200), changed);
-  assert.equal((await jsonResult(decrements[1 - winner], 409)).field, "quantity");
-  assert.equal((await modify({ ...key(), "If-Match": initialTag })).status, 412);
+  const limit = await jsonResult(decrements[1 - winner], 409);
+  assert.equal(limit.error, strict ? "limit_exceeded" : "conflict");
+  if (strict) assert.equal(limit.field, "quantity");
+  else assert.deepEqual(limit.details, { code: "limit_exceeded", field: "quantity" });
+  const staleKey = key();
+  assert.equal((await modify({ ...staleKey, "If-Match": initialTag })).status, 412);
+  assert.equal((await jsonResult(await modify(staleKey), 422)).error, "idempotency_key_reused");
 
   const endpoint = item + ":lock";
   const acquire = (body, headers = key()) => request("POST", endpoint, { body, headers, observe: true });
@@ -209,20 +257,33 @@ test("compare-and-swap, atomic increments and live leases serialize on one recor
 
   await sql(`UPDATE app_private.record_locks SET holder_scope = sha256('former-enrollment'::bytea),
     locked_by = 'Former holder' WHERE record_id = '${id}';`);
-  const blocked = await request("PATCH", item, { body: { data: { code: "item" } }, headers: headersFor(created) });
+  const blockedHeaders = { ...key(), "If-Match": leaseTag };
+  const blockedWrite = () => request("PATCH", item, { body: { data: { code: "item" } }, headers: blockedHeaders });
+  const blocked = await blockedWrite();
   assert.equal((await jsonResult(blocked, 423)).lockedBy, "Former holder");
   assert.equal((await request("DELETE", item)).status, 423);
   assert.deepEqual(await jsonResult(await modify([firstKey, secondKey][winner]), 200), changed);
   await sql(`UPDATE app_private.record_locks SET locked_until = clock_timestamp() - interval '1 second' WHERE record_id = '${id}';`);
+  const retried = await blockedWrite();
+  assert.equal(retried.status, 200);
   assert.equal((await release(lock.lockId)).status, 204);
   assert.equal((await release(lock.lockId)).status, 204);
 
   const bare = await create(collection("schemaless"), { any: "value" });
   const bareItem = `${dataPath(collection("schemaless"))}/${(await jsonResult(bare, 201)).id}`;
-  const noMatch = await request("DELETE", bareItem);
+  let latest = bare;
+  if (strict) {
+    const replaceKey = key();
+    const body = { data: { updated: true } };
+    assert.equal((await request("PATCH", bareItem, { body, headers: replaceKey, observe: true })).status, 428);
+    latest = await request("PATCH", bareItem, { body, headers: { ...replaceKey, ...headersFor(bare) }, observe: true });
+    assert.equal((await jsonResult(latest, 200)).version, 2);
+  }
+  const deleteKey = key();
+  const noMatch = await request("DELETE", bareItem, { headers: deleteKey });
   assert.equal(noMatch.status, strict ? 428 : 204);
-  if (strict) assert.equal((await request("DELETE", bareItem, { headers: headersFor(bare) })).status, 204);
-  assert.equal((await request("DELETE", item, { headers: { "If-Match": leaseTag }, observe: true })).status, 204);
+  if (strict) assert.equal((await request("DELETE", bareItem, { headers: { ...deleteKey, ...headersFor(latest) } })).status, 204);
+  assert.equal((await request("DELETE", item, { headers: headersFor(retried), observe: true })).status, 204);
 });
 
 test("unique-key upserts serialize with creates and reject tags from a previous incarnation", async () => {
@@ -230,7 +291,9 @@ test("unique-key upserts serialize with creates and reject tags from a previous 
   assert.equal((await register(name)).status, 200);
   const item = value => `${dataPath(name)}/by-key/${value}`;
   const upsert = (value, data, headers = key()) => request("PUT", item(value), { body: { data }, headers, observe: true });
-  assert.equal((await upsert("First", { code: "first" })).status, 400);
+  const badRequestKey = key();
+  assert.equal((await upsert("Corrected", { code: "wrong" }, badRequestKey)).status, 400);
+  assert.equal((await upsert("Corrected", { code: "Corrected" }, badRequestKey)).status, 201);
   const payload = { code: "First" };
   const [one, other] = await Promise.all([upsert("First", payload), upsert("First", payload)]);
   assert.deepEqual(statuses([one, other]), [201, 428]);
@@ -303,6 +366,9 @@ test("batch locks collections in sorted order and rolls back rows, projections a
   assert.equal((await send([deleteWithoutMatch])).status, 428);
   const increments = await jsonResult(await send([increment, increment]), 200);
   assert.deepEqual(increments.results.map(result => result.version), [2, 3]);
+  const invalidIncrement = { ...increment, operations: [{ op: "increment", field: "quantity", by: -104 }] };
+  const resultViolation = await jsonResult(await send([createItem(b, { code: "rolled_back" }), invalidIncrement]), 422);
+  assert.deepEqual(resultViolation.issues, [{ path: "/operations/1/data/quantity", keyword: "minimum" }]);
   assert.equal((await jsonResult(await request("GET", item), 200)).data.quantity, 3);
   assert.equal((await send([{ ...deleteWithoutMatch, ifMatch: current.headers.get("etag") }])).status, 412);
   const validDelete = { ...deleteWithoutMatch, ifMatch: (await request("GET", item)).headers.get("etag") };

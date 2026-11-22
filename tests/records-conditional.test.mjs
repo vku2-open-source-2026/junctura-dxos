@@ -3,6 +3,7 @@
 import assert from "node:assert/strict";
 import { Readable } from "node:stream";
 import { test } from "node:test";
+import { loadConfig } from "../src/bootstrap/config.mjs";
 import { handleAppRecords, parseRecordIncrements, parseRecordLockWrite, presentRecordRequest } from "../src/modules/data/records.mjs";
 
 const id = "11111111-1111-4111-8111-111111111111";
@@ -10,6 +11,17 @@ const tag = `"record-${"a".repeat(64)}-1"`;
 const identity = { tenantId: "test", issuer: "https://issuer.invalid", subject: id, clientId: "app", roles: ["core-writer"] };
 const dataPath = `/v2/data/test/${id}`;
 const operation = { op: "increment", field: "count", by: -1, min: 0 };
+
+test("STRICT_RECORD_WRITES accepts only true or false when set", () => {
+  const env = { OIDC_ISSUER: identity.issuer, CORE_CLIENT_SECRET: "fixture", IDENTITY_URL: identity.issuer };
+  assert.equal(loadConfig(env).config.strictRecords, false);
+  for (const value of ["true", "false"]) {
+    assert.equal(loadConfig({ ...env, STRICT_RECORD_WRITES: value }).config.strictRecords, value === "true");
+  }
+  for (const value of ["TRUE", "1", "true ", ""]) {
+    assert.throws(() => loadConfig({ ...env, STRICT_RECORD_WRITES: value }), /STRICT_RECORD_WRITES must be true or false/);
+  }
+});
 
 function adapter(strictRecords) {
   return async (method, path, headers = {}, value, caller = identity) => {
@@ -25,7 +37,8 @@ function adapter(strictRecords) {
     };
     const config = { dataUrl: "http://data.invalid", dataSecret: "x".repeat(32), strictRecords };
     const url = new URL(path, "http://core.invalid");
-    await presentRecordRequest(request, response, () => handleAppRecords(request, response, caller, config, url));
+    await presentRecordRequest(request, response, () => handleAppRecords(request, response, caller, config, url),
+      !strictRecords && !path.endsWith(":lock"));
     return result;
   };
 }
@@ -73,6 +86,31 @@ test("strict replacement and delete leave the lease and precondition order to SQ
   assert.deepEqual((await compatibility("PATCH", dataPath, {}, { data: {} })).value, { data: {} });
   assert.equal((await compatibility("DELETE", dataPath)).status, 204);
   assert.equal((await strict("DELETE", dataPath, { "if-match": "bad" })).status, 400);
+});
+
+test("409 responses preserve the compatibility code and expose strict details", async t => {
+  t.mock.method(globalThis, "fetch", async (_url, request) => {
+    const { operation } = JSON.parse(request.body);
+    return Response.json(operation === "increment"
+      ? { status: 409, error: "limit_exceeded", details: { field: "count", private: "ignored" } }
+      : { status: 409, error: "unique_key_conflict" });
+  });
+  const compatibility = adapter(false);
+  const strict = adapter(true);
+  const headers = { "idempotency-key": id };
+  for (const requestHeaders of [{}, headers]) {
+    const create = await compatibility("POST", "/v2/data/test", requestHeaders, { data: {} });
+    assert.equal(create.status, 409);
+    assert.deepEqual(create.value, { error: "conflict", requestId: create.headers["X-Request-Id"],
+      details: { code: "unique_key_conflict" } });
+  }
+  assert.equal((await strict("POST", "/v2/data/test", headers, { data: {} })).value.error, "unique_key_conflict");
+  const legacyIncrement = await compatibility("PATCH", dataPath, headers, { operations: [operation] });
+  assert.deepEqual(legacyIncrement.value, { error: "conflict", requestId: legacyIncrement.headers["X-Request-Id"],
+    details: { code: "limit_exceeded", field: "count" } });
+  const strictIncrement = await strict("PATCH", dataPath, headers, { operations: [operation] });
+  assert.deepEqual(strictIncrement.value, { error: "limit_exceeded", requestId: strictIncrement.headers["X-Request-Id"],
+    field: "count" });
 });
 
 test("lock TTLs, verified writers and closed lock error envelopes", async t => {

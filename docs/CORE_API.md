@@ -190,8 +190,7 @@ are refused. Add reviewed migrations for schema changes. Named volumes survive `
 
 V2 collection schemas use `type`, `required`, `properties`, `enum`, `minLength`,
 `maxLength`, `pattern`, `minimum`, `maximum`, `items` and `format` for dates and
-date-times. Registering a schema validates existing rows before activating it. The root
-is an object and the maximum schema depth is eight. Patterns are at most 256
+date-times. The root is an object and the maximum schema depth is eight. Patterns are at most 256
 characters and use PostgreSQL regular expressions with C collation. The subset
 supports ASCII literals, character classes, anchors and quantifiers on single
 atoms. Grouping, alternation and backreferences are outside the subset.
@@ -200,6 +199,14 @@ normalized to UTC in the index at PostgreSQL's microsecond precision. Record
 writes reject numbers outside ±2^53 or numbers that lose decimal precision
 during HTTP parsing. Core measures the 64 KiB data limit in compact UTF-8
 JSON with insignificant whitespace and trailing decimal zeros removed.
+
+Schema registration validates existing records and rebuilds their indexed field
+values in one transaction while holding the collection's write lock. The record
+RPC has a 4-second statement timeout and a 2-second lock timeout. A timeout rolls
+back the registration and can return `503 data_unavailable` to it or to writers
+waiting on the collection. Register schemas before bulk loads. For populated
+collections, schedule registration during low write traffic and validate its
+duration with representative data before updating large collections.
 
 The owner receives a strong, incarnation-specific ETag on individual reads and
 writes. Keep the complete tag, including the quotes. In compatibility mode,
@@ -210,6 +217,12 @@ on every Core replica. In strict mode, the default list scope is the calling
 app and list items include their version. Restart pagination after switching
 modes. Management readers with an explicit app-level grant receive the
 representation with sensitive fields omitted.
+
+In compatibility mode, `409` from `POST /v2/data/{collection}` and
+`PATCH /v2/data/{collection}/{id}` returns `error: "conflict"` with the specific
+code in `details.code` and any increment field in `details.field`. This applies
+with or without an idempotency key. Strict mode puts the specific code in `error`
+and returns an increment field at the top level.
 
 #### Filtered lists and aggregates
 
@@ -586,6 +599,14 @@ Core keeps the first recorded result for 24 hours in the verified tenant, caller
 path scope. A retry with the same key and logical request, including any write precondition, replays
 the original status, body and resource headers. A changed request with the same key returns
 `422 idempotency_key_reused`. Use a fresh key for each new operation.
+
+Record writes save receipts for `2xx`, `409`, `412`, `422` and `429`. A `423`
+can be retried with the same key after the lock expires or is released. After
+`400` or `428`, correct the request and retry with the same key.
+
+If a batch increment produces data that violates the collection schema, the issue
+points to the resulting field at `/operations/N/data/<field>`, using a zero-based
+batch index and JSON Pointer escaping.
 
 With `quantity` registered as an indexed numeric field, send this body with an `Idempotency-Key`
 to `POST /v2/data:batch` to decrease stock for two items together. If either quantity would go

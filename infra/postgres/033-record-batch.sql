@@ -25,16 +25,9 @@ BEGIN
   RETURN record_write('replace', p_actor, p_collection, target_id, p_data, p_if_match, true);
 END $$;
 
-CREATE FUNCTION app_private.record_batch_issues(p_item jsonb, p_base text, p_issues jsonb) RETURNS jsonb
+CREATE FUNCTION app_private.record_batch_issues(p_base text, p_issues jsonb) RETURNS jsonb
 LANGUAGE sql IMMUTABLE SET search_path = pg_catalog, app_private AS $$
-  SELECT jsonb_agg(jsonb_set(issue, '{path}', to_jsonb(p_base || CASE WHEN p_item->>'op' = 'increment'
-    THEN coalesce((
-      SELECT '/operations/' || (ordinality - 1) || '/field'
-      FROM jsonb_array_elements(p_item->'operations') WITH ORDINALITY AS increments(operation, ordinality)
-      WHERE issue->>'path' = record_pointer('/data', operation->>'field')
-      ORDER BY ordinality DESC LIMIT 1
-    ), '')
-    ELSE issue->>'path' END)) ORDER BY issue_ordinality)
+  SELECT jsonb_agg(jsonb_set(issue, '{path}', to_jsonb(p_base || (issue->>'path'))) ORDER BY issue_ordinality)
   FROM jsonb_array_elements(p_issues) WITH ORDINALITY AS issues(issue, issue_ordinality)
 $$;
 
@@ -66,7 +59,7 @@ BEGIN
     IF result ? 'error' THEN
       pointer := '/operations/' || (item_number - 1);
       IF result->>'error' = 'schema_violation' THEN
-        result := jsonb_set(result, '{details,issues}', record_batch_issues(item, pointer, result->'details'->'issues'));
+        result := jsonb_set(result, '{details,issues}', record_batch_issues(pointer, result->'details'->'issues'));
       ELSIF result->>'error' = 'invalid_request' THEN
         result := record_error(400, 'invalid_request', jsonb_build_object('issues', record_issue(pointer, 'properties')));
       END IF;
