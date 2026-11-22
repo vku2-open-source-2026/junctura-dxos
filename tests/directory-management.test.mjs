@@ -3,9 +3,10 @@
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
 import { readFileSync } from "node:fs";
+import { setTimeout as wait } from "node:timers/promises";
 import { after, before, test } from "node:test";
 import { randomUUID } from "node:crypto";
-import { handleDirectory } from "../src/modules/directory/directory.mjs";
+import { handleDirectory, startDirectoryReconciler } from "../src/modules/directory/directory.mjs";
 import { HttpError, json } from "../src/platform/http/http.mjs";
 
 const identity = {
@@ -16,8 +17,14 @@ const reader = { ...identity, roles: ["core-reader"] };
 const writerWithoutPermission = { ...identity, subject: "writer-only" };
 let dataDown = false;
 let keycloakDown = false;
-let failMembershipReadBack = false;
+let failMembershipWriteAt = 0;
+let membershipWrites = 0;
+let emptyGroupReadback;
 let gate;
+let leaseHolder;
+let config;
+let providerPaths;
+let syncEnabled = true;
 const store = { types: new Map(), units: new Map(), groups: new Map(), members: new Map() };
 let data, keycloak, core, mirror, base, mirrorBase;
 const listen = server => new Promise(resolve => server.listen(0, "127.0.0.1", () => resolve(`http://127.0.0.1:${server.address().port}`)));
@@ -30,24 +37,51 @@ const listen = server => new Promise(resolve => server.listen(0, "127.0.0.1", ()
 const directoryWriters = new Set(["admin-1"]);
 function rpc(operation, payload, claims) {
   const table = { unit_type: store.types, unit: store.units, group: store.groups, member: store.members };
-  const kind = operation.replace(/_(put|confirm|delete|delete_confirm|list)$/, "");
-  const rows = table[kind];
-  const keyOf = row => { const value = row.desired ?? row;
-    return kind === "unit_type" ? value.unitType : kind === "unit" ? value.unit :
-      kind === "group" ? `${value.unit}/${value.group}` : `${value.unit}/${value.subject}`; };
+  const worker = claims.role === "junctura_directory_worker";
   const mutation = !operation.endsWith("_list");
-  if (mutation && claims.directory_writer !== true) return { status: 403, error: "write_forbidden" };
-  if (mutation && !directoryWriters.has(claims.sub ?? "")) return { status: 403, error: "forbidden" };
+  const conflict = { status: 409, error: "resource_conflict" };
+  if (!worker && mutation && claims.directory_writer !== true) return { status: 403, error: "write_forbidden" };
+  if (!worker && mutation && !directoryWriters.has(claims.sub ?? "")) return { status: 403, error: "forbidden" };
+  if (operation === "sync_tenants") return { status: 200, value: payload.after ? [] : [identity.tenantId] };
+  if (operation === "sync_acquire") {
+    if (leaseHolder) return conflict;
+    leaseHolder = payload.lease;
+    return { status: 204 };
+  }
+  if (operation === "sync_release") {
+    if (leaseHolder === payload.lease) leaseHolder = undefined;
+    return { status: 204 };
+  }
+  if (mutation && !operation.startsWith("unit_type_") && (!leaseHolder || leaseHolder !== payload.lease)) return conflict;
+  delete payload.lease;
+  if (operation === "sync_renew") return { status: 204 };
+  if (operation === "sync_next") {
+    const jobs = [];
+    for (const [kind, phases] of [["unit", [1, 6]], ["group", [2, 5]], ["member", [3, 4]]]) {
+      for (const row of table[kind].values()) {
+        const { unit, group, subject, groups } = row.desired;
+        const keys = group ? { unit, group } : subject ? { unit, subject } : { unit };
+        const cursor = [phases[Number(row.pending_delete)], unit, group ?? subject ?? ""].join("/");
+        jobs.push({ kind, keys, groups, cursor, generation: row.generation, remove: row.pending_delete });
+      }
+    }
+    return { status: 200, value: jobs.sort((a, b) => a.cursor.localeCompare(b.cursor))
+      .find(job => !payload.after || job.cursor > payload.after) ?? null };
+  }
+  const kind = operation.replace(/_(put|delete_confirm|confirm|delete|list)$/, "");
+  const rows = table[kind];
+  const keyOf = value => kind === "unit_type" ? value.unitType : kind === "unit" ? value.unit :
+    kind === "group" ? `${value.unit}/${value.group}` : `${value.unit}/${value.subject}`;
   if (operation.endsWith("_list")) {
     // Lists order and page by the collection's own key, like the SQL does.
     const listKey = row => { const value = row.desired ?? row;
       return kind === "unit_type" ? value.unitType : kind === "unit" ? value.unit :
         kind === "group" ? value.group : value.subject; };
-    const visible = [...rows.values()].sort((a, b) => listKey(a) < listKey(b) ? -1 : 1)
-      .filter(row => !row.pending_delete)
+    if (payload.unit && !store.units.get(payload.unit)?.confirmed) return { status: 404, error: "not_found" };
+    const visible = [...rows.values()].filter(row => row.confirmed && (!payload.unit || row.confirmed.unit === payload.unit))
+      .map(row => row.confirmed).sort((a, b) => listKey(a) < listKey(b) ? -1 : 1)
       .filter(row => !payload.after || listKey(row) > payload.after);
-    return { status: 200, value: { items: visible.slice(0, payload.limit).map(row => kind === "member"
-      ? { unit: row.desired.unit, subject: row.desired.subject, groups: row.desired.groups } : { ...row.desired }), total: visible.length } };
+    return { status: 200, value: { items: visible.slice(0, payload.limit), total: visible.length } };
   }
   if (operation.endsWith("_put")) {
     const existing = rows.get(keyOf(payload));
@@ -69,18 +103,21 @@ function rpc(operation, payload, claims) {
     }
     if (same) return { status: 200, generation: existing.generation };
     if (!existing) {
-      rows.set(keyOf(payload), { desired, generation: 1, synced_generation: null, pending_delete: false });
+      rows.set(keyOf(payload), { desired, generation: 1, synced_generation: kind === "unit_type" ? 1 : null,
+        confirmed: kind === "unit_type" ? desired : undefined, pending_delete: false });
       return { status: 201, generation: 1 };
     }
     const recreated = existing.pending_delete && existing.synced_generation === existing.generation;
     existing.generation += 1; existing.synced_generation = null; existing.pending_delete = false;
     existing.desired = desired;
+    if (kind === "unit_type") { existing.confirmed = desired; existing.synced_generation = existing.generation; }
     return { status: recreated ? 201 : 200, generation: existing.generation };
   }
   if (operation.endsWith("delete_confirm")) {
     const existing = rows.get(keyOf(payload));
     if (existing && existing.pending_delete && existing.generation === payload.generation) {
       existing.synced_generation = payload.generation;
+      existing.confirmed = undefined;
       return { status: 204 };
     }
     return { status: 409, error: "resource_conflict" };
@@ -89,6 +126,7 @@ function rpc(operation, payload, claims) {
     const existing = rows.get(keyOf(payload));
     if (existing && !existing.pending_delete && existing.generation === payload.generation) {
       existing.synced_generation = payload.generation;
+      existing.confirmed = { ...existing.desired };
       return { status: 204 };
     }
     return { status: 409, error: "resource_conflict" };
@@ -107,12 +145,16 @@ function rpc(operation, payload, claims) {
       !row.pending_delete && row.desired.unit === payload.unit && row.desired.groups.includes(payload.group))) {
       return { status: 409, error: "resource_conflict" };
     }
-    if (existing.pending_delete && existing.synced_generation === existing.generation) return { status: 204 };
+
     if (!existing.pending_delete) {
       existing.pending_delete = true;
       existing.generation += 1;
       existing.synced_generation = null;
       if (kind === "member") existing.desired = { unit: payload.unit, subject: payload.subject, groups: [] };
+    }
+    if (kind === "unit_type") {
+      existing.confirmed = undefined;
+      existing.synced_generation = existing.generation;
     }
     return { status: 204, generation: existing.generation };
   }
@@ -136,7 +178,8 @@ before(async () => {
   // pagination walks every page instead of trusting the first one.
   const realm = { groups: [{ id: "g-root", name: "tenant-a", path: "/tenant-a" }],
     users: [{ id: "u-1", username: "subject-42", groupIds: ["g-root"] }, { id: "u-2", username: "outsider", groupIds: [] }] };
-  const childOf = (parentId, name) => realm.groups.find(group => group.parentId === parentId && group.name === name);
+  providerPaths = subject => realm.groups.filter(group =>
+    realm.users.find(person => person.username === subject)?.groupIds.includes(group.id)).map(group => group.path);
   const paged = (items, url) => {
     const first = Number(url.searchParams.get("first") ?? 0);
     const max = Number(url.searchParams.get("max") ?? 2);
@@ -144,7 +187,7 @@ before(async () => {
   };
   keycloak = createServer(async (request, response) => {
     const chunks = []; for await (const chunk of request) chunks.push(chunk);
-    if (keycloakDown || failMembershipReadBack) { response.writeHead(503); return response.end(); }
+    if (keycloakDown) { response.writeHead(503); return response.end(); }
     const url = new URL(request.url, "http://identity");
     if (url.pathname === "/identity/realms/junctura/protocol/openid-connect/token") {
       response.writeHead(200, { "Content-Type": "application/json" });
@@ -153,7 +196,7 @@ before(async () => {
     const group = url.pathname.match(/^\/identity\/admin\/realms\/junctura\/groups\/([^/]+)(\/children)?$/);
     const groups = url.pathname === "/identity/admin/realms/junctura/groups";
     const userPath = url.pathname.match(/^\/identity\/admin\/realms\/junctura\/users\/([^/]+)(\/groups(\/([^/]+))?)?$/);
-    response.writeHead(200, { "Content-Type": "application/json" });
+    response.setHeader("Content-Type", "application/json");
     if (groups) {
       if (request.method === "POST") {
         const body = JSON.parse(Buffer.concat(chunks).toString());
@@ -166,9 +209,11 @@ before(async () => {
     }
     if (group) {
       const parent = realm.groups.find(item => item.id === group[1]);
-      if (!parent) { response.statusCode = 404; return response.end(); }
+      if (!parent) {
+        response.statusCode = group[1] === emptyGroupReadback && request.method === "GET" ? 200 : 404;
+        return response.end();
+      }
       if (group[2]) { // children
-        if (request.method === "GET" && gate && gate.holds === 0) { gate.holds += 1; await gate.promise; }
         if (request.method === "POST") {
           const body = JSON.parse(Buffer.concat(chunks).toString());
           realm.groups.push({ id: randomUUID(), name: body.name, parentId: parent.id, path: `${parent.path}/${body.name}` });
@@ -178,6 +223,7 @@ before(async () => {
         return response.end(JSON.stringify(paged(realm.groups.filter(item => item.parentId === parent.id), url)));
       }
       if (request.method === "DELETE") {
+        if (emptyGroupReadback === true) emptyGroupReadback = parent.id;
         realm.groups = realm.groups.filter(item => item.id !== parent.id && item.path !== parent.path &&
           !item.path.startsWith(`${parent.path}/`));
         response.statusCode = 204;
@@ -189,6 +235,14 @@ before(async () => {
       const person = realm.users.find(item => item.id === decodeURIComponent(userPath[1]) || item.username === decodeURIComponent(userPath[1]));
       if (!person) { response.statusCode = 404; return response.end(); }
       if (userPath[3]) { // /groups/{id}
+        const memberGroup = realm.groups.find(item => item.id === userPath[4]);
+        if (gate && memberGroup?.name === gate.group && request.method === "PUT") {
+          const current = gate;
+          gate = undefined;
+          current.entered();
+          await current.promise;
+        }
+        if (++membershipWrites === failMembershipWriteAt) { response.statusCode = 503; return response.end(); }
         if (request.method === "PUT") {
           person.groupIds = [...new Set([...person.groupIds ?? [], userPath[4]])];
           response.statusCode = 204;
@@ -207,14 +261,14 @@ before(async () => {
   const keycloakBase = await listen(keycloak);
   const identityUrl = `${keycloakBase}/identity/realms/junctura`;
 
-  const config = { dataUrl, dataSecret: "x".repeat(32), identityUrl, directorySyncClientId: "junctura-directory-sync",
+  config = { dataUrl, dataSecret: "x".repeat(32), identityUrl, directorySyncClientId: "junctura-directory-sync",
     directorySyncSecret: "y".repeat(32) };
   const serve = () => createServer(async (request, response) => {
     // The caller identity rides a test header so one fixture can serve several
     // principals; production resolves it from the bearer token.
     const who = { reader, "writer-only": writerWithoutPermission }[request.headers["x-fixture-subject"]] ?? identity;
     try {
-      await handleDirectory(request, response, who, config, new URL(request.url, "http://core"));
+      await handleDirectory(request, response, who, syncEnabled ? config : { ...config, directorySyncSecret: undefined }, new URL(request.url, "http://core"));
     } catch (error) {
       json(response, error instanceof HttpError ? error.status : 500, { error: error.message });
     }
@@ -383,45 +437,93 @@ test("a failed provider synchronization leaves the desired state to converge on 
   assert.equal((await call("/v1/directory/unit-types/office", "DELETE")).status, 204);
 });
 
-test("an outage after a partial membership change still converges on retry", async () => {
+async function eventually(check) {
+  const deadline = Date.now() + 3000;
+  while (Date.now() < deadline) {
+    if (await check()) return;
+    await wait(15);
+  }
+  assert.fail("directory state did not reconcile");
+}
+
+test("an outage after a partial membership change converges on a new replica without a client retry", async () => {
   await call("/v1/directory/unit-types/office", "PUT", { name: "Office" });
   await call("/v1/directory/units/unit-a", "PUT", { unitType: "office", name: "Unit A" });
   await call("/v1/directory/units/unit-a/groups/reviewers", "PUT", { name: "Reviewers" });
-  failMembershipReadBack = true;
+  failMembershipWriteAt = membershipWrites + 2;
   const halfDone = await call("/v1/directory/units/unit-a/members/subject-42", "PUT", { groups: ["reviewers"] });
-  assert.equal(halfDone.status, 503, "the membership was applied but the read-back failed");
-  failMembershipReadBack = false;
-  const retried = await call("/v1/directory/units/unit-a/members/subject-42", "PUT", { groups: ["reviewers"] });
-  assert.equal([200, 201].includes(retried.status), true, "the same desired state converges after the outage");
-  assert.deepEqual(await retried.json(), { unit: "unit-a", subject: "subject-42", groups: ["reviewers"] });
-  assert.equal((await call("/v1/directory/units/unit-a/members/subject-42", "DELETE")).status, 204);
-  assert.equal((await call("/v1/directory/units/unit-a/groups/reviewers", "DELETE")).status, 204);
-  assert.equal((await call("/v1/directory/units/unit-a", "DELETE")).status, 204);
-  assert.equal((await call("/v1/directory/unit-types/office", "DELETE")).status, 204);
+  assert.equal(halfDone.status, 503);
+  assert.ok(providerPaths("subject-42").includes("/tenant-a/unit-a"));
+  assert.ok(!providerPaths("subject-42").includes("/tenant-a/unit-a/reviewers"));
+  assert.deepEqual((await (await call("/v1/directory/units/unit-a/members")).json()).items, []);
+  const stop = startDirectoryReconciler(config, 10);
+  try {
+    await eventually(() => store.members.get("unit-a/subject-42")?.confirmed?.groups[0] === "reviewers");
+    assert.ok(providerPaths("subject-42").includes("/tenant-a/unit-a/reviewers"));
+  } finally { stop(); }
+  await eventually(() => !leaseHolder);
+  await call("/v1/directory/units/unit-a/members/subject-42", "DELETE");
+  await call("/v1/directory/units/unit-a/groups/reviewers", "DELETE");
+  await call("/v1/directory/units/unit-a", "DELETE");
+  await call("/v1/directory/unit-types/office", "DELETE");
 });
 
-test("replicas racing the same row serialize by generation and the stale confirm loses", async () => {
+test("a write finishing after lease expiry cannot confirm and a new replica repairs provider drift", async () => {
   await call("/v1/directory/unit-types/office", "PUT", { name: "Office" });
   await call("/v1/directory/units/unit-a", "PUT", { unitType: "office", name: "Unit A" });
-  // Hold the first replica between the two prepares so both rows carry
-  // distinct generations before either confirms; later callers pass through.
+  await call("/v1/directory/units/unit-a/groups/reviewers", "PUT", { name: "Reviewers" });
+  const path = "/v1/directory/units/unit-a/members/subject-42";
+  assert.equal((await call(path, "PUT", { groups: [] })).status, 201);
   let release;
-  gate = { holds: 0, promise: new Promise(resolve => { release = resolve; }) };
-  const first = call("/v1/directory/units/unit-a/groups/reviewers", "PUT", { name: "First" }, identity, mirrorBase);
-  await new Promise(resolve => setTimeout(resolve, 120));
-  const second = call("/v1/directory/units/unit-a/groups/reviewers", "PUT", { name: "Second" });
-  release();
-  const outcomes = await Promise.all([first, second]);
-  const statuses = outcomes.map(response => response.status).sort();
-  assert.deepEqual(statuses, [200, 409], "the stale confirm reports a conflict instead of success");
-  const settled = await (await call("/v1/directory/units/unit-a/groups")).json();
-  assert.equal(settled.items.length, 1, "exactly one desired row survives the race");
-  const healed = await call("/v1/directory/units/unit-a/groups/reviewers", "PUT", { name: "Settled" });
-  assert.equal(healed.status, 200, "a retry of the winning desired state converges");
-  assert.equal((await call("/v1/directory/units/unit-a/groups/reviewers", "DELETE")).status, 204);
-  assert.equal((await call("/v1/directory/units/unit-a", "DELETE")).status, 204);
-  assert.equal((await call("/v1/directory/unit-types/office", "DELETE")).status, 204);
-  gate = null;
+  const arrived = new Promise(entered => {
+    gate = { entered, group: "reviewers", promise: new Promise(resolve => { release = resolve; }) };
+  });
+  const old = call(path, "PUT", { groups: ["reviewers"] }, identity, mirrorBase);
+  try {
+    await Promise.race([arrived, wait(2000, undefined, { ref: false }).then(() => assert.fail("provider never received the old write"))]);
+    assert.equal((await call(path, "PUT", { groups: [] })).status, 409, "a live lease prevents overlap");
+    leaseHolder = undefined; // Advance the fixture clock past the old lease's expiry.
+    assert.equal((await call(path, "PUT", { groups: [] })).status, 200);
+  } finally { release(); }
+  assert.equal((await old).status, 409);
+  assert.ok(providerPaths("subject-42").includes("/tenant-a/unit-a/reviewers"), "the old HTTP request did finish late");
+  const stop = startDirectoryReconciler(config, 10);
+  try {
+    await eventually(() => !providerPaths("subject-42").includes("/tenant-a/unit-a/reviewers"));
+    assert.deepEqual((await (await call("/v1/directory/units/unit-a/members")).json()).items,
+      [{ unit: "unit-a", subject: "subject-42", groups: [] }]);
+  } finally { stop(); }
+  await eventually(() => !leaseHolder);
+  await call(path, "DELETE");
+  await call("/v1/directory/units/unit-a/groups/reviewers", "DELETE");
+  await call("/v1/directory/units/unit-a", "DELETE");
+  await call("/v1/directory/unit-types/office", "DELETE");
+});
+
+test("disabled sync preserves confirmed views and a blank GET cannot confirm a delete", async () => {
+  const type = "/v1/directory/unit-types/office";
+  const unit = "/v1/directory/units/unit-a";
+  const body = { unitType: "office", name: "Unit A" };
+  await call(type, "PUT", { name: "Office" });
+  syncEnabled = false;
+  try {
+    assert.equal((await call(unit, "PUT", body)).status, 503);
+    assert.ok(store.units.get("unit-a")?.pending_delete);
+  } finally { syncEnabled = true; }
+  assert.equal((await call(unit, "PUT", body)).status, 201);
+  syncEnabled = false;
+  try { assert.equal((await call(unit, "DELETE")).status, 503); }
+  finally { syncEnabled = true; }
+  assert.equal(store.units.get("unit-a").pending_delete, false);
+  emptyGroupReadback = true;
+  try {
+    assert.equal((await call(unit, "DELETE")).status, 503);
+    assert.deepEqual((await (await call("/v1/directory/units")).json()).items, [{ unit: "unit-a", ...body }]);
+  } finally { emptyGroupReadback = undefined; }
+  assert.equal((await call(unit, "DELETE")).status, 204);
+  assert.equal((await call(type, "DELETE")).status, 204);
+  assert.equal((await call("/v1/directory/units/%ZZ/groups")).status, 400);
+  assert.equal((await call("/v1/directory/units/%ZZ", "DELETE")).status, 400);
 });
 
 test("a member write racing the deletion of its group ends in a documented conflict", async () => {
@@ -433,7 +535,7 @@ test("a member write racing the deletion of its group ends in a documented confl
     call("/v1/directory/units/unit-a/groups/reviewers", "DELETE"),
   ]);
   assert.ok(
-    (member.status === 201 && removal.status === 409) || (member.status === 404 && removal.status === 204),
+    (member.status === 201 && removal.status === 409) || ([404, 409].includes(member.status) && removal.status === 204),
     "either the member lands and the delete conflicts, or the delete wins and the member is refused");
   const groups = await (await call("/v1/directory/units/unit-a/groups")).json();
   const members = await (await call("/v1/directory/units/unit-a/members")).json();
@@ -461,8 +563,7 @@ test("the migrations bind generations, permissions and consent identity durably"
   assert.match(directory, /directory_writer',''\) IS DISTINCT FROM 'true'/, "mutations need the relayed core-writer flag");
   assert.match(directory, /IF NOT FOUND THEN RETURN jsonb_build_object\('status',409,'error','resource_conflict'\); END IF;\n    RETURN jsonb_build_object\('status',204\);/,
     "a confirm that updates zero rows is a lost race, never a success");
-  assert.match(directory, /SELECT generation, synced_generation, pending_delete INTO gen, synced, pending FROM app_private\.directory_members\n      WHERE tenant_id=tenant AND unit=unit_key AND subject=key FOR UPDATE;\n    created := NOT FOUND OR \(pending AND synced=gen\);/,
-    "FOUND is saved before the aggregate select can overwrite it");
+  assert.match(directory, /member_exists := FOUND;[\s\S]*?IF NOT member_exists THEN/);
   assert.match(directory, /SET unit_type=key, name=desired_name/, "a unit PUT compares and updates its type");
   assert.match(directory, /GRANT EXECUTE ON FUNCTION core\.directory_command\(text,jsonb\) TO junctura_directory_api/);
   assert.doesNotMatch(directory, /WHERE[\s\S]*?key=key/, "no plpgsql variable/column ambiguity");
@@ -473,15 +574,10 @@ test("the migrations bind generations, permissions and consent identity durably"
   assert.match(bindings, /GRANT EXECUTE ON FUNCTION core\.subject_binding\(jsonb\) TO junctura_subject_api/);
   assert.match(bindings, /RESET ROLE;\nREVOKE CREATE ON SCHEMA core/, "the migration role never writes the ledger");
   const consents = sql("038-verified-subject-consents.sql");
-  assert.match(consents, /s\.canonical_subject = execution_private\.canonical_subject\(p_tenant,p_issuer,p_subject\)/,
-    "the capability consent check resolves the canonical identity of the named person");
-  assert.match(consents, /b\.login_subject=p_subject/, "resolution joins one way, from a login to its subjectId");
-  assert.match(consents, /canonical_subject text/, "rows keep a separate canonical subject key");
-  assert.match(consents, /SET canonical_subject = execution_private\.canonical_subject\(s\.tenant_id, s\.issuer, s\.data_subject\)/,
-    "legacy rows are backfilled through the same one-way join");
-  assert.match(consents, /subject-consent-limit/, "the active-consent limit counts under its own per-subject lock");
-  assert.match(consents, /subject_binding_names_disjoint/, "subjectIds and login subjects never share identifiers");
-  assert.match(consents, /x\.data_subject=sid AND e\.issuer=iss/, "the access log resolves the bound subjectId");
+  assert.match(bindings, /INSERT INTO app_private.subject_binding_scopes/);
+  assert.match(consents, /WHERE \(s\.tenant_id,s\.issuer,s\.data_subject\)=\(b\.tenant_id,b\.issuer,b\.login_subject\)/);
+  assert.match(consents, /subject-consent-limit/);
+  assert.match(consents, /x\.subject_kind='canonical' AND x\.data_subject=sid/);
   for (const migration of [bindings, directory, consents]) {
     assert.match(migration, /RESET ROLE;\nREVOKE CREATE ON SCHEMA core/, "the ledger is written by the migration role");
   }

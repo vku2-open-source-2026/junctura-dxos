@@ -1,99 +1,145 @@
 -- SPDX-FileCopyrightText: 2026 Junctura Contributors
 -- SPDX-License-Identifier: Apache-2.0
 BEGIN;
--- Consent under the verified subject identity. The caller's token must carry a
--- subjectId claim whose binding in (tenant, issuer) maps to the caller's login
--- subject; anything else is refused before any row is read. Consent rows are
--- keyed by a canonical subject resolved one way only, from a login subject to
--- the bound subjectId: a subjectId never selects a person by looking up a
--- login in the reverse direction, and rows that no allowed binding reaches
--- stay quarantined for operator reconciliation. Legacy rows are backfilled
--- through that same one-way join; rows with no binding keep their original
--- identifier and never re-enter the authorization path until an operator
--- re-maps them explicitly.
+-- Legacy rows have a login subject. Canonical consent authority requires a
+-- binding, and historical access contexts have no explicit identifier kind.
 GRANT CREATE ON SCHEMA core TO junctura_app_owner;
-GRANT USAGE ON SCHEMA core TO junctura_subject_api;
 
--- The canonical key of a named person, resolved one way only: a string that a
--- binding lists as its login subject maps to that binding's subjectId, and a
--- string that is itself a bound subjectId stays itself. Anything else has no
--- verified canonical identity and must not reach stored consents.
-CREATE OR REPLACE FUNCTION execution_private.canonical_subject(p_tenant text, p_issuer text, p_subject text)
-RETURNS text LANGUAGE sql STABLE SET search_path=pg_catalog,app_private AS $$
-  SELECT CASE
-    WHEN EXISTS (SELECT 1 FROM app_private.subject_bindings b
-      WHERE b.tenant_id=p_tenant AND b.issuer=p_issuer AND b.login_subject=p_subject)
-    THEN (SELECT b.subject_id FROM app_private.subject_bindings b
-      WHERE b.tenant_id=p_tenant AND b.issuer=p_issuer AND b.login_subject=p_subject)
-    WHEN EXISTS (SELECT 1 FROM app_private.subject_bindings b
-      WHERE b.tenant_id=p_tenant AND b.issuer=p_issuer AND b.subject_id=p_subject)
-    THEN p_subject
-    ELSE NULL END
-$$;
-
--- One-time backfill: legacy rows written under a login subject move to the
--- bound subjectId of that login; rows for identifiers no binding reaches are
--- left with canonical_subject NULL (quarantined). Runs as the migration role
--- before RLS-restricted ownership so it sees every tenant exactly once.
-ALTER TABLE execution_private.subject_consents
-  ADD COLUMN IF NOT EXISTS canonical_subject text;
-CREATE INDEX IF NOT EXISTS subject_consents_canonical_idx
+ALTER TABLE execution_private.subject_consents ADD COLUMN canonical_subject text;
+CREATE INDEX subject_consents_canonical_idx
   ON execution_private.subject_consents (tenant_id, issuer, canonical_subject) WHERE revoked_at IS NULL;
-DO $$
-DECLARE t text; original text := current_setting('request.jwt.claims', true);
-BEGIN
-  FOR t IN SELECT DISTINCT tenant_id FROM execution_private.subject_consents LOOP
-    PERFORM set_config('request.jwt.claims', jsonb_build_object('tenant_id', t)::text, true);
-    UPDATE execution_private.subject_consents s
-      SET canonical_subject = execution_private.canonical_subject(s.tenant_id, s.issuer, s.data_subject)
-      WHERE s.tenant_id = t AND s.canonical_subject IS NULL;
-  END LOOP;
-  PERFORM set_config('request.jwt.claims', original, true);
-END $$;
+ALTER TABLE execution_private.execution_contexts ADD COLUMN subject_kind text
+  CHECK (subject_kind IS NULL OR (subject_kind IN ('login','canonical') AND data_subject IS NOT NULL));
+UPDATE execution_private.subject_consents s SET canonical_subject=b.subject_id
+  FROM app_private.subject_bindings b
+  WHERE (s.tenant_id,s.issuer,s.data_subject)=(b.tenant_id,b.issuer,b.login_subject);
 
 SET LOCAL ROLE junctura_app_owner;
 
--- Bindings are stable: a subjectId and a login subject must never name each
--- other, so one-way resolution stays unambiguous. Reassigning a binding to a
--- different login is an operator reconciliation task, not a routine insert.
-CREATE OR REPLACE FUNCTION app_private.subject_binding_names_disjoint() RETURNS trigger
-LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog,app_private AS $$
-DECLARE original text := current_setting('request.jwt.claims', true);
-BEGIN
-  -- Check within the row tenant regardless of the caller claims, so direct
-  -- operator inserts cannot bypass the disjointness rule through RLS.
-  PERFORM set_config('request.jwt.claims', jsonb_build_object('tenant_id', NEW.tenant_id)::text, true);
-  IF NEW.subject_id = NEW.login_subject THEN
-    RAISE EXCEPTION 'subject id and login subject must differ';
-  END IF;
-  IF EXISTS (SELECT 1 FROM app_private.subject_bindings o
-    WHERE o.tenant_id=NEW.tenant_id AND o.issuer=NEW.issuer
-      AND NOT (o.subject_id=NEW.subject_id AND o.login_subject=NEW.login_subject)
-      AND (o.login_subject=NEW.subject_id OR o.subject_id=NEW.login_subject)) THEN
-    RAISE EXCEPTION 'subject ids and login subjects must not share identifiers';
-  END IF;
-  PERFORM set_config('request.jwt.claims', coalesce(original, ''), true);
-  RETURN NEW;
-END $$;
-DROP TRIGGER IF EXISTS subject_binding_names_disjoint ON app_private.subject_bindings;
-CREATE TRIGGER subject_binding_names_disjoint
-  BEFORE INSERT OR UPDATE OF subject_id, login_subject ON app_private.subject_bindings
-  FOR EACH ROW EXECUTE FUNCTION app_private.subject_binding_names_disjoint();
-ALTER FUNCTION app_private.subject_binding_names_disjoint() OWNER TO junctura_app_owner;
-REVOKE ALL ON FUNCTION app_private.subject_binding_names_disjoint() FROM PUBLIC;
-
--- Active consent for exactly this person's canonical identity, consumer,
--- capability and purpose. Rows with no canonical key stay quarantined.
-CREATE OR REPLACE FUNCTION execution_private.active_consent(p_tenant text, p_issuer text, p_subject text,
-  p_consumer uuid, p_capability text, p_purpose text) RETURNS uuid
-LANGUAGE sql STABLE SET search_path=pg_catalog,app_private AS $$
+-- Lock the selected grant through reservation or redemption. Revoke takes
+-- an incompatible row lock, and a ticket with a grant stays pinned to it.
+CREATE FUNCTION execution_private.active_consent(p_tenant text, p_issuer text, p_subject text, p_kind text,
+  p_consumer uuid, p_capability text, p_purpose text, p_consent uuid) RETURNS uuid
+LANGUAGE sql SET search_path=pg_catalog AS $$
   SELECT s.consent_id FROM execution_private.subject_consents s
    WHERE s.tenant_id=p_tenant AND s.issuer=p_issuer
-     AND s.canonical_subject = execution_private.canonical_subject(p_tenant,p_issuer,p_subject)
+     AND ((p_kind='canonical' AND s.canonical_subject=p_subject)
+         OR (coalesce(p_kind,'login')='login' AND s.data_subject=p_subject))
+     AND (p_consent IS NULL OR s.consent_id=p_consent)
      AND s.consumer_app_id=p_consumer AND s.capability_id=p_capability
-     AND p_purpose = ANY(s.purposes) AND s.revoked_at IS NULL AND s.expires_at > clock_timestamp()
-   ORDER BY s.expires_at DESC, s.consent_id LIMIT 1
+     AND p_purpose=ANY(s.purposes) AND s.revoked_at IS NULL AND s.expires_at>clock_timestamp()
+   ORDER BY s.expires_at DESC, s.consent_id LIMIT 1 FOR SHARE
 $$;
+REVOKE ALL ON FUNCTION execution_private.active_consent(text,text,text,text,uuid,text,text,uuid) FROM PUBLIC;
+
+CREATE OR REPLACE FUNCTION core.execution_command(operation text, payload jsonb) RETURNS jsonb
+LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog AS $$
+DECLARE
+  c jsonb := current_setting('request.jwt.claims',true)::jsonb;
+  ctx jsonb; result jsonb; tenant text := c->>'tenant_id'; execution uuid; actor uuid; consent uuid;
+  stored execution_private.execution_contexts; found_context boolean; emergency boolean;
+  e execution_private.executions; open_emergencies integer; subject_kind text;
+BEGIN
+  IF operation IN ('ticket_context','redeem') AND jsonb_typeof(payload)='object' THEN
+    -- Consent is re-checked before the provider receives authority.
+    SELECT x.* INTO stored FROM execution_private.execution_contexts x
+      WHERE x.tenant_id=tenant AND x.execution_id=(CASE WHEN payload->>'executionId' ~ '^[0-9a-f-]{36}$' THEN (payload->>'executionId')::uuid END);
+    IF FOUND AND stored.data_subject IS NOT NULL AND NOT stored.emergency THEN
+      SELECT * INTO e FROM execution_private.executions WHERE tenant_id=tenant AND execution_id=stored.execution_id;
+      IF execution_private.active_consent(tenant, e.issuer, stored.data_subject, stored.subject_kind,
+          e.consumer_app_id, e.capability_id, stored.purpose, stored.consent_id) IS NULL THEN
+        RETURN jsonb_build_object('status',200,'value',jsonb_build_object('active',false));
+      END IF;
+    END IF;
+    result := execution_private.execution_command_base(operation, payload);
+    IF operation='redeem' AND result->'value'->>'active'='true' THEN
+      SELECT * INTO stored FROM execution_private.execution_contexts
+        WHERE tenant_id=result->'value'->'context'->>'tenantId'
+          AND execution_id=(result->'value'->'context'->>'executionId')::uuid;
+      IF FOUND THEN
+        result := jsonb_set(result, '{value,context}', (result->'value'->'context') ||
+          jsonb_strip_nulls(jsonb_build_object('purpose', stored.purpose, 'dataSubject', stored.data_subject,
+            'dataSubjectKind', CASE WHEN stored.subject_kind='canonical' THEN 'canonical' END,
+            'emergency', CASE WHEN stored.emergency THEN true END)));
+      END IF;
+    END IF;
+    RETURN result;
+  END IF;
+  IF operation IS DISTINCT FROM 'reserve' OR jsonb_typeof(payload) IS DISTINCT FROM 'object' THEN
+    RETURN execution_private.execution_command_base(operation, payload);
+  END IF;
+
+  ctx := payload->'context';
+  IF ctx IS NOT NULL AND (
+       jsonb_typeof(ctx) <> 'object' OR (ctx - 'purpose' - 'dataSubject' - 'dataSubjectKind' - 'emergency' - 'justification') <> '{}'::jsonb
+       OR jsonb_typeof(ctx->'purpose') IS DISTINCT FROM 'string' OR ctx->>'purpose' !~ '^[a-z][a-z0-9_]{1,62}$'
+       OR (ctx ? 'dataSubject' AND (jsonb_typeof(ctx->'dataSubject') <> 'string'
+           OR length(ctx->>'dataSubject') NOT BETWEEN 1 AND 255 OR ctx->>'dataSubject' ~ '[[:cntrl:]]'))
+       OR (ctx ? 'dataSubjectKind' AND (NOT ctx ? 'dataSubject'
+           OR coalesce(ctx->>'dataSubjectKind','') NOT IN ('login','canonical')))
+       OR (ctx ? 'emergency' AND ctx->'emergency' IS DISTINCT FROM 'true'::jsonb)
+       OR ((ctx ? 'emergency') <> (ctx ? 'justification'))
+       OR (ctx ? 'emergency' AND NOT ctx ? 'dataSubject')
+       OR (ctx ? 'justification' AND (jsonb_typeof(ctx->'justification') <> 'string'
+           OR length(ctx->>'justification') NOT BETWEEN 10 AND 500 OR ctx->>'justification' ~ '[[:cntrl:]]'))) THEN
+    RETURN jsonb_build_object('status',400,'error','invalid_execution_context');
+  END IF;
+  IF ctx ? 'dataSubject' THEN subject_kind:=coalesce(ctx->>'dataSubjectKind','login'); END IF;
+  IF subject_kind='canonical' AND NOT EXISTS (SELECT FROM app_private.subject_bindings b
+      WHERE b.tenant_id=tenant AND b.issuer=c->>'iss' AND b.subject_id=ctx->>'dataSubject') THEN
+    RETURN jsonb_build_object('status',403,'error','verified_subject_required');
+  END IF;
+  emergency := coalesce(ctx->'emergency' = 'true'::jsonb, false);
+
+  IF emergency THEN
+    -- Bounded break-glass use: at most five unreviewed emergency calls per consumer.
+    actor := core.resource_actor();
+    SELECT count(*) INTO open_emergencies FROM execution_private.emergency_reviews r
+      JOIN execution_private.executions x ON x.tenant_id=r.tenant_id AND x.execution_id=r.execution_id
+      WHERE r.tenant_id=tenant AND r.state='pending' AND x.consumer_app_id=actor;
+    IF open_emergencies >= 5 THEN RETURN jsonb_build_object('status',429,'error','emergency_review_backlog'); END IF;
+  ELSIF ctx ? 'dataSubject' THEN
+    actor := core.resource_actor();
+    consent := execution_private.active_consent(tenant, c->>'iss', ctx->>'dataSubject', subject_kind, actor,
+      payload->'target'->>'capabilityId', ctx->>'purpose', NULL);
+    IF consent IS NULL THEN RETURN jsonb_build_object('status',403,'error','subject_consent_required'); END IF;
+  END IF;
+
+  result := execution_private.execution_command_base('reserve', payload - 'context');
+  IF result->>'status' NOT IN ('200','202') THEN RETURN result; END IF;
+  execution := (result->'value'->>'executionId')::uuid;
+  SELECT * INTO stored FROM execution_private.execution_contexts WHERE tenant_id=tenant AND execution_id=execution;
+  found_context := FOUND;
+
+  IF result->>'status' = '202' THEN
+    IF ctx IS NOT NULL THEN
+      INSERT INTO execution_private.execution_contexts(tenant_id, execution_id, purpose, data_subject, subject_kind, emergency, justification, consent_id)
+        VALUES (tenant, execution, ctx->>'purpose', ctx->>'dataSubject', subject_kind, emergency, ctx->>'justification', consent);
+      PERFORM app_private.audit_append(CASE WHEN emergency THEN 'execution.emergency_access' ELSE 'execution.subject_accessed' END,
+        'execution', execution, 1, 'success', ctx->>'purpose', CASE WHEN ctx ? 'dataSubject'
+          THEN 'data_subject_sha256:' || encode(sha256(convert_to(
+            CASE WHEN subject_kind='canonical' THEN jsonb_build_array(subject_kind,ctx->>'dataSubject')::text
+                 ELSE ctx->>'dataSubject' END,'UTF8')),'hex') END);
+      IF emergency THEN
+        INSERT INTO execution_private.emergency_reviews(tenant_id, execution_id) VALUES (tenant, execution);
+      END IF;
+    END IF;
+  ELSIF found_context <> (ctx IS NOT NULL)
+     OR (found_context AND (stored.purpose IS DISTINCT FROM ctx->>'purpose'
+                            OR stored.data_subject IS DISTINCT FROM ctx->>'dataSubject'
+                            OR coalesce(stored.subject_kind,'login') IS DISTINCT FROM
+                               coalesce(subject_kind,'login')
+                            OR stored.emergency IS DISTINCT FROM emergency
+                            OR stored.justification IS DISTINCT FROM ctx->>'justification')) THEN
+    RETURN jsonb_build_object('status',409,'error','idempotency_conflict');
+  END IF;
+  RETURN result;
+END $$;
+ALTER FUNCTION core.execution_command(text,jsonb) OWNER TO junctura_app_owner;
+REVOKE ALL ON FUNCTION core.execution_command(text,jsonb) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION core.execution_command(text,jsonb) TO junctura_execution_api;
+
+DROP FUNCTION execution_private.active_consent(text,text,text,uuid,text,text);
 
 -- Idempotent consent grants: the first committed result of a key replays for
 -- 24 hours; a different logical request under the same key is refused. The
@@ -104,27 +150,29 @@ LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog,app_private AS $$
 DECLARE c jsonb; tenant text; who text; iss text; sid text; bound text;
   s execution_private.subject_consents; expiry timestamptz;
   purposes text[]; items jsonb; consent jsonb; receipt app_private.idempotency_results;
-  canonical text; scope bytea; digest bytea; idem_key uuid;
+  scope bytea; digest bytea; idem_key uuid;
 BEGIN
   BEGIN c:=current_setting('request.jwt.claims',true)::jsonb;
   EXCEPTION WHEN others THEN c:=NULL; END;
   tenant:=c->>'tenant_id'; who:=c->>'sub'; iss:=c->>'iss'; sid:=c->>'subject_id';
-  IF c IS NULL OR tenant IS NULL OR tenant !~ '^[a-z][a-z0-9-]{0,62}$' OR coalesce(who,'')='' OR coalesce(iss,'')=''
-     OR coalesce(sid,'')='' OR sid !~ '^[A-Za-z0-9:_-]{1,128}$' THEN
-    RETURN jsonb_build_object('status',403,'error','verified_subject_required');
-  END IF;
-  -- The verified subject is the bound one: the claim must map to this login subject.
-  SELECT b.login_subject INTO bound FROM app_private.subject_bindings b
-    WHERE b.tenant_id=tenant AND b.issuer=iss AND b.subject_id=sid;
-  IF bound IS NULL OR bound<>who THEN
+  IF c IS NULL OR tenant IS NULL OR tenant !~ '^[a-z][a-z0-9-]{0,62}$' OR coalesce(who,'')='' OR coalesce(iss,'')='' THEN
     RETURN jsonb_build_object('status',403,'error','verified_subject_required');
   END IF;
   IF jsonb_typeof(payload) IS DISTINCT FROM 'object' THEN RETURN jsonb_build_object('status',400,'error','invalid_consent'); END IF;
+  IF operation='create' THEN
+    PERFORM pg_advisory_xact_lock(hashtextextended(jsonb_build_array(
+      'subject-consent-limit',tenant,iss,who)::text,0));
+  END IF;
+  SELECT b.subject_id INTO bound FROM app_private.subject_bindings b
+    WHERE b.tenant_id=tenant AND b.issuer=iss AND b.login_subject=who;
+  IF sid IS NOT NULL AND sid IS DISTINCT FROM bound THEN
+    RETURN jsonb_build_object('status',403,'error','verified_subject_required');
+  END IF;
   IF operation='list' THEN
     IF payload<>'{}'::jsonb THEN RETURN jsonb_build_object('status',400,'error','invalid_consent'); END IF;
     SELECT coalesce(jsonb_agg(execution_private.consent_view(x) ORDER BY x.created_at DESC, x.consent_id),'[]'::jsonb) INTO items
       FROM (SELECT * FROM execution_private.subject_consents WHERE tenant_id=tenant AND issuer=iss
-            AND canonical_subject=sid
+            AND data_subject=who
             ORDER BY created_at DESC, consent_id LIMIT 200) x;
     RETURN jsonb_build_object('status',200,'value',jsonb_build_object('consents',items));
   ELSIF operation='create' THEN
@@ -172,15 +220,13 @@ BEGIN
                      AND v.capability_id=consent->>'capabilityId' AND v.state IN ('published','deprecated')) THEN
       RETURN jsonb_build_object('status',404,'error','not_found');
     END IF;
-    PERFORM pg_advisory_xact_lock(hashtextextended(jsonb_build_array(
-      'subject-consent-limit',tenant,iss,sid)::text,0));
     IF (SELECT count(*) FROM execution_private.subject_consents WHERE tenant_id=tenant AND issuer=iss
-          AND canonical_subject=sid AND revoked_at IS NULL AND expires_at>clock_timestamp()) >= 200 THEN
+          AND data_subject=who AND revoked_at IS NULL AND expires_at>clock_timestamp()) >= 200 THEN
       RETURN jsonb_build_object('status',429,'error','consent_limit_reached');
     END IF;
     INSERT INTO execution_private.subject_consents(tenant_id, issuer, data_subject, canonical_subject,
         consumer_app_id, capability_id, purposes, expires_at)
-      VALUES (tenant, iss, sid, sid, (consent->>'consumerAppId')::uuid, consent->>'capabilityId', purposes, expiry) RETURNING * INTO s;
+      VALUES (tenant, iss, who, bound, (consent->>'consumerAppId')::uuid, consent->>'capabilityId', purposes, expiry) RETURNING * INTO s;
     items:=jsonb_build_object('status',201,'value',execution_private.consent_view(s));
     INSERT INTO app_private.idempotency_results(tenant_id, caller_scope, method, concrete_path, key, digest,
         status, response_body, resource_headers, created_at, expires_at)
@@ -193,7 +239,7 @@ BEGIN
       RETURN jsonb_build_object('status',400,'error','invalid_consent');
     END IF;
     SELECT * INTO s FROM execution_private.subject_consents WHERE tenant_id=tenant AND issuer=iss
-      AND canonical_subject=sid AND consent_id=(payload->>'consentId')::uuid FOR UPDATE;
+      AND data_subject=who AND consent_id=(payload->>'consentId')::uuid FOR UPDATE;
     IF NOT FOUND THEN RETURN jsonb_build_object('status',404,'error','not_found'); END IF;
     IF s.revoked_at IS NULL THEN
       UPDATE execution_private.subject_consents SET revoked_at=clock_timestamp()
@@ -204,8 +250,9 @@ BEGIN
   RETURN jsonb_build_object('status',400,'error','invalid_operation');
 END $$;
 
--- The subject's access log shows every capability call that named this person,
--- under either identifier: the login subject or the operator-bound subjectId.
+-- A canonical event is visible only through the caller's own login binding.
+-- Untyped historical values that could refer to either namespace are held
+-- for reconciliation unless their stored legacy grant establishes the kind.
 CREATE OR REPLACE FUNCTION core.subject_access(payload jsonb) RETURNS jsonb
 LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path=pg_catalog,app_private AS $$
 DECLARE c jsonb; tenant text; who text; iss text; sid text; items jsonb; total integer;
@@ -220,15 +267,19 @@ BEGIN
   IF c IS NULL OR tenant IS NULL OR tenant !~ '^[a-z][a-z0-9-]{0,62}$' OR coalesce(who,'')='' OR coalesce(iss,'')='' THEN
     RETURN jsonb_build_object('status',403,'error','verified_subject_required');
   END IF;
-  sid:=execution_private.canonical_subject(tenant,iss,who);
+  SELECT b.subject_id INTO sid FROM app_private.subject_bindings b
+    WHERE b.tenant_id=tenant AND b.issuer=iss AND b.login_subject=who;
   WITH mine AS (
     SELECT x.*, e.consumer_app_id, e.provider_app_id, e.capability_id, e.version, e.version_id, e.state,
            r.state AS review_state
       FROM execution_private.execution_contexts x
       JOIN execution_private.executions e ON e.tenant_id=x.tenant_id AND e.execution_id=x.execution_id
       LEFT JOIN execution_private.emergency_reviews r ON r.tenant_id=x.tenant_id AND r.execution_id=x.execution_id
-      WHERE x.tenant_id=tenant AND x.data_subject=who AND e.issuer=iss
-        OR (x.tenant_id=tenant AND sid IS NOT NULL AND x.data_subject=sid AND e.issuer=iss)
+      WHERE x.tenant_id=tenant AND e.issuer=iss
+        AND ((x.subject_kind='canonical' AND x.data_subject=sid)
+          OR (x.data_subject=who AND (x.subject_kind='login' OR (x.subject_kind IS NULL AND
+            (x.consent_id IS NOT NULL OR NOT EXISTS (SELECT FROM app_private.subject_bindings b
+                WHERE b.tenant_id=tenant AND b.issuer=iss AND b.subject_id=who))))))
   ), newest AS (SELECT * FROM mine ORDER BY recorded_at DESC, execution_id LIMIT max_items)
   SELECT (SELECT count(*) FROM mine), coalesce(jsonb_agg(jsonb_build_object(
       'executionId', n.execution_id,
@@ -250,18 +301,6 @@ BEGIN
     'generatedAt', to_char(clock_timestamp() AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')));
 END $$;
 
--- Ownership changes run as the migration role, which owns functions created before SET LOCAL ROLE.
-RESET ROLE;
-ALTER FUNCTION execution_private.canonical_subject(text,text,text) OWNER TO junctura_app_owner;
-ALTER FUNCTION execution_private.active_consent(text,text,text,uuid,text,text) OWNER TO junctura_app_owner;
-REVOKE ALL ON FUNCTION execution_private.canonical_subject(text,text,text) FROM PUBLIC;
-REVOKE ALL ON FUNCTION execution_private.active_consent(text,text,text,uuid,text,text) FROM PUBLIC;
-ALTER FUNCTION core.subject_consent(text,jsonb) OWNER TO junctura_app_owner;
-ALTER FUNCTION core.subject_access(jsonb) OWNER TO junctura_app_owner;
-REVOKE ALL ON FUNCTION core.subject_consent(text,jsonb) FROM PUBLIC,junctura_api,junctura_app_api,junctura_resource_api,junctura_audit_api,junctura_trust_api,junctura_execution_api;
-REVOKE ALL ON FUNCTION core.subject_access(jsonb) FROM PUBLIC,junctura_api,junctura_app_api,junctura_resource_api,junctura_audit_api,junctura_trust_api,junctura_execution_api;
-GRANT EXECUTE ON FUNCTION core.subject_consent(text,jsonb) TO junctura_subject_api;
-
 -- A binding created after the upgrade maps that login's quarantined legacy
 -- consents to the bound subjectId, so operators can reconcile one login at a time.
 CREATE OR REPLACE FUNCTION app_private.subject_binding_map_consents() RETURNS trigger
@@ -277,7 +316,6 @@ BEGIN
 END $$;
 ALTER FUNCTION app_private.subject_binding_map_consents() OWNER TO junctura_app_owner;
 REVOKE ALL ON FUNCTION app_private.subject_binding_map_consents() FROM PUBLIC;
-DROP TRIGGER IF EXISTS subject_binding_map_consents ON app_private.subject_bindings;
 CREATE TRIGGER subject_binding_map_consents AFTER INSERT ON app_private.subject_bindings
   FOR EACH ROW EXECUTE FUNCTION app_private.subject_binding_map_consents();
 RESET ROLE;

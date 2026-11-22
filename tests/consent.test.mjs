@@ -40,6 +40,8 @@ test("consent routes are recognised exactly and the API module loads them", () =
   for (const path of ["/v1/me/consents", `/v1/me/consents/${CONSENT}/revoke`, "/v1/emergency-accesses", `/v1/emergency-accesses/${EXECUTION}/review`]) assert.ok(isConsentPath(path), path);
   for (const path of ["/v1/me/data-access", "/v1/me", "/v1/emergency", undefined]) assert.equal(isConsentPath(path), false, String(path));
   assert.equal(typeof createApi, "function");
+  assert.throws(() => validateExecutionContext({ purpose: "review", dataSubjectKind: "canonical" }), /invalid_execution_context/);
+  assert.doesNotThrow(() => validateExecutionContext({ purpose: "review", dataSubject: "person-1", dataSubjectKind: "canonical" }));
 });
 
 test("people list, create and revoke only their own consents through the subject role", async () => {
@@ -84,18 +86,13 @@ test("consent requests are strict and failures stay closed", async () => {
   assert.equal((await call("/v1/me/consents")).status, 503);
 });
 
-test("consent operations refuse callers without a verified subject claim", async () => {
+test("legacy consent callers reach the subject RPC using only their own login", async () => {
   seen = [];
   identity = { ...identity, subjectId: undefined };
-  for (const [method, body] of [["GET", undefined], ["POST", { consumerAppId: "11111111-1111-4111-8111-111111111111", capabilityId: "urn:junctura:capability:22222222-2222-4222-8222-222222222222:vaccination", purposes: ["review"], expiresAt: "2026-12-01T00:00:00.000Z" }]]) {
-    const response = await call("/v1/me/consents", method, body);
-    assert.equal(response.status, 403, String(method));
-    assert.equal((await response.json()).error, "verified_subject_required");
-  }
-  const revoke = await call(`/v1/me/consents/${CONSENT}/revoke`, "POST", {});
-  assert.equal(revoke.status, 403);
-  assert.equal((await revoke.json()).error, "verified_subject_required");
-  assert.deepEqual(seen, [], "no data store call without a verified subject");
+  reply = ({ operation }) => ({ status: 200, value: operation === "list" ? { consents: [] } : { consentId: CONSENT } });
+  assert.equal((await call("/v1/me/consents")).status, 200);
+  assert.equal((await call(`/v1/me/consents/${CONSENT}/revoke`, "POST", {})).status, 200);
+  assert.deepEqual(seen.map(({ sub, subjectId }) => [sub, subjectId]), [["subject-1", undefined], ["subject-1", undefined]]);
 });
 
 test("emergency reviews use the trust role and need a writer to decide", async () => {

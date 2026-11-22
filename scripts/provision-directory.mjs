@@ -7,7 +7,6 @@
 // running it again changes nothing. Development stacks.
 import { parseArgs } from "node:util";
 import { pathToFileURL } from "node:url";
-import { randomBytes } from "node:crypto";
 
 export const DEFAULT_CLIENTS = ["junctura-console", "junctura-local", "tenant-a", "tenant-b", "reader"];
 
@@ -38,21 +37,21 @@ export const DIRECTORY_SYNC_CLIENT = "junctura-directory-sync";
 // permissions; manage-realm is broader than synchronization needs.
 export const DIRECTORY_SYNC_ROLES = ["view-realm", "query-users", "query-groups", "manage-users"];
 
-export function missingMappers(client) {
-  const names = new Set((client?.protocolMappers ?? []).map(mapper => mapper?.name));
-  return DESIRED_MAPPERS.filter(mapper => !names.has(mapper.name));
+function mapsClaim(mapper, desired) {
+  if (DESIRED_MAPPERS.some(candidate => candidate.name === mapper?.name)) return mapper.name === desired.name;
+  return mapper?.config?.["claim.name"] === desired.config["claim.name"];
 }
 
-// Existing mappers whose stored configuration differs from the desired one.
+const mapperDiffers = (mapper, desired) => mapper.protocolMapper !== desired.protocolMapper ||
+  mapper.protocol !== desired.protocol || Object.keys(desired.config).some(key => mapper.config?.[key] !== desired.config[key]);
+
+export function missingMappers(client) {
+  return DESIRED_MAPPERS.filter(desired => !(client?.protocolMappers ?? []).some(mapper => mapsClaim(mapper, desired)));
+}
+
 export function driftedMappers(client) {
-  const known = new Map((client?.protocolMappers ?? [])
-    .filter(mapper => mapper?.name).map(mapper => [mapper.name, mapper]));
-  return DESIRED_MAPPERS.filter(desired => {
-    const existing = known.get(desired.name);
-    if (!existing) return false;
-    return Object.keys(desired.config).some(key => existing.config?.[key] !== desired.config[key]) ||
-      existing.protocolMapper !== desired.protocolMapper;
-  });
+  return DESIRED_MAPPERS.filter(desired => (client?.protocolMappers ?? [])
+    .some(mapper => mapsClaim(mapper, desired) && mapperDiffers(mapper, desired)));
 }
 
 export function parseAssignments(values = []) {
@@ -78,6 +77,9 @@ export function mapperPatch(source, additions) {
 export function subjectIdProfilePatch(current) {
   const profile = structuredClone(current ?? {});
   profile.attributes ??= [];
+  if (!profile.attributes.some(attribute => attribute?.name === "tenant_id")) {
+    profile.attributes.push({ name: "tenant_id", displayName: "Tenant ID", permissions: { view: ["admin"], edit: ["admin"] } });
+  }
   const property = { name: "subject_id", displayName: "Verified subject ID", permissions: { view: ["admin"], edit: ["admin"] },
     validations: {}, annotations: {} };
   const index = profile.attributes.findIndex(attribute => attribute?.name === "subject_id");
@@ -90,15 +92,16 @@ function baseOf(publicUrl) {
   return (publicUrl ?? "http://127.0.0.1:8080").trim().replace(/\/+$/, "");
 }
 
-export function bindingStatement({ tenant, issuer, username, subjectId, loginSubject }) {
+export function bindingStatement({ tenant, issuer, subjectId, loginSubject }) {
+  const literal = value => `'${value.replaceAll("'", "''")}'`;
   // Bindings are stable: rerunning the same assignment converges, while moving
   // a subjectId to another login deliberately matches nothing and must go
   // through operator reconciliation, never through this provisioning path.
   return `INSERT INTO app_private.subject_bindings(tenant_id,issuer,subject_id,login_subject)
-    VALUES('${tenant}','${issuer}','${subjectId}','${loginSubject}')
+    VALUES(${[tenant, issuer, subjectId, loginSubject].map(literal).join(",")})
     ON CONFLICT (tenant_id,issuer,subject_id) DO UPDATE SET
       updated_at=clock_timestamp()
-      WHERE app_private.subject_bindings.login_subject='${loginSubject.replaceAll("'", "''")}';`;
+      WHERE app_private.subject_bindings.login_subject=${literal(loginSubject)};`;
 }
 
 async function operator(base, password) {
@@ -125,7 +128,7 @@ export async function main(args = process.argv.slice(2), {
     log(`Usage: npm run directory:provision -- [options]
 
   --base <url>       Gateway origin for identity administration (default PUBLIC_URL)
-  --clients <list>   Clients that receive the organization mappers
+  --clients <list>   Additional client IDs to align alongside discovered Junctura clients
   --assign <k=v>     Bind a login username to an operator-assigned subjectId (repeatable)
   --tenant <name>    Tenant used for binding rows (default first workflow tenant)
   --help             Show this help
@@ -140,64 +143,80 @@ export async function main(args = process.argv.slice(2), {
     return response;
   };
 
-  for (const clientId of values.clients.split(",").map(value => value.trim()).filter(Boolean)) {
-    const found = await expect(await admin(`clients?clientId=${encodeURIComponent(clientId)}`), [200], `Read ${clientId}`);
-    const client = (await found.json())[0];
-    if (!client) { log(`• client ${clientId}: not found, skipped`); continue; }
-    const missing = missingMappers(client);
-    for (const mapper of missing) {
-      await expect(await admin(`clients/${client.id}/protocol-mappers/models`, mapper, "POST"), [201], `Map ${clientId}/${mapper.name}`);
-    }
-    const drifted = driftedMappers(client);
-    for (const mapper of drifted) {
-      const existing = (await (await expect(await admin(`clients/${client.id}/protocol-mappers/models`), [200],
-        `Read mappers ${clientId}`)).json()).find(item => item.name === mapper.name);
-      await expect(await admin(`clients/${client.id}/protocol-mappers/models/${existing.id}`,
-        { ...mapper, id: existing.id }), [204], `Remap ${clientId}/${mapper.name}`);
-    }
-    if (missing.length || drifted.length) {
-      log(`• client ${clientId}: ${[...missing, ...drifted].map(mapper => mapper.name).join(", ")} aligned`);
-    }
+  const read = async (path, what) => (await expect(await admin(path), [200], what)).json();
+  const namedClients = new Set(values.clients.split(",").map(value => value.trim()).filter(Boolean));
+  const syncClientId = env.DIRECTORY_SYNC_CLIENT_ID || DIRECTORY_SYNC_CLIENT;
+  const syncSecret = env.DIRECTORY_SYNC_CLIENT_SECRET?.trim();
+  const clients = [];
+  for (let first = 0; ; ) {
+    const page = await read(`clients?first=${first}&max=100`, "List realm clients");
+    if (!page.length) break;
+    clients.push(...page);
+    first += page.length;
   }
 
-  const syncClient = (await (await expect(await admin(`clients?clientId=${DIRECTORY_SYNC_CLIENT}`), [200], "Read sync client")).json())[0];
-  if (!syncClient) {
-    // Keycloak generates a random secret when none is supplied; the operator
-    // stores the configured one, or the generated default printed once below.
-    const secret = env.DIRECTORY_SYNC_CLIENT_SECRET ?? randomBytes(32).toString("base64url");
-    await expect(await admin("clients", { clientId: DIRECTORY_SYNC_CLIENT, enabled: true, protocol: "openid-connect",
-      publicClient: false, serviceAccountsEnabled: true, standardFlowEnabled: false, directAccessGrantsEnabled: false,
-      secret }, "POST"), [201], `Create ${DIRECTORY_SYNC_CLIENT}`);
-    log(`• client ${DIRECTORY_SYNC_CLIENT}: created for directory synchronization`);
-    if (!env.DIRECTORY_SYNC_CLIENT_SECRET) {
-      log(`• generated sync secret (store it in DIRECTORY_SYNC_CLIENT_SECRET for Core): ${secret}`);
+  async function configureSync(clientId, secret, existing) {
+    const policy = { clientId, protocol: "openid-connect", publicClient: false, serviceAccountsEnabled: true,
+      standardFlowEnabled: false, directAccessGrantsEnabled: false, enabled: false };
+    if (!existing) {
+      await expect(await admin("clients", { ...policy, ...(secret ? { secret } : {}) }, "POST"), [201], `Create ${clientId}`);
+      existing = (await read(`clients?clientId=${encodeURIComponent(clientId)}`, `Read ${clientId}`))
+        .find(client => client.clientId === clientId);
     }
+    const path = `clients/${existing.id}`;
+    const disable = async () => expect(await admin(path,
+      { ...policy, notBefore: Math.floor(Date.now() / 1000) }), [204], `Disable ${clientId}`);
+    if (existing.enabled && !secret) await disable();
+    const account = await read(`${path}/service-account-user`, "Read sync account");
+    const management = clients.find(client => client.clientId === "realm-management");
+    const mapping = `users/${account.id}/role-mappings/clients/${management.id}`;
+    const assigned = await read(mapping, "Read sync roles");
+    const extra = assigned.filter(role => !DIRECTORY_SYNC_ROLES.includes(role.name));
+    const missing = DIRECTORY_SYNC_ROLES.filter(name => !assigned.some(role => role.name === name));
+    const policyDrift = Object.entries(policy).some(([key, value]) => key !== "enabled" && existing[key] !== value);
+    const storedSecret = secret && (await read(`${path}/client-secret`, "Read current sync secret")).value;
+    const needsUpdate = !secret || !existing.enabled || policyDrift || extra.length > 0 ||
+      missing.length > 0 || storedSecret !== secret;
+    if (existing.enabled && secret && needsUpdate) await disable();
+    if (extra.length) await expect(await admin(mapping, extra, "DELETE"), [204], "Remove excess sync roles");
+    await expect(await admin(`${path}/client-secret/rotated`, undefined, "DELETE"), [204], "Invalidate the rotated sync secret");
+    if (!secret) {
+      log(`• client ${clientId}: disabled pending a replacement secret`);
+      return;
+    }
+    if (missing.length) {
+      const roles = await read(`clients/${management.id}/roles?max=100`, "Read realm-management roles");
+      const additions = missing.map(name => {
+        const role = roles.find(item => item.name === name);
+        if (!role) throw new Error(`Realm-management role ${name} not found`);
+        return { id: role.id, name };
+      });
+      await expect(await admin(mapping, additions, "POST"), [204], "Assign sync roles");
+    }
+    if (needsUpdate) await expect(await admin(path, { ...policy, enabled: true, secret }), [204], `Enable ${clientId} with the replacement secret`);
   }
-  const sync = (await (await expect(await admin(`clients?clientId=${DIRECTORY_SYNC_CLIENT}`), [200], "Read sync client")).json())[0];
-  // Rotate any secret imported from a realm template to the configured value.
-  if (env.DIRECTORY_SYNC_CLIENT_SECRET) {
-    await expect(await admin(`clients/${sync.id}`, { ...sync, secret: env.DIRECTORY_SYNC_CLIENT_SECRET }), [204],
-      `Rotate ${DIRECTORY_SYNC_CLIENT} secret`);
-    log(`• client ${DIRECTORY_SYNC_CLIENT}: secret set to the configured value`);
-  }
-  const account = (await (await expect(await admin(`clients/${sync.id}/service-account-user`), [200], "Read sync account")).json());
-  const management = (await (await expect(await admin("clients?clientId=realm-management"), [200], "Read realm-management")).json())[0];
-  // Role assignments need the real role representation: Keycloak 26.8.1
-  // requires a matching id as well as the name.
-  const roleRepresentations = [];
-  for (const name of DIRECTORY_SYNC_ROLES) {
-    const representations = (await (await expect(await admin(`clients/${management.id}/roles`), [200], "Read client roles")).json());
-    const role = representations.find(item => item.name === name);
-    if (!role) throw new Error(`Realm-management role ${name} not found`);
-    roleRepresentations.push(role);
-  }
-  const assigned = new Set((await (await expect(await admin(`users/${account.id}/role-mappings/clients/${management.id}`), [200], "Read sync roles")).json())
-    .map(role => role.name));
-  const lacking = roleRepresentations.filter(role => !assigned.has(role.name));
-  if (lacking.length) {
-    await expect(await admin(`users/${account.id}/role-mappings/clients/${management.id}`,
-      lacking.map(role => ({ id: role.id, name: role.name })), "POST"), [204], "Assign sync roles");
-    log(`• service account ${account.username}: added ${lacking.map(role => role.name).join(", ")}`);
+
+  const formerSync = clients.find(client => client.clientId === DIRECTORY_SYNC_CLIENT);
+  if (formerSync && syncClientId !== DIRECTORY_SYNC_CLIENT) await configureSync(DIRECTORY_SYNC_CLIENT, undefined, formerSync);
+  await configureSync(syncClientId, syncSecret, clients.find(client => client.clientId === syncClientId));
+
+  for (const client of clients.filter(client => client.protocol === "openid-connect" || namedClients.has(client.clientId))) {
+    const { id, clientId } = client;
+    const path = `clients/${id}/protocol-mappers/models`;
+    const protocolMappers = await read(path, `Read mappers for ${clientId}`);
+    if (!namedClients.has(clientId) && !protocolMappers.some(mapper =>
+      ["tenant_id", "tenant_memberships"].includes(mapper.config?.["claim.name"]))) continue;
+    const current = { protocolMappers };
+    for (const mapper of missingMappers(current)) {
+      await expect(await admin(path, mapper, "POST"), [201], `Map ${clientId}/${mapper.name}`);
+    }
+    for (const mapper of driftedMappers(current)) {
+      for (const existing of protocolMappers.filter(item => mapsClaim(item, mapper) && mapperDiffers(item, mapper))) {
+        await expect(await admin(`${path}/${existing.id}`, { ...mapper, id: existing.id, name: existing.name }),
+          [204], `Remap ${clientId}/${existing.name}`);
+      }
+    }
+    log(`• client ${clientId}: organization mappers aligned`);
   }
 
   // The subjectId attribute is managed: declared in the user profile, edited
@@ -206,7 +225,7 @@ export async function main(args = process.argv.slice(2), {
   await expect(await admin("users/profile", profile), [200], "Apply user profile");
   const storedProfile = await (await expect(await admin("users/profile"), [200], "Read user profile back")).json();
   const managed = storedProfile.attributes?.find(attribute => attribute?.name === "subject_id");
-  if (!managed || JSON.stringify(managed.permissions) !== JSON.stringify({ view: ["admin"], edit: ["admin"] })) {
+  if (!managed || ["view", "edit"].some(action => managed.permissions?.[action]?.join(",") !== "admin")) {
     throw new Error("subject_id is not a managed admin-only attribute; refusing to continue");
   }
 

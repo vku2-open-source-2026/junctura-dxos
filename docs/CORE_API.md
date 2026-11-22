@@ -106,8 +106,8 @@ Methods are included with each family; action suffixes are described in the link
 | `/v1/capability-executions` (POST), `/{executionId}` (GET) | Opt-in C4A/C4B invocation and status | Bound consumer, exact invocation authority; writer for submission | [CAPABILITIES.md](CAPABILITIES.md) |
 | `/v1/capability-authorizations/introspect` (POST) | Opt-in provider ticket redemption | Writer, exact bound provider and valid ticket/context | [CAPABILITIES.md](CAPABILITIES.md) |
 | `/v1/compositions` and `/*` (GET, POST, PUT) | Opt-in C4B registry/lifecycle | `config.compositionRuntime`; management `compositions.write` / `compositions.publish` | [CAPABILITIES.md](CAPABILITIES.md) |
-| `/v1/me/consents` (GET, POST), `/{consentId}/revoke` (POST) | Manage the caller's own consents | Verified subject (bound `subjectId`); no writer requirement | [SECURITY.md](SECURITY.md) |
-| `/v1/me/data-access` (GET) | Capability calls naming the caller as data subject | Verified subject/client; own tenant/issuer/subject only | [SECURITY.md](SECURITY.md) |
+| `/v1/me/consents` (GET, POST), `/{consentId}/revoke` (POST) | Manage the caller's own consents | Own authenticated login with a matching binding if the token supplies `subjectId` | [SECURITY.md](SECURITY.md) |
+| `/v1/me/data-access` (GET) | Capability calls naming the caller as data subject | Verified client and own tenant, issuer and subject | [SECURITY.md](SECURITY.md) |
 | `/v1/emergency-accesses` (GET), `/{executionId}/review` (POST) | Review emergency invocations | List: management `trust.approve` or `audit.read`; review: `trust.approve` and writer | [SECURITY.md](SECURITY.md) |
 | `/v1/audit-events` (GET), `/v1/audit-events/verify` (POST) | Protected event query and chain verification | Management `audit.read`; no writer requirement | Internal protected audit contract below; [SECURITY.md](SECURITY.md) |
 | `/v1/metrics/traffic`, `/requests`, `/features` (GET) | Per-tenant, process-local traffic observations | Management `audit.read`; verified client ID | Traffic metrics below |
@@ -658,21 +658,37 @@ below zero, Core returns `409 limit_exceeded` and both quantities stay the same.
 
 An enrolled `directory.write` principal manages `/v1/directory/unit-types`, `/v1/directory/units`,
 and each unit's `groups` and `members`. List each collection and use PUT or DELETE at an item URL.
-Core synchronizes these changes into Keycloak through a dedicated service account and confirms only the
-generation it read back. Renew a token to refresh membership claims.
-`GET /v1/identity` exposes verified `units` and group paths of the form `/unit/group` (empty when absent).
-Data-subject accounts carry a verified `subjectId` claim bound by an operator per tenant and issuer; users
-cannot self-assign it. Core uses it, with tenant and issuer, for `/v1/me/consents` list, grant and revoke,
-and the same identity gates the capability consent check: `/v1/me/*` returns `403 verified_subject_required`
-while the claim or its binding is missing. Consents granted before verified subjects keep their authority
-through the same binding: each stored consent carries a canonical subject resolved one way only, from a
-login subject to its bound subjectId. The one-time backfill moved legacy rows through that join; rows no
-binding reaches stay quarantined and never authorize a call until an operator re-maps them during
-reconciliation, and a subjectId is never allowed to name a login subject (or vice versa); the mapping is
-one-to-one per (tenant, issuer) and renewing a binding is an operator task, not a routine update. The login
-identifier remains `subject`. `GET /v1/me/data-access` shows history recorded under either
-identifier of the person. Grant requests require a UUID `Idempotency-Key`; the first committed result replays
-for 24 hours.
+Core takes a PostgreSQL lease per tenant before changing desired state. A competing write can return
+`409 resource_conflict`. Provider mutations renew the lease, and confirmation requires both the current
+lease and row generation. GET lists show the last confirmed values. With no sync client configured,
+provider-backed writes return `503` before saving changes. A provider outage after a save leaves work for
+the background reconciler. Each replica can run it, and the tenant lease coordinates who applies each job.
+The periodic sweep reads back confirmed rows and deletion tombstones too, so a late Keycloak write
+after lease expiry is corrected without a client retry. Renew the token to refresh membership claims.
+
+For rollout on an existing realm, run `npm run directory:provision` first. It discovers clients using the
+Junctura mapper template and aligns their tenant memberships to full group paths. Pass `--clients` for
+enrolled clients with custom mapper layouts. Configure a replacement sync secret before enabling the
+client. Inventory enrolled clients, renew their tokens and check that each carries its exact
+`/{tenant}` root. Then deploy Core with migrations 036–038. Operators can seed verified one-to-one
+bindings after migration 036 for the migration 038 backfill, or create them afterward and let the
+insert trigger map the login's existing consents. Renew each user's token after assigning `subject_id`
+to use its verified `subjectId`. Account holders cannot edit this managed attribute.
+
+`GET /v1/identity` exposes verified `units` and group paths of the form `/unit/group`. A bound
+`subjectId` is optional. The existing consent and history routes retain compatibility by looking up the
+authenticated login in its tenant and issuer. A consent request with a mismatched `subjectId` claim
+returns `403 verified_subject_required`. The planned flag and feedback routes require a verified binding.
+Consent grants require a UUID `Idempotency-Key`. The first committed result replays for 24 hours.
+
+Capability callers can name a login with `dataSubject`, or set `dataSubjectKind: "canonical"` to name
+an operator-bound subject ID. Unmapped consents stay in the login namespace pending operator
+reconciliation. The access log uses the binding for canonical events and the login for login events.
+Operators review ambiguous historical entries against the original execution and consent before assigning
+an identifier kind. Binding keys are immutable in normal operation.
+The planned delegated-user path for application audit depends on Keycloak token exchange that verifies
+both app and actor, followed by a SQL enrollment check. Resource authorization currently uses the
+enrolled backend service-account subject.
 
 ### Files, events, search and privacy
 

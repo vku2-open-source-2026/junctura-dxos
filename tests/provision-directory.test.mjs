@@ -9,6 +9,7 @@ import {
   bindingStatement,
   driftedMappers,
   mapperPatch,
+  main,
   missingMappers,
   parseAssignments,
   subjectIdProfilePatch,
@@ -77,4 +78,87 @@ test("the subjectId profile property is managed and admin-only", () => {
   assert.deepEqual(merged.attributes.find(attribute => attribute.name === "subject_id").permissions,
     { view: ["admin"], edit: ["admin"] }, "an existing user-editable declaration is overridden");
   assert.equal(merged.attributes.length, 2, "unrelated attributes are preserved");
+});
+
+test("provisioning creates the sync client, aligns old clients and removes excess authority", async () => {
+  const clients = [{ id: "management", clientId: "realm-management", protocol: "openid-connect" },
+    { id: "legacy", clientId: "previously-enrolled-app", protocol: "openid-connect" }];
+  const mappers = [existing({ "full.path": "false" })];
+  const roles = DIRECTORY_SYNC_ROLES.map(name => ({ id: `id-${name}`, name }));
+  let assigned = [];
+  let rotatedSecretInvalidated = false;
+  let profile = { attributes: [] };
+  let writes = 0;
+  const response = value => Response.json(value);
+  const ok = status => new Response(null, { status });
+  const admin = async (path, body, method = body === undefined ? "GET" : "PUT") => {
+    if (path === "clients") {
+      assert.equal(method, "POST");
+      clients.push({ ...body, id: "sync" });
+      return ok(201);
+    }
+    if (path.startsWith("clients?")) {
+      const query = new URLSearchParams(path.split("?")[1]);
+      return response(query.has("clientId") ? clients.filter(client => client.clientId === query.get("clientId"))
+        : clients.slice(Number(query.get("first")), Number(query.get("first")) + 2));
+    }
+    if (path === "clients/sync/service-account-user") return response({ id: "sync-user" });
+    if (path === "clients/sync/client-secret") return response({ value: clients.find(client => client.id === "sync").secret });
+    if (path === "clients/sync/client-secret/rotated") {
+      assert.equal(method, "DELETE");
+      rotatedSecretInvalidated = true;
+      return ok(204);
+    }
+    if (path === "clients/sync") {
+      assert.equal(method, "PUT");
+      Object.assign(clients.find(client => client.id === "sync"), body);
+      writes++;
+      return ok(204);
+    }
+    if (path === "users/sync-user/role-mappings/clients/management") {
+      if (method === "GET") return response(assigned);
+      if (method === "DELETE") assigned = assigned.filter(role => !body.some(item => role.id === item.id));
+      if (method === "POST") { assert.deepEqual(body, roles); assigned.push(...body); }
+      return ok(204);
+    }
+    if (path === "clients/management/roles?max=100") return response(roles);
+    if (path.endsWith("/protocol-mappers/models")) {
+      if (path !== "clients/legacy/protocol-mappers/models") return response([]);
+      if (method === "GET") return response(mappers);
+      mappers.push({ ...body, id: body.name });
+      return ok(201);
+    }
+    if (path === "clients/legacy/protocol-mappers/models/mapper-id") {
+      assert.equal(method, "PUT");
+      mappers[0] = structuredClone(body);
+      return ok(204);
+    }
+    if (path === "users/profile") {
+      if (method === "PUT") profile = body;
+      return response(profile);
+    }
+    assert.fail(`Unknown fixture endpoint ${method} ${path}`);
+  };
+  const env = { KEYCLOAK_ADMIN_PASSWORD: "fixture", DIRECTORY_SYNC_CLIENT_SECRET: "fixture-replacement" };
+  const provision = current => main([], { env: current, log: () => {}, runOperator: async () => admin });
+  await provision(env);
+  const sync = clients.find(client => client.id === "sync");
+  assert.equal(sync.enabled, true);
+  assert.equal(sync.secret, env.DIRECTORY_SYNC_CLIENT_SECRET);
+  assert.deepEqual(assigned, roles);
+  assert.deepEqual(profile.attributes.find(entry => entry.name === "subject_id").permissions,
+    { view: ["admin"], edit: ["admin"] });
+  assert.equal(mappers.length, 3);
+  assert.equal(mappers[0].config["full.path"], "true");
+
+  mappers[0].config["full.path"] = "false";
+  await provision(env);
+  assert.equal(mappers[0].config["full.path"], "true");
+  assert.equal(writes, 1, "fixing a mapper leaves a healthy client online");
+  assigned.push({ id: "excess", name: "manage-realm" });
+  rotatedSecretInvalidated = false;
+  await provision({ KEYCLOAK_ADMIN_PASSWORD: "fixture" });
+  assert.equal(sync.enabled, false);
+  assert.equal(rotatedSecretInvalidated, true);
+  assert.deepEqual(assigned, roles);
 });

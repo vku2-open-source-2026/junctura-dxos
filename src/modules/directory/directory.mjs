@@ -1,20 +1,11 @@
 // SPDX-FileCopyrightText: 2026 Junctura Contributors
 // SPDX-License-Identifier: Apache-2.0
-// Read-only tenant directory: enrolled management principals and the real
-// organization/application tree. The database enforces audit.read on the
-// verified caller; Core only asserts the private directory role.
-//
-// Directory management writes (directory.write principals holding the
-// core-writer role): unit types, flat units, per-unit groups and unit
-// memberships with durable desired state. Coordination lives in PostgreSQL:
-// every command takes a per-tenant advisory lock and carries a per-row
-// generation, so replicas never need an in-process lock. Each change is
-// applied to the identity provider through a dedicated service account and
-// only confirmed after a read-back matches the stored generation; a confirm
-// that lost a race reports the conflict and a retry of the same desired state
-// converges.
+// Tenant directory and durable management writes.
+import { randomUUID } from "node:crypto";
+import { setTimeout as wait } from "node:timers/promises";
 import { applicationToken } from "../applications/applications.mjs";
 import { createDirectorySync } from "./keycloak.mjs";
+import { signInternalToken } from "../../platform/security/internal-token.mjs";
 import { HttpError, json, readBody, requireWriter } from "../../platform/http/http.mjs";
 import { parseStrictJson } from "../capability/compatibility/compatibility.mjs";
 
@@ -102,13 +93,17 @@ async function readManagementBody(request) {
   return value;
 }
 
-async function command(config, identity, operation, payload) {
+async function command(config, identity, operation, payload, worker = false) {
   if (!config.dataUrl) throw new HttpError(503, "directory_unavailable");
   let result;
   try {
+    const token = worker
+      ? signInternalToken(config.dataSecret, { role: "junctura_directory_worker", tenant_id: identity.tenantId,
+        aud: "junctura-data", exp: Math.floor(Date.now() / 1000) + 30 })
+      : applicationToken(identity, config.dataSecret, "junctura_directory_api");
     const db = await fetch(`${config.dataUrl}/rpc/directory_command`, {
       method: "POST", redirect: "error",
-      headers: { Authorization: `Bearer ${applicationToken(identity, config.dataSecret, "junctura_directory_api")}`,
+      headers: { Authorization: `Bearer ${token}`,
         "Content-Type": "application/json" },
       body: JSON.stringify({ operation, payload }),
       signal: AbortSignal.timeout(5000),
@@ -121,20 +116,82 @@ async function command(config, identity, operation, payload) {
   return result;
 }
 
-const withProvider = (config, action) => {
-  const provider = createDirectorySync(config);
+async function withLease(config, rpc, run, waitForLease = true) {
+  const lease = randomUUID();
+  const fenced = (operation, payload = {}) => rpc(operation, { ...payload, lease });
+  const provider = createDirectorySync(config, fetch, () => fenced("sync_renew"));
   if (!provider) throw new HttpError(503, "directory_unavailable");
-  return action(provider).catch(error => {
-    if (error instanceof Error && error.code === "not_found") throw new HttpError(404, "not_found");
+  const deadline = Date.now() + 750;
+  for (;;) {
+    try { await fenced("sync_acquire"); break; }
+    catch (error) {
+      if (error.status !== 409 || !waitForLease || Date.now() >= deadline) throw error;
+      await wait(50);
+    }
+  }
+  try {
+    return await run(fenced, provider);
+  } catch (error) {
+    if (error instanceof HttpError) throw error;
+    if (error?.code === "not_found") throw new HttpError(404, "not_found");
     throw new HttpError(503, "directory_unavailable");
-  });
-};
+  } finally {
+    // A lost release is recovered by lease expiry.
+    await fenced("sync_release").catch(() => {});
+  }
+}
+
+const PROVIDER_METHODS = { unit: ["putUnit", "removeUnit"], group: ["putGroup", "removeGroup"],
+  member: ["putMember", "removeMember"] };
+
+async function applyJob(tenant, rpc, provider, { kind, remove, keys, groups, generation }) {
+  if (generation === undefined) return;
+  const args = kind === "unit" ? [keys.unit] : kind === "group" ? [keys.unit, keys.group] : [keys.unit, keys.subject];
+  if (kind === "member" && !remove) args.push(groups);
+  await provider[PROVIDER_METHODS[kind][Number(remove)]](tenant, ...args);
+  await rpc(`${kind}${remove ? "_delete" : ""}_confirm`, { ...keys, generation });
+}
+
+// Each pass also checks confirmed rows and tombstones for late provider writes.
+export function startDirectoryReconciler(config, delay = 30_000) {
+  if (!config.dataUrl || !createDirectorySync(config)) return undefined;
+  let stopped = false;
+  async function sweep() {
+    let after;
+    do {
+      const { value: tenants } = await command(config, {}, "sync_tenants", { after }, true);
+      if (!tenants.length) break;
+      for (const tenantId of tenants) {
+        const rpc = (operation, payload) => command(config, { tenantId }, operation, payload, true);
+        let cursor;
+        while (!stopped) {
+          let job;
+          try {
+            await withLease(config, rpc, async (fenced, provider) => {
+              ({ value: job } = await fenced("sync_next", { after: cursor }));
+              if (job && !stopped) await applyJob(tenantId, fenced, provider, job);
+            }, false);
+          } catch { /* An unavailable row is retried on the next pass. */ }
+          if (!job) break;
+          cursor = job.cursor;
+        }
+      }
+      after = tenants.at(-1);
+    } while (!stopped);
+  }
+  async function tick() {
+    try { await sweep(); }
+    catch { /* Retry database outages on the next pass. */ }
+    if (!stopped) timer = setTimeout(tick, delay).unref();
+  }
+  let timer = setTimeout(tick, delay).unref();
+  return () => { stopped = true; clearTimeout(timer); };
+}
 
 const KINDS = {
   "unit-type": {
     pattern: /^\/v1\/directory\/unit-types\/([^/]+)$/, keys: ["unitType"], list: "unit_type_list",
-    put: "unit_type_put", confirm: "unit_type_confirm", remove: "unit_type_delete",
-    removeConfirm: "unit_type_delete_confirm", identityProvider: false,
+    put: "unit_type_put", remove: "unit_type_delete", identityProvider: false,
     parse: body => {
       if (!body || Object.keys(body).sort().join(",") !== "name" || !displayName(body.name)) throw new HttpError(400, "invalid_request");
       return { name: body.name };
@@ -143,19 +200,17 @@ const KINDS = {
   },
   "unit": {
     pattern: /^\/v1\/directory\/units\/([^/]+)$/, keys: ["unit"], list: "unit_list",
-    put: "unit_put", confirm: "unit_confirm", remove: "unit_delete",
-    removeConfirm: "unit_delete_confirm", identityProvider: true,
+    put: "unit_put", remove: "unit_delete", identityProvider: true,
     parse: body => {
       if (!body || Object.keys(body).sort().join(",") !== "name,unitType" ||
-        !keyPattern.test(body.unitType) || !displayName(body.name)) throw new HttpError(400, "invalid_request");
+        (typeof body.unitType !== "string" || !keyPattern.test(body.unitType)) || !displayName(body.name)) throw new HttpError(400, "invalid_request");
       return { unitType: body.unitType, name: body.name };
     },
     row: (keys, body) => ({ unit: keys.unit, unitType: body.unitType, name: body.name }),
   },
   "group": {
     pattern: /^\/v1\/directory\/units\/([^/]+)\/groups\/([^/]+)$/, keys: ["unit", "group"], list: undefined,
-    put: "group_put", confirm: "group_confirm", remove: "group_delete",
-    removeConfirm: "group_delete_confirm", identityProvider: true,
+    put: "group_put", remove: "group_delete", identityProvider: true,
     parse: body => {
       if (!body || Object.keys(body).sort().join(",") !== "name" || !displayName(body.name)) throw new HttpError(400, "invalid_request");
       return { name: body.name };
@@ -169,6 +224,14 @@ const LIST_ROUTES = new Map([
   ["/v1/directory/units", { list: "unit_list" }],
 ]);
 
+function segment(raw, pattern = keyPattern) {
+  let value;
+  try { value = decodeURIComponent(raw); }
+  catch { throw new HttpError(400, "invalid_request"); }
+  if (!pattern.test(value)) throw new HttpError(400, "invalid_request");
+  return value;
+}
+
 function matchManagement(request, response, url) {
   const path = url.pathname;
   const collection = path.match(/^\/v1\/directory\/units\/([^/]+)\/(groups|members)$/);
@@ -177,7 +240,7 @@ function matchManagement(request, response, url) {
       response.setHeader("Allow", "GET");
       throw new HttpError(405, "method_not_allowed");
     }
-    return { list: collection[2] === "groups" ? "group_list" : "member_list", unit: collection[1] };
+    return { list: collection[2] === "groups" ? "group_list" : "member_list", unit: segment(collection[1]) };
   }
   if (LIST_ROUTES.has(path)) {
     if (request.method !== "GET") {
@@ -188,11 +251,8 @@ function matchManagement(request, response, url) {
   }
   const member = path.match(/^\/v1\/directory\/units\/([^/]+)\/members\/([^/]+)$/);
   if (member) {
-    // Decode each raw path segment once; encoded valid identifiers such as a
-    // colon inside a subject must not fail the shape check.
-    const unit = decodeURIComponent(member[1]);
-    const subject = decodeURIComponent(member[2]);
-    if (!keyPattern.test(unit) || !subjectPattern.test(subject)) throw new HttpError(400, "invalid_request");
+    const unit = segment(member[1]);
+    const subject = segment(member[2], subjectPattern);
     if (request.method !== "PUT" && request.method !== "DELETE") {
       response.setHeader("Allow", "PUT, DELETE");
       throw new HttpError(405, "method_not_allowed");
@@ -202,8 +262,7 @@ function matchManagement(request, response, url) {
   for (const [kind, spec] of Object.entries(KINDS)) {
     const match = path.match(spec.pattern);
     if (!match) continue;
-    const keys = Object.fromEntries(spec.keys.map((name, index) => [name, decodeURIComponent(match[index + 1])]));
-    if (Object.values(keys).some(value => !keyPattern.test(value))) throw new HttpError(400, "invalid_request");
+    const keys = Object.fromEntries(spec.keys.map((name, index) => [name, segment(match[index + 1])]));
     if (request.method !== "PUT" && request.method !== "DELETE") {
       response.setHeader("Allow", "PUT, DELETE");
       throw new HttpError(405, "method_not_allowed");
@@ -213,9 +272,8 @@ function matchManagement(request, response, url) {
   throw new HttpError(404, "not_found");
 }
 
-async function listPage(request, response, identity, config, url, list, unit) {
+async function listPage(response, identity, config, url, list, unit) {
   const { limit, after } = pageQuery(url);
-  if (unit !== undefined && !keyPattern.test(unit)) throw new HttpError(400, "invalid_request");
   const result = await command(config, identity, list,
     { limit, ...(after !== undefined ? { after } : {}), ...(unit !== undefined ? { unit } : {}) });
   const value = result.value;
@@ -230,62 +288,44 @@ async function listPage(request, response, identity, config, url, list, unit) {
       ? encodeCursor(String(last[cursorKey])) : null });
 }
 
-// The membership set of one member is a durable desired state like every other
-// row: prepare first, apply to the provider only after the subject is verified
-// in this tenant, read the provider back, and confirm that generation.
-async function writeMember(request, response, identity, config, url, unit, subject) {
+async function writeMember(request, response, identity, config, url, keys) {
   if (url.search) throw new HttpError(400, "invalid_query");
-  if (request.method === "DELETE") {
-    const prepared = await command(config, identity, "member_delete", { unit, subject });
-    if (prepared.generation === undefined) return noContent(response);
-    await withProvider(config, provider => provider.removeMember(identity.tenantId, unit, subject));
-    await command(config, identity, "member_delete_confirm", { unit, subject, generation: prepared.generation });
-    return noContent(response);
+  const remove = request.method === "DELETE";
+  let groups;
+  if (!remove) {
+    const body = await readManagementBody(request);
+    if (Object.keys(body).join(",") !== "groups" || !Array.isArray(body.groups) ||
+      body.groups.length > 100 || body.groups.some(group => typeof group !== "string" || !keyPattern.test(group)) ||
+      new Set(body.groups).size !== body.groups.length) {
+      throw new HttpError(400, "invalid_request");
+    }
+    groups = body.groups.sort();
   }
-  const body = await readManagementBody(request);
-  if (Object.keys(body).sort().join(",") !== "groups" || !Array.isArray(body.groups) ||
-    body.groups.length > 100 || body.groups.some(group => !keyPattern.test(group)) ||
-    new Set(body.groups).size !== body.groups.length) {
-    throw new HttpError(400, "invalid_request");
-  }
-  const groups = [...new Set(body.groups)].sort();
-  // Verify the subject belongs to this tenant before any desired state is
-  // committed, so a provider 404 can never strand a member row and block the
-  // deletion of its unit.
-  await withProvider(config, provider => provider.verifySubject(identity.tenantId, subject));
-  const prepared = await command(config, identity, "member_put", { unit, subject, groups });
-  // Always read the provider back: an identical confirmed desired state
-  // verifies the stored state, and a diverging provider heals here.
-  await withProvider(config, provider => provider.putMember(identity.tenantId, unit, subject, groups));
-  await command(config, identity, "member_confirm", { unit, subject, generation: prepared.generation });
-  return json(response, prepared.status, { unit, subject, groups });
+  const rpc = (operation, payload) => command(config, identity, operation, payload);
+  const prepared = await withLease(config, rpc, async (fenced, provider) => {
+    if (!remove) await provider.verifySubject(identity.tenantId, keys.subject);
+    const result = await fenced(remove ? "member_delete" : "member_put", { ...keys, groups });
+    await applyJob(identity.tenantId, fenced, provider, { kind: "member", remove, keys, groups, generation: result.generation });
+    return result;
+  });
+  return remove ? noContent(response) : json(response, prepared.status, { ...keys, groups });
 }
 
 async function writeRow(request, response, identity, config, url, kind, keys, spec) {
   if (url.search) throw new HttpError(400, "invalid_query");
-  if (request.method === "DELETE") {
-    const prepared = await command(config, identity, spec.remove, keys);
-    if (prepared.generation === undefined) return noContent(response);
-    if (spec.identityProvider) {
-      await withProvider(config, provider => kind === "unit"
-        ? provider.removeUnit(identity.tenantId, keys.unit)
-        : provider.removeGroup(identity.tenantId, keys.unit, keys.group));
-    }
-    await command(config, identity, spec.removeConfirm, { ...keys, generation: prepared.generation });
-    return noContent(response);
-  }
-  const body = await readManagementBody(request);
-  const desired = spec.parse(body);
-  const prepared = await command(config, identity, spec.put, { ...keys, ...desired });
-  // Always read the provider back, including after a prepare that reports the
-  // row as already confirmed, so provider drift is repaired on every write.
-  if (spec.identityProvider) {
-    await withProvider(config, provider => kind === "unit"
-      ? provider.putUnit(identity.tenantId, keys.unit)
-      : provider.putGroup(identity.tenantId, keys.unit, keys.group));
-  }
-  await command(config, identity, spec.confirm, { ...keys, generation: prepared.generation });
-  return json(response, prepared.status, spec.row(keys, body));
+  const remove = request.method === "DELETE";
+  const desired = remove ? undefined : spec.parse(await readManagementBody(request));
+  const rpc = (operation, payload) => command(config, identity, operation, payload);
+  const operation = remove ? spec.remove : spec.put;
+  const payload = { ...keys, ...desired };
+  const prepared = spec.identityProvider
+    ? await withLease(config, rpc, async (fenced, provider) => {
+      const result = await fenced(operation, payload);
+      await applyJob(identity.tenantId, fenced, provider, { kind, remove, keys, generation: result.generation });
+      return result;
+    })
+    : await rpc(operation, payload);
+  return remove ? noContent(response) : json(response, prepared.status, spec.row(keys, desired));
 }
 
 async function readView(request, response, identity, config, url, rpc) {
@@ -330,7 +370,7 @@ export async function handleDirectory(request, response, identity, config, url) 
   // database re-checks both through the internal token.
   if (!match.list) requireWriter(identity);
   response.setHeader("Cache-Control", "no-store");
-  if (match.list) return listPage(request, response, identity, config, url, match.list, match.unit);
-  if (match.member) return writeMember(request, response, identity, config, url, match.member.unit, match.member.subject);
+  if (match.list) return listPage(response, identity, config, url, match.list, match.unit);
+  if (match.member) return writeMember(request, response, identity, config, url, match.member);
   return writeRow(request, response, identity, config, url, match.kind, match.keys, match.spec);
 }

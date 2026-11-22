@@ -3037,7 +3037,7 @@
       "post": {
         "operationId": "createCapabilityExecution",
         "summary": "Accept one guarded pinned capability execution",
-        "description": "Opt-in guarded execution. C4B accepts only target and input and pins a published caller-owned composition. Every step rechecks original OIDC authority, active apps and independent same-tenant direct invoke grants; providers authenticate and redeem single-use step-bound tickets. C4B replay returns the durable reservation and never restores a lost lease or retries ambiguous work. Results require original consumer/subject/client and current authority. Success requires validated final output and confirmed Flowable history. No cancellation, resume, delegation or automatic retries. C4A retains its documented untouched-work replay contract. See CAPABILITY_COMPOSITION.md and CAPABILITY_EXECUTION.md. An optional context {purpose, dataSubject} declares why the call is made and whose data it concerns; it is bound into the idempotent request, sealed into the audit chain, passed to the provider on ticket redemption and listed for the data subject by GET /v1/me/data-access. When the context names a dataSubject, an active consent of that person for the consumer application, capability and purpose is required (403 subject_consent_required), unless emergency is true with a justification; emergency calls are queued for review and at most five may be pending per consumer (429 emergency_review_backlog).",
+        "description": "Opt-in guarded execution. C4B accepts only target and input and pins a published caller-owned composition. Every step rechecks original OIDC authority, active apps and independent same-tenant direct invoke grants; providers authenticate and redeem single-use step-bound tickets. C4B replay returns the durable reservation and never restores a lost lease or retries ambiguous work. Results require original consumer/subject/client and current authority. Success requires validated final output and confirmed Flowable history. No cancellation, resume, delegation or automatic retries. C4A retains its documented untouched-work replay contract. See CAPABILITY_COMPOSITION.md and CAPABILITY_EXECUTION.md. An optional context with purpose, dataSubject and dataSubjectKind declares why the call is made and whose data it concerns; it is bound into the idempotent request, sealed into the audit chain, passed to the provider on ticket redemption and listed for the data subject by GET /v1/me/data-access. When the context names a dataSubject, an active consent of that person for the consumer application, capability and purpose is required (403 subject_consent_required), unless emergency is true with a justification; emergency calls are queued for review and at most five may be pending per consumer (429 emergency_review_backlog).",
         "tags": [
           "capability-executions"
         ],
@@ -4208,7 +4208,7 @@
       "get": {
         "operationId": "getSubjectAccessLog",
         "summary": "List capability calls that concerned the caller",
-        "description": "Implemented. Returns the newest 200 capability invocations whose consumer named the caller as dataSubject, with purpose, consumer, provider, capability and state. Any verified principal may ask, only about itself, in its own tenant and issuer. No inputs, outputs, tickets or operator identities are returned. Purpose and a SHA-256 of the data subject are sealed in the audit chain (event execution.subject_accessed).",
+        "description": "Implemented. Returns the newest 200 capability invocations whose consumer named the caller as dataSubject, with purpose, consumer, provider, capability and state. Any verified principal may ask, only about itself, in its own tenant and issuer. No inputs, outputs, tickets or operator identities are returned. Purpose and a SHA-256 of the declared identifier are sealed in the audit chain (event execution.subject_accessed). The hash also covers the kind for canonical identifiers.",
         "tags": [
           "audit-events"
         ],
@@ -4435,14 +4435,11 @@
       "get": {
         "operationId": "listConsentsBySubjectId",
         "summary": "List the data subject's consents",
-        "description": "Return the latest 200 consents belonging to the data subject. Use the verified token subjectId, tenant and issuer; a supplied subject identifier never selects another person. A missing verified claim returns 403.",
+        "description": "Return the latest 200 consents belonging to the data subject. Uses the authenticated login, tenant and issuer for compatibility. A supplied subjectId claim must match the operator binding or the request returns 403.",
         "tags": ["tenant"],
         "x-junctura-status": "implemented-verified-subject",
         "x-junctura-source": "src/modules/consent/consent.mjs",
         "x-junctura-test-suite": "capabilities",
-        "x-junctura-required-permissions": [
-          "verified-subject"
-        ],
         "x-junctura-query-policy": "closed",
         "security": [
           {
@@ -4496,14 +4493,11 @@
       "post": {
         "operationId": "createConsentBySubjectId",
         "summary": "Grant consent as the data subject",
-        "description": "Grant the active registered app the declared purposes for an existing capability, expiring within 366 days. Use the verified token subjectId, tenant and issuer; a supplied subject identifier never selects another person. A missing verified claim returns 403.",
+        "description": "Grant the active registered app the declared purposes for an existing capability, expiring within 366 days. Uses the authenticated login, tenant and issuer for compatibility. A supplied subjectId claim must match the operator binding or the request returns 403.",
         "tags": ["tenant"],
         "x-junctura-status": "implemented-verified-subject",
         "x-junctura-source": "src/modules/consent/consent.mjs",
         "x-junctura-test-suite": "capabilities",
-        "x-junctura-required-permissions": [
-          "verified-subject"
-        ],
         "x-junctura-query-policy": "closed",
         "security": [
           {
@@ -4577,14 +4571,11 @@
       "post": {
         "operationId": "revokeConsentBySubjectId",
         "summary": "Revoke the data subject's consent",
-        "description": "Revoking an already revoked consent returns its current representation. Use the verified token subjectId, tenant and issuer; a supplied subject identifier never selects another person. A missing verified claim returns 403.",
+        "description": "Revoking an already revoked consent returns its current representation. Uses the authenticated login, tenant and issuer for compatibility. A supplied subjectId claim must match the operator binding or the request returns 403.",
         "tags": ["tenant"],
         "x-junctura-status": "implemented-verified-subject",
         "x-junctura-source": "src/modules/consent/consent.mjs",
         "x-junctura-test-suite": "capabilities",
-        "x-junctura-required-permissions": [
-          "verified-subject"
-        ],
         "x-junctura-query-policy": "closed",
         "security": [
           {
@@ -7267,7 +7258,12 @@
             "type": "string",
             "minLength": 1,
             "maxLength": 255,
-            "description": "Identity-provider subject of the person whose data the call concerns. Shown to that person in GET /v1/me/data-access."
+            "description": "Identifier of the person whose data the call concerns. Defaults to a login subject."
+          },
+          "dataSubjectKind": {
+            "type": "string",
+            "enum": ["canonical"],
+            "description": "Identifies an operator-bound subjectId. A missing kind means login."
           },
           "emergency": {
             "const": true
@@ -8218,7 +8214,12 @@
             "type": "string",
             "minLength": 1,
             "maxLength": 255,
-            "description": "Identity-provider subject of the person whose data the call concerns. Shown to that person in GET /v1/me/data-access."
+            "description": "Identifier of the person whose data the call concerns. Defaults to a login subject."
+          },
+          "dataSubjectKind": {
+            "type": "string",
+            "enum": ["login", "canonical"],
+            "description": "Use canonical for an operator-bound subjectId. A missing kind means login."
           },
           "emergency": {
             "const": true,
@@ -8232,6 +8233,7 @@
           }
         },
         "dependentRequired": {
+          "dataSubjectKind": ["dataSubject"],
           "emergency": [
             "dataSubject",
             "justification"

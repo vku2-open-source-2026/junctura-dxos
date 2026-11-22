@@ -158,44 +158,83 @@ test("upgrading from 035 maps legacy consents one way and quarantines unmapped r
       cpSync(join(directory, migration), join(upgradeDir, migration));
     }
     await migrate({ MIGRATION_DIR: "/migrations/consent-upgrade" }, database);
-    // A legacy consent row keyed by the login subject and one nobody can reach.
+    const issuer = "https://fixture.invalid";
+    const capability = `urn:junctura:capability:${appId}:lookup`;
     await sql(`INSERT INTO app_private.applications
       (tenant_id,app_id,issuer,oauth_client_id,owner_subject,provider_origin,display_name,digest,state)
-      VALUES('tenant-a','${appId}','https://fixture.invalid','fixture','subject','https://fixture.invalid',
+      VALUES('tenant-a','${appId}','${issuer}','fixture','subject','https://fixture.invalid',
         'Consent fixture','sha256:${"0".repeat(64)}','active');
       INSERT INTO execution_private.subject_consents(tenant_id,issuer,data_subject,consumer_app_id,capability_id,purposes,expires_at)
-        VALUES('tenant-a','https://fixture.invalid','legacy-person','${appId}',
-          'urn:junctura:capability:${appId}:lookup',ARRAY['service_review']::text[],now()+interval '2 hours'),
-          ('tenant-a','https://fixture.invalid','unmapped-foreign-subject','${appId}',
-          'urn:junctura:capability:${appId}:lookup',ARRAY['service_review']::text[],now()+interval '2 hours');`, database);
-    for (const migration of migrations.filter(file => Number(file.slice(0, 3)) > 35)) {
-      cpSync(join(directory, migration), join(upgradeDir, migration));
-    }
-    await migrate({ MIGRATION_DIR: "/migrations/consent-upgrade" }, database);
-    // The operator binds legacy-person to a verified subjectId after 036.
-    await sql(`INSERT INTO app_private.subject_bindings(tenant_id,issuer,subject_id,login_subject)
-      VALUES('tenant-a','https://fixture.invalid','verified-1','legacy-person');`, database);
-    // The one-way backfill moved the mapped row to the canonical key and left
-    // the unmapped one quarantined; only the mapped row grants authority.
-    const state = await sql(`SELECT to_jsonb(u) FROM (
-      SELECT (SELECT count(*) FROM execution_private.subject_consents WHERE canonical_subject='verified-1') AS mapped,
-             (SELECT count(*) FROM execution_private.subject_consents WHERE canonical_subject IS NULL
-               AND data_subject='unmapped-foreign-subject') AS quarantined,
-             (SELECT execution_private.canonical_subject('tenant-a','https://fixture.invalid','legacy-person')) AS canonical,
-             (SELECT execution_private.canonical_subject('tenant-a','https://fixture.invalid','unmapped-foreign-subject')) AS foreign_canonical) u;`, database);
-    assert.deepEqual(JSON.parse(state), { mapped: 1, quarantined: 1,
-      canonical: "verified-1", foreign_canonical: null });
-    // Binding rows cannot collide: a subjectId that names an existing login is refused.
-    let collision = "";
-    try {
-      await sql(`INSERT INTO app_private.subject_bindings(tenant_id,issuer,subject_id,login_subject)
-        VALUES('tenant-a','https://fixture.invalid','legacy-person','another-login');`, database);
-    } catch { collision = "refused"; }
-    assert.equal(collision, "refused", "subject ids and login subjects never share an identifier");
+        SELECT 'tenant-a','${issuer}',login,'${appId}','${capability}',
+          ARRAY['service_review']::text[],now()+interval '2 hours'
+        FROM unnest(ARRAY['legacy-person','verified-1','late-person']) login;`, database);
+    const addVersions = (min, max) => {
+      for (const migration of migrations.filter(file => {
+        const version = Number(file.slice(0, 3));
+        return version >= min && version <= max;
+      })) cpSync(join(directory, migration), join(upgradeDir, migration));
+    };
+    const upgrade = () => migrate({ MIGRATION_DIR: "/migrations/consent-upgrade" }, database);
+    addVersions(36, 36);
+    await upgrade();
+    const bind = (subject, login) => `INSERT INTO app_private.subject_bindings(tenant_id,issuer,subject_id,login_subject)
+      VALUES('tenant-a','${issuer}','${subject}','${login}')`;
+    await sql(bind("verified-1", "legacy-person"), database);
+    addVersions(37, 38);
+    await upgrade();
+    const mappings = () => sql(`SELECT jsonb_object_agg(data_subject,canonical_subject)
+      FROM execution_private.subject_consents WHERE consumer_app_id='${appId}';`, database);
+    assert.deepEqual(JSON.parse(await mappings()), { "legacy-person": "verified-1", "verified-1": null, "late-person": null });
+    await sql(bind("verified-2", "late-person"), database);
+    assert.deepEqual(JSON.parse(await mappings()), { "legacy-person": "verified-1", "verified-1": null, "late-person": "verified-2" });
+    const results = await Promise.allSettled([
+      sql(`BEGIN; ${bind("cross-id", "login-a")}; SELECT pg_sleep(0.3); COMMIT;`, database),
+      sql(`BEGIN; ${bind("canonical-b", "cross-id")}; SELECT pg_sleep(0.3); COMMIT;`, database),
+    ]);
+    assert.equal(results.filter(result => result.status === "fulfilled").length, 1);
+    assert.match(results.find(result => result.status === "rejected").reason.stderr, /must not share identifiers/);
+    await assert.rejects(sql("UPDATE app_private.subject_bindings SET login_subject='different' WHERE subject_id='verified-1';", database),
+      /operator reconciliation/);
+    await assert.rejects(sql("DELETE FROM app_private.subject_bindings WHERE subject_id='verified-1';", database),
+      /operator reconciliation/);
   } finally {
     await sql(`DROP DATABASE ${database}`);
     rmSync(upgradeDir, { recursive: true, force: true });
   }
+});
+
+test("directory confirmation requires the current lease and generation", async () => {
+  const tenant = "directory-lease-test";
+  const claims = { tenant_id: tenant, sub: "tester", iss: "https://directory.invalid", client_id: "manager",
+    role: "junctura_directory_api", directory_writer: true };
+  const rpc = async (operation, payload, session = claims) => JSON.parse((await sql(`
+    SET ROLE ${session.role};
+    SELECT set_config('request.jwt.claims','${JSON.stringify(session)}',true);
+    SELECT core.directory_command('${operation}','${JSON.stringify(payload)}');
+  `)).split("\n").at(-1));
+  await sql(`INSERT INTO app_private.principals(tenant_id,issuer,subject,management_client,permissions)
+    VALUES('${tenant}','${claims.iss}','${claims.sub}','${claims.client_id}',ARRAY['directory.write']);`);
+  const old = randomUUID(), current = randomUUID();
+  assert.equal((await rpc("unit_type_put", { unitType: "office", name: "Office" })).status, 201);
+  assert.equal((await rpc("sync_acquire", { lease: old })).status, 204);
+  assert.equal((await rpc("sync_acquire", { lease: current })).status, 409);
+  const keys = { unit: "office-a" };
+  const first = await rpc("unit_put", { ...keys, unitType: "office", name: "Old", lease: old });
+  assert.equal(first.status, 201);
+  assert.deepEqual((await rpc("unit_list", { limit: 10 })).value.items, []);
+  await sql(`UPDATE app_private.directory_sync_leases SET expires_at='-infinity' WHERE tenant_id='${tenant}';`);
+  assert.equal((await rpc("sync_acquire", { lease: current })).status, 204);
+  const next = await rpc("unit_put", { ...keys, unitType: "office", name: "Current", lease: current });
+  assert.equal(next.status, 200);
+  assert.equal((await rpc("unit_confirm", { ...keys, lease: old, generation: next.generation })).status, 409);
+  assert.equal((await rpc("unit_confirm", { ...keys, lease: current, generation: first.generation })).status, 409);
+  assert.equal((await rpc("unit_confirm", { ...keys, lease: current, generation: next.generation })).status, 204);
+  assert.deepEqual((await rpc("unit_list", { limit: 10 })).value.items, [{ ...keys, unitType: "office", name: "Current" }]);
+  const worker = { role: "junctura_directory_worker", tenant_id: tenant };
+  assert.ok((await rpc("sync_tenants", {}, worker)).value.includes(tenant));
+  assert.equal((await rpc("unit_put", { ...keys, lease: current }, worker)).status, 403);
+  const job = (await rpc("sync_next", { lease: current }, worker)).value;
+  assert.deepEqual([job.kind, job.keys, job.generation], ["unit", keys, next.generation]);
 });
 
 test("version-only history requires explicit operator adoption", async () => {

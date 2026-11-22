@@ -26,27 +26,32 @@ const api = (path, who, body, headers = {}, method = body === undefined ? "GET" 
     ...(body === undefined ? {} : { "Content-Type": "application/json" }), ...headers },
     body: body === undefined ? undefined : JSON.stringify(body), signal: AbortSignal.timeout(15000) });
 const fixture = createAuthorityFixture({ base, prefix, sql, q, api, clientIds, users });
-const { operatorToken, admin, login, human } = fixture;
-let manager, member;
+const { operatorToken, admin, login, human, verifiedSubject, cleanupSubjectBindings } = fixture;
+let manager, member, raceMember;
 
 before(async () => {
   await operatorToken();
-  // Repeatable realm provisioning: mappers, the sync service account, its roles.
-  await provisionDirectory([], { log: () => {}, env: process.env });
+  const importedProfile = await (await admin("users/profile")).json();
+  assert.deepEqual(importedProfile.attributes.find(entry => entry.name === "subject_id")?.permissions,
+    { view: ["admin"], edit: ["admin"] }, "realm import protects subject_id before provisioning");
   // A dedicated operator-managed PKCE client keeps fixture changes local, the
   // way the capability suite prepares its own management client.
   const template = (await (await admin("clients?clientId=tenant-a")).json())[0];
   const source = await (await admin(`clients/${template.id}`)).json();
   const protocolMappers = structuredClone(source.protocolMappers);
   for (const mapper of protocolMappers) delete mapper.id;
+  protocolMappers.find(mapper => mapper.name === "tenant-memberships").config["full.path"] = "false";
   const createdClient = await admin("clients", { clientId: `${prefix}-management-tenant-a`, enabled: true,
     protocol: "openid-connect", publicClient: true, standardFlowEnabled: true, directAccessGrantsEnabled: false,
     redirectUris: ["http://127.0.0.1:9876/callback"], attributes: { "pkce.code.challenge.method": "S256" },
     protocolMappers }, "POST");
   assert.equal(createdClient.status, 201);
   clientIds.push(createdClient.headers.get("location").split("/").at(-1));
+  // This older client predates provisioning and is absent from its default names.
+  await provisionDirectory([], { log: () => {}, env: process.env });
   manager = await human("manager", "tenant-a", ["directory.write"]);
   member = await human("member", "tenant-a", []);
+  raceMember = await human("race-member", "tenant-a", []);
 });
 
 after(async () => {
@@ -61,7 +66,8 @@ after(async () => {
     DELETE FROM app_private.directory_groups WHERE tenant_id='tenant-a' AND unit LIKE '${prefix}%';
     DELETE FROM app_private.directory_units WHERE tenant_id='tenant-a' AND unit LIKE '${prefix}%';
     DELETE FROM app_private.directory_unit_types WHERE tenant_id='tenant-a' AND unit_type LIKE '${prefix}%';
-    DELETE FROM app_private.subject_bindings WHERE tenant_id='tenant-a' AND subject_id LIKE '${prefix}%';`);
+    DELETE FROM app_private.principals WHERE tenant_id='tenant-a' AND subject IN (${users.map(q).join(",") || "NULL"});`);
+  await cleanupSubjectBindings();
   for (const id of users) await admin(`users/${id}`, undefined, "DELETE");
   for (const id of clientIds) await admin(`clients/${id}`, undefined, "DELETE");
   await verifyContracts("directory");
@@ -70,6 +76,48 @@ after(async () => {
 const unitType = `${prefix}-office`;
 const unit = `${prefix}-unit-a`;
 const group = `${prefix}-reviewers`;
+
+test("provisioning upgrades old client tokens and rejects a nested group with the tenant root name", async () => {
+  const identity = await api("/v1/identity", manager);
+  assert.equal(identity.status, 200);
+  const claims = JSON.parse(Buffer.from(manager.token.split(".")[1], "base64url"));
+  assert.ok(claims.tenant_memberships.includes("/tenant-a"));
+  const roots = await (await admin("groups")).json();
+  const tenantA = roots.find(item => item.path === "/tenant-a");
+  const tenantB = roots.find(item => item.path === "/tenant-b");
+  const nested = await admin(`groups/${tenantB.id}/children`, { name: "tenant-a" }, "POST");
+  assert.equal(nested.status, 201);
+  const nestedId = nested.headers.get("location").split("/").at(-1);
+  try {
+    assert.equal((await admin(`users/${raceMember.id}/groups/${nestedId}`, undefined, "PUT")).status, 204);
+    assert.equal((await admin(`users/${raceMember.id}/groups/${tenantA.id}`, undefined, "DELETE")).status, 204);
+    const token = await login(raceMember.username, raceMember.password, raceMember.clientId);
+    const rejected = await api("/v1/identity", token);
+    assert.equal(rejected.status, 403);
+    assert.equal((await rejected.json()).error, "tenant_required");
+  } finally {
+    await admin(`groups/${nestedId}`, undefined, "DELETE");
+    await admin(`users/${raceMember.id}/groups/${tenantA.id}`, undefined, "PUT");
+  }
+});
+
+test("the Account API cannot change subject_id, and new tokens carry the operator assignment", async () => {
+  const subjectId = `${prefix}:member`;
+  const assigned = await verifiedSubject(member, subjectId);
+  const account = `${issuer}/account/`;
+  const headers = { Authorization: `Bearer ${assigned.token}`, Accept: "application/json", "Content-Type": "application/json" };
+  const view = await globalThis.fetch(account, { headers });
+  assert.equal(view.status, 200);
+  const profile = await view.json();
+  const response = await globalThis.fetch(account, { method: "POST", headers,
+    body: JSON.stringify({ ...profile, attributes: { ...profile.attributes, subject_id: [`${prefix}:forged`] } }) });
+  assert.ok([204, 400].includes(response.status), await response.text());
+  const stored = await (await admin(`users/${member.id}`)).json();
+  assert.deepEqual(stored.attributes.subject_id, [subjectId]);
+  const token = await login(member.username, member.password, member.clientId);
+  assert.equal(JSON.parse(Buffer.from(token.split(".")[1], "base64url")).subject_id, subjectId);
+  assert.equal((await (await api("/v1/identity", token)).json()).subjectId, subjectId);
+});
 
 test("directory changes store desired state, sync Keycloak and confirm only the read-back generation", async () => {
   const created = await api(`/v1/directory/unit-types/${unitType}`, manager, { name: "Technical office" }, {}, "PUT");
@@ -141,11 +189,11 @@ test("lists paginate in ascending order with cursors and require the permission"
 test("references, conflicts, racing writes and deletes follow the documented contract", async () => {
   assert.equal((await api(`/v1/directory/units/${prefix}-other`, manager,
     { unitType: `${prefix}-missing`, name: "X" }, {}, "PUT")).status, 404);
-  assert.equal((await api(`/v1/directory/units/${unit}/groups/${prefix}-ghost`, manager,
+  assert.equal((await api(`/v1/directory/units/${prefix}-absent/groups/${prefix}-ghost`, manager,
     { name: "X" }, {}, "PUT")).status, 404);
   assert.equal((await api(`/v1/directory/units/${unit}/members/99999999-outside-tenant`, manager,
     { groups: [] }, {}, "PUT")).status, 404, "the login subject must exist in this tenant");
-  assert.equal((await api(`/v1/directory/units/${unit}`, manager, { unitType, name: "x" }, {}, "PUT")).status, 400,
+  assert.equal((await api(`/v1/directory/units/${unit}`, manager, { unitType, name: "" }, {}, "PUT")).status, 400,
     "name shape violations stay 400");
   assert.equal((await api(`/v1/directory/unit-types/${unitType}`, manager, { name: "x".repeat(121) }, {}, "PUT")).status, 400);
 
@@ -159,7 +207,9 @@ test("references, conflicts, racing writes and deletes follow the documented con
     api(`/v1/directory/units/${unit}/groups/${group}`, manager, { name: "Race A" }, {}, "PUT"),
     api(`/v1/directory/units/${unit}/groups/${group}`, manager, { name: "Race B" }, {}, "PUT"),
   ]);
-  assert.deepEqual(races.map(response => response.status).sort(), [200, 200]);
+  const statuses = races.map(response => response.status).sort();
+  assert.equal(statuses[0], 200);
+  assert.ok([200, 409].includes(statuses[1]));
   const root = (await (await admin(`groups?search=tenant-a&exact=true`)).json()).find(item => item.name === "tenant-a");
   const children = await (await admin(`groups/${root.id}/children`)).json();
   assert.ok(children.some(item => item.name === unit), "the racing renames leave the provider group in place");
@@ -168,19 +218,20 @@ test("references, conflicts, racing writes and deletes follow the documented con
 
   // A member write racing the deletion of its group ends in exactly one
   // documented outcome and the desired state stays consistent.
+  assert.equal((await api(`/v1/directory/units/${unit}/members/${member.id}`, manager, undefined, {}, "DELETE")).status, 204);
   const shared = await Promise.all([
-    api(`/v1/directory/units/${unit}/members/${member.id}`, manager, { groups: [group] }, {}, "PUT"),
+    api(`/v1/directory/units/${unit}/members/${raceMember.id}`, manager, { groups: [group] }, {}, "PUT"),
     api(`/v1/directory/units/${unit}/groups/${group}`, manager, undefined, {}, "DELETE"),
   ]);
   assert.ok(
     (shared[0].status === 201 && shared[1].status === 409) ||
-      (shared[0].status === 404 && shared[1].status === 204),
+      ([404, 409].includes(shared[0].status) && shared[1].status === 204),
     `the race ends in one documented outcome, got ${shared[0].status}/${shared[1].status}`);
-  const providerGroups = await (await admin(`users/${member.id}/groups`)).json();
+  const providerGroups = await (await admin(`users/${raceMember.id}/groups`)).json();
   if (shared[0].status === 201) {
     assert.ok(providerGroups.some(item => item.path === `/tenant-a/${unit}/${group}`),
       "a surviving member holds its group at the provider");
-    assert.equal((await api(`/v1/directory/units/${unit}/members/${member.id}`, manager, undefined, {}, "DELETE")).status, 204);
+    assert.equal((await api(`/v1/directory/units/${unit}/members/${raceMember.id}`, manager, undefined, {}, "DELETE")).status, 204);
   } else {
     assert.ok(!providerGroups.some(item => item.path?.startsWith(`/tenant-a/${unit}`)),
       "a refused member leaves no provider membership");
@@ -197,6 +248,25 @@ test("references, conflicts, racing writes and deletes follow the documented con
   assert.equal((await api(`/v1/directory/unit-types/${unitType}`, manager, undefined, {}, "DELETE")).status, 204);
 });
 
+test("recreating a deleted type, unit and group returns 201 and allows a new member with no groups", async () => {
+  for (const [path, body] of [
+    [`/v1/directory/unit-types/${unitType}`, { name: "Office" }],
+    [`/v1/directory/units/${unit}`, { unitType, name: "Unit" }],
+    [`/v1/directory/units/${unit}/groups/${group}`, { name: "Group" }],
+  ]) {
+    const recreated = await api(path, manager, body, {}, "PUT");
+    assert.equal(recreated.status, 201, await recreated.clone().text());
+  }
+  const path = `/v1/directory/units/${unit}/members/${raceMember.id}`;
+  const empty = await api(path, manager, { groups: [] }, {}, "PUT");
+  assert.equal(empty.status, 201, await empty.clone().text());
+  assert.deepEqual((await empty.json()).groups, []);
+  for (const deletedPath of [path, `/v1/directory/units/${unit}/groups/${group}`,
+    `/v1/directory/units/${unit}`, `/v1/directory/unit-types/${unitType}`]) {
+    assert.equal((await api(deletedPath, manager, undefined, {}, "DELETE")).status, 204);
+  }
+});
+
 test("a wiped provider subtree heals on the next write of the same desired state", async () => {
   await api(`/v1/directory/unit-types/${unitType}`, manager, { name: "Technical office" }, {}, "PUT");
   await api(`/v1/directory/units/${unit}`, manager, { unitType, name: "Unit A" }, {}, "PUT");
@@ -207,7 +277,6 @@ test("a wiped provider subtree heals on the next write of the same desired state
   await admin(`groups/${unitGroup.id}`, undefined, "DELETE");
   const healed = await api(`/v1/directory/units/${unit}/groups/${group}`, manager, { name: "Reviewers" }, {}, "PUT");
   assert.equal(healed.status, 200, await healed.clone().text());
-  const rebuilt = await (await admin(`users/${member.id}/groups`)).json();
   const memberPut = await api(`/v1/directory/units/${unit}/members/${member.id}`, manager, { groups: [group] }, {}, "PUT");
   assert.equal(memberPut.status, 201);
   const after = await (await admin(`users/${member.id}/groups`)).json();

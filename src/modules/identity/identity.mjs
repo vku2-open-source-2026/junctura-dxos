@@ -36,7 +36,7 @@ export async function handleIdentity(request, response, identity, config) {
   return json(response, 200, {
     subject: identity.subject,
     tenantId: identity.tenantId,
-    roles: identity.roles,
+    roles: identity.roles.filter(role => role === "core-reader" || role === "core-writer"),
     units: identity.units,
     groups: identity.groups,
     ...(subjectId ? { subjectId } : {}),

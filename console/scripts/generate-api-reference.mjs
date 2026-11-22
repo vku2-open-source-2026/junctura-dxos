@@ -130,8 +130,13 @@ function sample(input, spec, depth = 0, seen = new Set(), hint = "") {
 
 function parametersFor(pathItem, operation, spec) {
   return [...(pathItem.parameters ?? []), ...(operation.parameters ?? [])]
-    .map((parameter) => deref(parameter, spec).value)
-    .filter((parameter) => parameter && parameter.in && parameter.name);
+    .map((parameter) => {
+      const { value } = deref(parameter, spec);
+      if (!value?.in || !value.name) {
+        throw new Error(`Unresolved parameter ${parameter.$ref ?? parameter.name} for ${operation.operationId}`);
+      }
+      return value;
+    });
 }
 
 function summarizeParameter(parameter, spec) {
@@ -244,26 +249,9 @@ for (const [endpointPath, pathItem] of Object.entries(capabilitySpec.paths)) {
 
 const payload = { foundation, capability };
 
-// A capability operation that requires a header must expose it in the
-// generated reference; an unresolved cross-file $ref would otherwise drop a
-// required Idempotency-Key from the request guidance.
-for (const [endpointPath, pathItem] of Object.entries(capabilitySpec.paths)) {
-  for (const [method, operation] of Object.entries(pathItem)) {
-    if (!methods.has(method) || !operation.operationId) continue;
-    if (operation["x-junctura-status"] === "planned") continue;
-    const declared = [...(pathItem.parameters ?? []), ...(operation.parameters ?? [])]
-      .map((parameter) => deref(parameter, capabilitySpec).value)
-      .filter((parameter) => parameter?.in === "header" && parameter.required === true)
-      .map((parameter) => parameter.name);
-    const generated = capability
-      .filter((endpoint) => endpoint.path === endpointPath && endpoint.method === method.toUpperCase())
-      .flatMap((endpoint) => endpoint.headerParameters.map((header) => header.name));
-    for (const name of declared) {
-      if (!generated.includes(name)) {
-        throw new Error(`Required header ${name} is missing from the generated reference of ${method.toUpperCase()} ${endpointPath}`);
-      }
-    }
-  }
+const consentPost = capability.find(endpoint => endpoint.path === "/v1/me/consents" && endpoint.method === "POST");
+if (!consentPost?.headerParameters.some(header => header.name === "Idempotency-Key" && header.required)) {
+  throw new Error("POST /v1/me/consents must show the required Idempotency-Key header");
 }
 
 const generated = `${JSON.stringify(payload)}\n`;

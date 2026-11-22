@@ -163,7 +163,10 @@ export function generateDocCurl(
   }
   if (endpoint.requestContentType === "application/json") {
     command.push('-H "Content-Type: application/json"');
-    const body = JSON.stringify(endpoint.requestBodyExample ?? {}, null, 2);
+    const example = endpoint.requestBodyExample ?? {};
+    const body = JSON.stringify(endpoint.path === "/v1/me/consents" && endpoint.method === "POST"
+      ? { ...example, expiresAt: new Date(Date.now() + 86_400_000).toISOString() }
+      : example, null, 2);
     command.push(`-d '${body}'`);
   }
   lines.push(command.join(" \\\n  "));

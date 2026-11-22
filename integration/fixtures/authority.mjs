@@ -6,6 +6,7 @@ import { createHash, randomBytes } from "node:crypto";
 export function createAuthorityFixture({ base, prefix, sql, q, api, clientIds, users }) {
 const issuer = `${base}/identity/realms/junctura`;
 let adminToken;
+const bindings = [];
 async function operatorToken() {
   const deadline = Date.now() + 30000;
   while (Date.now() < deadline) {
@@ -60,9 +61,19 @@ async function verifiedSubject(person, subjectId) {
     ON CONFLICT (tenant_id,issuer,subject_id) DO UPDATE SET updated_at=clock_timestamp()
     WHERE app_private.subject_bindings.login_subject=${q(person.id)}
     RETURNING subject_id;`);
-  assert.match(bound.stdout.trim(), new RegExp(subjectId.replaceAll(":", "\\:")),
+  assert.equal(bound.stdout.trim().split(/\r?\n/)[0], subjectId,
     "the binding must map this login; move the subjectId through operator reconciliation instead");
+  bindings.push([person.tenant, person.id, subjectId]);
   return { ...person, token: await login(person.username, person.password, person.clientId) };
+}
+async function cleanupSubjectBindings() {
+  if (!bindings.length) return;
+  const keys = bindings.map(([tenant, login, subjectId]) => `(${[tenant, issuer, login, subjectId].map(q).join(",")})`);
+  await sql(`BEGIN;
+    ALTER TABLE app_private.subject_bindings DISABLE TRIGGER subject_binding_guard;
+    DELETE FROM app_private.subject_bindings WHERE (tenant_id,issuer,login_subject,subject_id) IN (${keys.join(",")});
+    ALTER TABLE app_private.subject_bindings ENABLE TRIGGER subject_binding_guard;
+    COMMIT;`);
 }
 async function backend(label, principal, administrator, tenant = "tenant-a", writer = true, providerOrigin) {
   adminToken = await operatorToken();
@@ -99,5 +110,5 @@ async function backend(label, principal, administrator, tenant = "tenant-a", wri
 }
 
 
-return { operatorToken, admin, login, human, verifiedSubject, backend };
+return { operatorToken, admin, login, human, verifiedSubject, cleanupSubjectBindings, backend };
 }

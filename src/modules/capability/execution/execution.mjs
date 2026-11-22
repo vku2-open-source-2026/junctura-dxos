@@ -22,8 +22,10 @@ export const ticketDigest = ticket => `sha256:${createHash("sha256").update(tick
 export const PURPOSE = /^[a-z][a-z0-9_]{1,62}$/;
 export function validateExecutionContext(context) {
   if (!context || typeof context !== "object" || Array.isArray(context) ||
-    Object.keys(context).some(key => !["purpose", "dataSubject", "emergency", "justification"].includes(key)) ||
+    Object.keys(context).some(key => !["purpose", "dataSubject", "dataSubjectKind", "emergency", "justification"].includes(key)) ||
     // Emergency (break-glass) access needs a named subject and a justification.
+    (Object.hasOwn(context, "dataSubjectKind") && (!Object.hasOwn(context, "dataSubject") ||
+      !["login", "canonical"].includes(context.dataSubjectKind))) ||
     (Object.hasOwn(context, "emergency") !== Object.hasOwn(context, "justification")) ||
     (Object.hasOwn(context, "emergency") && (context.emergency !== true || !Object.hasOwn(context, "dataSubject") ||
       typeof context.justification !== "string" || !context.justification.isWellFormed() ||

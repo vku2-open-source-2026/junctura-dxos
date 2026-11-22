@@ -5,8 +5,8 @@ import { handleApplications } from "./modules/applications/applications.mjs";
 import { APPLICATION_STATS_PATH, handleApplicationStats } from "./modules/applications/stats.mjs";
 import { AUDIT_EVENTS_PATH, AUDIT_VERIFY_PATH, SUBJECT_ACCESS_PATH, handleAudit, handleAuditEvents, handleSubjectAccess } from "./modules/audit/audit.mjs";
 import { DIRECTORY_MANAGEMENT_PATH, DIRECTORY_ORGANIZATIONS_PATH, DIRECTORY_PRINCIPALS_PATH, handleDirectory } from "./modules/directory/directory.mjs";
-import { handleIdentity } from "./modules/identity/identity.mjs";
-import { handleConsent, isConsentPath } from "./modules/consent/consent.mjs";
+import { handleIdentity, verifiedSubjectBinding } from "./modules/identity/identity.mjs";
+import { handleConsent, isConsentPath, isPlannedSubjectPath } from "./modules/consent/consent.mjs";
 import { createAuthorizer } from "./platform/auth/auth.mjs";
 import { handleApprovals, handleCapabilities } from "./modules/capability/registry/capabilities.mjs";
 import { handleCompositions } from "./modules/capability/composition/registry.mjs";
@@ -152,11 +152,17 @@ export function createApi(config) {
           { error: error instanceof HttpError ? error.message : "capabilities_unavailable", issues: error.issues, requestId });
       }
     }
-    if (isConsentPath(path)) {
+    if (isConsentPath(path) || (request.method === "POST" && isPlannedSubjectPath(path))) {
       const requestId = randomUUID();
       response.setHeader("X-Request-Id", requestId);
       try {
-        return await handleConsent(request, response, await authorize(request, true), config, new URL(request.url, "http://core"));
+        const identity = await authorize(request, true);
+        if (isPlannedSubjectPath(path)) {
+          response.setHeader("Cache-Control", "no-store");
+          if (!await verifiedSubjectBinding(config, identity)) throw new HttpError(403, "verified_subject_required");
+          throw new HttpError(404, "not_found");
+        }
+        return await handleConsent(request, response, identity, config, new URL(request.url, "http://core"));
       } catch (error) {
         if (error.status === 413) response.setHeader("Connection", "close");
         return json(response, error instanceof HttpError ? error.status : 503,

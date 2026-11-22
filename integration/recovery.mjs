@@ -30,6 +30,7 @@ test("pg_dump/pg_restore preserves real data and tenant RLS in an isolated tempo
   let target;
   let seeded = false;
   let applicationSeeded = false;
+  let bindingSeeded = false;
   try {
     await sourceSql(`${sourceClaim} INSERT INTO core.records(id,collection,data) VALUES ('${id}','recovery_fixture','{"fixture":"backup"}');`);
     seeded = true;
@@ -68,7 +69,10 @@ test("pg_dump/pg_restore preserves real data and tenant RLS in an isolated tempo
     }
     assert.ok(ready, "Isolated PostgreSQL completed initialization");
     await docker(["exec", target, "createdb", "-U", "junctura_admin", "recovered"]);
-    await docker(["exec", target, "psql", "-U", "junctura_admin", "-d", "recovered", "-v", "ON_ERROR_STOP=1", "-c", "CREATE ROLE junctura_api NOLOGIN NOBYPASSRLS; CREATE ROLE junctura_app_api NOLOGIN NOBYPASSRLS; CREATE ROLE junctura_app_owner NOLOGIN NOBYPASSRLS; CREATE ROLE junctura_resource_api NOLOGIN NOBYPASSRLS; CREATE ROLE junctura_record_api NOLOGIN NOBYPASSRLS; ALTER ROLE junctura_record_api SET statement_timeout='4s'; CREATE ROLE junctura_audit_api NOLOGIN NOBYPASSRLS; CREATE ROLE junctura_capability_api NOLOGIN NOBYPASSRLS; CREATE ROLE junctura_trust_api NOLOGIN NOBYPASSRLS; CREATE ROLE junctura_execution_api NOLOGIN NOBYPASSRLS; CREATE ROLE junctura_composition_api NOLOGIN NOBYPASSRLS; CREATE ROLE junctura_subject_api NOLOGIN NOBYPASSRLS; CREATE ROLE junctura_directory_api NOLOGIN NOBYPASSRLS; CREATE ROLE junctura_storage_api NOLOGIN NOBYPASSRLS; CREATE ROLE junctura_storage_collections_api NOLOGIN NOBYPASSRLS; CREATE ROLE junctura_workflow_audit_api NOLOGIN NOBYPASSRLS; CREATE ROLE junctura_application_stats_api NOLOGIN NOBYPASSRLS;"]);
+    await docker(["exec", target, "psql", "-U", "junctura_admin", "-d", "recovered", "-v", "ON_ERROR_STOP=1", "-c", "CREATE ROLE junctura_api NOLOGIN NOBYPASSRLS; CREATE ROLE junctura_app_api NOLOGIN NOBYPASSRLS; CREATE ROLE junctura_app_owner NOLOGIN NOBYPASSRLS; CREATE ROLE junctura_resource_api NOLOGIN NOBYPASSRLS; CREATE ROLE junctura_record_api NOLOGIN NOBYPASSRLS; ALTER ROLE junctura_record_api SET statement_timeout='4s'; CREATE ROLE junctura_audit_api NOLOGIN NOBYPASSRLS; CREATE ROLE junctura_capability_api NOLOGIN NOBYPASSRLS; CREATE ROLE junctura_trust_api NOLOGIN NOBYPASSRLS; CREATE ROLE junctura_execution_api NOLOGIN NOBYPASSRLS; CREATE ROLE junctura_composition_api NOLOGIN NOBYPASSRLS; CREATE ROLE junctura_subject_api NOLOGIN NOBYPASSRLS; CREATE ROLE junctura_directory_api NOLOGIN NOBYPASSRLS; CREATE ROLE junctura_directory_worker NOLOGIN NOBYPASSRLS; CREATE ROLE junctura_storage_api NOLOGIN NOBYPASSRLS; CREATE ROLE junctura_storage_collections_api NOLOGIN NOBYPASSRLS; CREATE ROLE junctura_workflow_audit_api NOLOGIN NOBYPASSRLS; CREATE ROLE junctura_application_stats_api NOLOGIN NOBYPASSRLS;"]);
+    await sourceSql(`INSERT INTO app_private.subject_bindings(tenant_id,issuer,subject_id,login_subject)
+      VALUES('tenant-a','https://recovery.example.invalid','subject-${id}','recovery-${id}');`);
+    bindingSeeded = true;
     const dump = spawn("docker", ["compose", "exec", "-T", "database", "pg_dump", "-U", "junctura_admin", "--format=custom", "junctura_data"], { stdio: ["ignore", "pipe", "pipe"] });
     const restore = spawn("docker", ["exec", "-i", target, "pg_restore", "-U", "junctura_admin", "--exit-on-error", "--dbname=recovered"], { stdio: ["pipe", "ignore", "pipe"] });
     const dumpCode = closeCode(dump);
@@ -111,13 +115,16 @@ test("pg_dump/pg_restore preserves real data and tenant RLS in an isolated tempo
         has_function_privilege('junctura_subject_api','core.subject_consent(text,jsonb)','EXECUTE'),
         has_function_privilege('junctura_subject_api','core.subject_access(jsonb)','EXECUTE'),
         has_function_privilege('junctura_directory_api','core.directory_command(text,jsonb)','EXECUTE'),
+        has_function_privilege('junctura_directory_worker','core.directory_command(text,jsonb)','EXECUTE'),
+        has_table_privilege('junctura_directory_worker','app_private.directory_sync_leases','SELECT'),
         has_table_privilege('junctura_subject_api','app_private.subject_bindings','SELECT'),
         has_table_privilege('junctura_subject_api','execution_private.subject_consents','SELECT'),
         has_table_privilege('junctura_directory_api','app_private.directory_units','SELECT'),
         bool_and(c.relrowsecurity AND c.relforcerowsecurity)
         FROM pg_class c WHERE (c.oid='app_private.subject_bindings'::regclass OR c.oid='app_private.directory_members'::regclass
-          OR c.oid='execution_private.subject_consents'::regclass);`]);
-    assert.equal(subjectDirectoryAcl.stdout.trim(), "t|t|t|t|f|f|f|t",
+          OR c.oid='execution_private.subject_consents'::regclass OR c.oid='app_private.directory_sync_leases'::regclass
+          OR c.oid='app_private.subject_binding_scopes'::regclass);`]);
+    assert.equal(subjectDirectoryAcl.stdout.trim(), "t|t|t|t|t|f|f|f|f|t",
       "Restore preserves subject/directory RPC grants, private ACLs and forced tenant RLS");
     for (const [tenant, expected] of [["tenant-a", "1"], ["tenant-b", "0"]]) {
       const guarded = await docker(["exec", target, "psql", "-U", "junctura_admin", "-d", "recovered", "-Atc",
@@ -212,13 +219,14 @@ test("pg_dump/pg_restore preserves real data and tenant RLS in an isolated tempo
     // The verified-subject gate still refuses unbound claims and a mapped
     // person reads only their own rows after the restore.
     const bindingClaims=JSON.stringify({tenant_id:'tenant-a',iss:'https://recovery.example.invalid',sub:`recovery-${id}`,subject_id:`subject-${id}`});
+    const unboundClaims=JSON.stringify({tenant_id:'tenant-a',iss:'https://recovery.example.invalid',
+      sub:`unbound-${id}`,subject_id:`subject-${id}`});
     const gated=await docker(['exec',target,'psql','-U','junctura_admin','-d','recovered','-v','ON_ERROR_STOP=1','-Atc',
-      `SET ROLE junctura_subject_api; SELECT set_config('request.jwt.claims','${bindingClaims}',false);
+      `SET ROLE junctura_subject_api; SELECT set_config('request.jwt.claims','${unboundClaims}',false);
         SELECT core.subject_binding('{}'::jsonb)->>'error';`]);
     assert.equal(gated.stdout.trim().split(/\r?\n/).at(-1),'verified_subject_required',
       'A restored binding gate still refuses an operator-less claim');
-    await sourceSql(`INSERT INTO app_private.subject_bindings(tenant_id,issuer,subject_id,login_subject)
-      VALUES('tenant-a','https://recovery.example.invalid','subject-${id}','recovery-${id}');`);
+
     const mapped=await docker(['exec',target,'psql','-U','junctura_admin','-d','recovered','-v','ON_ERROR_STOP=1','-Atc',
       `SET ROLE junctura_subject_api; SELECT set_config('request.jwt.claims','${bindingClaims}',false);
         SELECT core.subject_binding('{}'::jsonb)->'value'->>'subjectId';`]);
@@ -230,7 +238,12 @@ test("pg_dump/pg_restore preserves real data and tenant RLS in an isolated tempo
     assert.equal(auditQuery.stdout.trim().split(/\r?\n/).at(-1),'t','Restored protected audit query returns the event');
   } finally {
     if (target && /^[0-9a-f]{64}$/.test(target)) await docker(["stop", target]);
-    await sourceSql(`DELETE FROM app_private.subject_bindings WHERE tenant_id='tenant-a' AND login_subject='recovery-${id}';`).catch(() => {});
+    if (bindingSeeded) await sourceSql(`BEGIN;
+      ALTER TABLE app_private.subject_bindings DISABLE TRIGGER subject_binding_guard;
+      DELETE FROM app_private.subject_bindings WHERE tenant_id='tenant-a' AND issuer='https://recovery.example.invalid'
+        AND login_subject='recovery-${id}' AND subject_id='subject-${id}';
+      ALTER TABLE app_private.subject_bindings ENABLE TRIGGER subject_binding_guard;
+      COMMIT;`);
     if (applicationSeeded) await sourceSql(`DELETE FROM core.app_records WHERE owner_app_id='${id}' AND collection='recovery_fixture';
       DELETE FROM app_private.audit WHERE tenant_id='tenant-a' AND resource_id='${id}';
       DELETE FROM app_private.principals WHERE tenant_id='tenant-a' AND subject='recovery-${id}' AND management_client='restore-${id}';

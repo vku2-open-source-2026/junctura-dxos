@@ -34,6 +34,54 @@ CREATE POLICY record_tenant_isolation ON app_private.subject_bindings TO junctur
   WITH CHECK (tenant_id = (current_setting('request.jwt.claims', true)::jsonb->>'tenant_id'));
 REVOKE ALL ON app_private.subject_bindings FROM PUBLIC;
 
+-- A shared namespace gives cross-column uniqueness even to concurrent
+-- inserts at repeatable-read isolation. Bindings can be retired or corrected
+-- only through an explicit operator reconciliation of their dependent data.
+CREATE TABLE app_private.subject_binding_scopes (
+  tenant_id text NOT NULL,
+  issuer text NOT NULL,
+  PRIMARY KEY (tenant_id, issuer)
+);
+ALTER TABLE app_private.subject_binding_scopes ENABLE ROW LEVEL SECURITY;
+ALTER TABLE app_private.subject_binding_scopes FORCE ROW LEVEL SECURITY;
+CREATE POLICY record_tenant_isolation ON app_private.subject_binding_scopes TO junctura_app_owner
+  USING (tenant_id = current_setting('request.jwt.claims',true)::jsonb->>'tenant_id')
+  WITH CHECK (tenant_id = current_setting('request.jwt.claims',true)::jsonb->>'tenant_id');
+REVOKE ALL ON app_private.subject_binding_scopes FROM PUBLIC;
+
+CREATE FUNCTION app_private.subject_binding_guard() RETURNS trigger
+LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog AS $$
+DECLARE original text := current_setting('request.jwt.claims',true);
+BEGIN
+  IF TG_OP='DELETE' THEN
+    RAISE EXCEPTION 'subject bindings require operator reconciliation to delete';
+  ELSIF TG_OP='UPDATE' THEN
+    IF (OLD.tenant_id,OLD.issuer,OLD.subject_id,OLD.login_subject) IS DISTINCT FROM
+       (NEW.tenant_id,NEW.issuer,NEW.subject_id,NEW.login_subject) THEN
+      RAISE EXCEPTION 'subject bindings require operator reconciliation to reassign';
+    END IF;
+    RETURN NEW;
+  END IF;
+
+  PERFORM set_config('request.jwt.claims',jsonb_build_object('tenant_id',NEW.tenant_id)::text,true);
+  INSERT INTO app_private.subject_binding_scopes (tenant_id,issuer) VALUES (NEW.tenant_id,NEW.issuer)
+    ON CONFLICT (tenant_id,issuer) DO UPDATE SET issuer=EXCLUDED.issuer;
+  IF NEW.subject_id=NEW.login_subject OR EXISTS (
+    SELECT FROM app_private.subject_bindings b WHERE b.tenant_id=NEW.tenant_id AND b.issuer=NEW.issuer
+      AND (b.subject_id=NEW.login_subject OR b.login_subject=NEW.subject_id)
+  ) THEN
+    RAISE EXCEPTION 'subject ids and login subjects must not share identifiers' USING ERRCODE='23505';
+  END IF;
+  -- Order binding creation against consent writes for this login.
+  PERFORM pg_advisory_xact_lock(hashtextextended(jsonb_build_array(
+    'subject-consent-limit',NEW.tenant_id,NEW.issuer,NEW.login_subject)::text,0));
+  PERFORM set_config('request.jwt.claims',coalesce(original,''),true);
+  RETURN NEW;
+END $$;
+REVOKE ALL ON FUNCTION app_private.subject_binding_guard() FROM PUBLIC;
+CREATE TRIGGER subject_binding_guard BEFORE INSERT OR UPDATE OR DELETE ON app_private.subject_bindings
+  FOR EACH ROW EXECUTE FUNCTION app_private.subject_binding_guard();
+
 -- Read-side check: the caller's own subject_id claim must be bound to the
 -- caller's login subject in the verified tenant and issuer. Everything else
 -- returns the same anonymous refusal; no foreign existence is disclosed.

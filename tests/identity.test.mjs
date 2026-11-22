@@ -8,7 +8,7 @@ import { HttpError, json } from "../src/platform/http/http.mjs";
 
 const identity = {
   tenantId: "tenant-a", subject: "login-1", issuer: "https://identity.example.invalid",
-  clientId: "junctura-console", roles: ["core-reader"], units: ["unit-a"], groups: ["/unit-a/reviewers"],
+  clientId: "junctura-console", roles: ["core-reader", "regulator"], units: ["unit-a"], groups: ["/unit-a/reviewers"],
 };
 let subjectId;
 let reply;

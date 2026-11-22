@@ -10,6 +10,7 @@ import { parseStrictJson } from "../capability/compatibility/compatibility.mjs";
 import { HttpError, json, logicalRequestDigest, readBody, requireWriter, uuidPattern } from "../../platform/http/http.mjs";
 
 export const CONSENTS_PATH = "/v1/me/consents";
+export const isPlannedSubjectPath = path => /^\/v1\/me\/(?:data-access\/[^/]+\/flag|emergency-accesses\/[^/]+\/feedback)$/.test(path);
 export const EMERGENCY_PATH = "/v1/emergency-accesses";
 
 const capabilityPattern = /^urn:junctura:capability:[0-9a-f-]{36}:[a-z][a-z0-9-]{0,62}$/;
@@ -65,10 +66,6 @@ export async function handleConsent(request, response, identity, config, url) {
   response.setHeader("Cache-Control", "no-store");
   const path = url.pathname;
   if (path === CONSENTS_PATH) {
-    // Consent routes use the verified subject identity: without a subjectId
-    // claim there is no canonical data subject, so every consent operation
-    // refuses before touching stored rows. The database re-checks the binding.
-    if (!identity.subjectId) throw new HttpError(403, "verified_subject_required");
     if (request.method === "GET") {
       return json(response, 200, (await command(config, identity, "junctura_subject_api", "subject_consent", "list", {})).value);
     }
@@ -85,7 +82,6 @@ export async function handleConsent(request, response, identity, config, url) {
   if (revoke) {
     if (revoke[1].length !== 36 || !uuidPattern.test(revoke[1])) throw new HttpError(400, "invalid_consent_path");
     if (request.method !== "POST") throw new HttpError(405, "method_not_allowed");
-    if (!identity.subjectId) throw new HttpError(403, "verified_subject_required");
     const body = await readObject(request);
     if (Object.keys(body).length) throw new HttpError(400, "invalid_consent");
     return json(response, 200, (await command(config, identity, "junctura_subject_api", "subject_consent", "revoke", { consentId: revoke[1] })).value);

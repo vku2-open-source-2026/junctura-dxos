@@ -4,14 +4,14 @@
 // service account. Organization groups live under a top-level per-tenant
 // namespace group: /{tenant}/{unit}/{group}. Every change is verified by
 // reading the provider back; a change that cannot be confirmed reports
-// failure and leaves the desired state to converge on a retry. The adapter
+// failure and leaves the desired state for reconciliation. The adapter
 // never returns provider internals, only whether a step succeeded.
 const PAGE = 200;
 
 const childOf = (children, name) => (Array.isArray(children) ? children : [])
   .find(child => child?.name === name);
 
-export function createDirectorySync(config, fetcher = fetch) {
+export function createDirectorySync(config, fetcher = fetch, beforeWrite = async () => {}) {
   if (!config.identityUrl || !config.directorySyncClientId || !config.directorySyncSecret) return undefined;
   const [, realm] = /\/realms\/([^/]+)$/.exec(config.identityUrl) ?? [];
   if (!realm) return undefined;
@@ -40,26 +40,29 @@ export function createDirectorySync(config, fetcher = fetch) {
     return cachedToken.value;
   }
 
-  async function call(path, { method = "GET", body } = {}) {
+  async function call(path, { method = "GET", body, expect } = {}) {
+    const accessToken = await token();
+    if (method !== "GET") await beforeWrite();
     let response;
     try {
       response = await fetcher(`${admin}${path}`, {
         method, redirect: "error", signal: AbortSignal.timeout(10000),
-        headers: { Authorization: `Bearer ${await token()}`,
+        headers: { Authorization: `Bearer ${accessToken}`,
           ...(body === undefined ? {} : { "Content-Type": "application/json" }) },
         body: body === undefined ? undefined : JSON.stringify(body),
       });
     } catch { throw new SyncFailure("unavailable"); }
-    // A 404 is a real absence; any other failure or an unreadable body must
-    // never be mistaken for an absent resource. An empty mutation body is no
-    // representation at all, not a malformed one.
     if (response.status === 404) { await response.body?.cancel(); return undefined; }
     if (!response.ok) { await response.body?.cancel(); throw new SyncFailure("unavailable"); }
-    if (response.status === 204) return undefined;
-    const text = await response.text();
-    if (text.trim() === "") return undefined;
-    try { return JSON.parse(text); } catch { throw new SyncFailure("unavailable"); }
+    if (method !== "GET") { await response.body?.cancel(); return; }
+    const value = await response.json().catch(() => { throw new SyncFailure("unavailable"); });
+    if (response.status !== 200 || !expect(value)) throw new SyncFailure("unavailable");
+    return value;
   }
+
+  const isGroup = item => typeof item?.id === "string" && !!item.id &&
+    typeof item.name === "string" && typeof item.path === "string";
+  const isUser = item => typeof item?.id === "string" && !!item.id;
 
   // Listing endpoints page by default; only a full walk can prove absence.
   // Servers may cap pages below the requested max, so the offset advances by
@@ -69,9 +72,9 @@ export function createDirectorySync(config, fetcher = fetch) {
     let first = 0;
     while (true) {
       const separator = path.includes("?") ? "&" : "?";
-      const batch = await call(`${path}${separator}first=${first}&max=${PAGE}`);
+      const batch = await call(`${path}${separator}first=${first}&max=${PAGE}`,
+        { expect: value => Array.isArray(value) && value.every(isGroup) });
       if (batch === undefined) return undefined;
-      if (!Array.isArray(batch)) throw new SyncFailure("unavailable");
       items.push(...batch);
       if (batch.length === 0) return items;
       first += batch.length;
@@ -79,20 +82,30 @@ export function createDirectorySync(config, fetcher = fetch) {
     }
   }
 
+  async function findNamespace(tenant) {
+    const roots = await allPages(`/groups?search=${encodeURIComponent(tenant)}&exact=true`);
+    if (!roots) throw new SyncFailure("unavailable");
+    return roots.find(group => group.path === `/${tenant}`);
+  }
+
   async function namespace(tenant) {
-    const read = async () => (await allPages(`/groups?search=${encodeURIComponent(tenant)}&exact=true`))
-      ?.find(group => group?.name === tenant);
-    const top = await read();
-    if (top?.id) return top;
+    const top = await findNamespace(tenant);
+    if (top) return top;
     await call("/groups", { method: "POST", body: { name: tenant } });
-    const created = await read();
-    if (!created?.id) throw new SyncFailure("unavailable");
+    const created = await findNamespace(tenant);
+    if (!created) throw new SyncFailure("unavailable");
     return created;
   }
 
-  // Exact-name lookup of an existing child, without creating anything.
   async function findChild(parent, name) {
+    if (!parent) return undefined;
     return childOf(await allPages(`/groups/${parent.id}/children`), name);
+  }
+
+  async function requireChild(parent, name) {
+    const child = await findChild(parent, name);
+    if (!child) throw new SyncFailure("unavailable");
+    return child;
   }
 
   async function ensureChild(parent, name) {
@@ -104,28 +117,22 @@ export function createDirectorySync(config, fetcher = fetch) {
     return created;
   }
 
-  async function locate(tenant, unit, group) {
-    const root = await namespace(tenant);
-    const unitGroup = await ensureChild(root, unit);
-    if (group === undefined) return unitGroup;
-    return ensureChild(unitGroup, group);
-  }
-
   async function removeGroupById(id) {
-    for (const subgroup of (await allPages(`/groups/${id}/children`)) ?? []) {
-      await removeGroupById(subgroup.id);
-    }
     await call(`/groups/${id}`, { method: "DELETE" });
-    if ((await call(`/groups/${id}`)) !== undefined) throw new SyncFailure("unavailable");
+    if ((await call(`/groups/${id}`, { expect: isGroup })) !== undefined) throw new SyncFailure("unavailable");
   }
 
   const user = async subject => {
-    const found = await call(`/users/${encodeURIComponent(subject)}`);
-    if (!found?.id) throw new SyncFailure("not_found");
+    const found = await call(`/users/${encodeURIComponent(subject)}`, { expect: isUser });
+    if (!found) throw new SyncFailure("not_found");
     return found;
   };
 
-  const memberGroups = async subject => (await allPages(`/users/${subject.id}/groups`)) ?? [];
+  const memberGroups = async subject => {
+    const groups = await allPages(`/users/${subject.id}/groups`);
+    if (!groups) throw new SyncFailure("unavailable");
+    return groups;
+  };
 
   const underUnit = (membership, unitGroup) => membership?.path === unitGroup.path ||
     membership.path?.startsWith(`${unitGroup.path}/`);
@@ -141,18 +148,18 @@ export function createDirectorySync(config, fetcher = fetch) {
       }
     },
     async putUnit(tenant, unit) {
-      await locate(tenant, unit);
+      await ensureChild(await namespace(tenant), unit);
     },
     async removeUnit(tenant, unit) {
-      const root = await namespace(tenant);
+      const root = await findNamespace(tenant);
       const unitGroup = await findChild(root, unit);
       if (unitGroup?.id) await removeGroupById(unitGroup.id);
     },
     async putGroup(tenant, unit, group) {
-      await locate(tenant, unit, group);
+      await ensureChild(await ensureChild(await namespace(tenant), unit), group);
     },
     async removeGroup(tenant, unit, group) {
-      const root = await namespace(tenant);
+      const root = await findNamespace(tenant);
       const unitGroup = await findChild(root, unit);
       if (!unitGroup?.id) return;
       const subgroup = await findChild(unitGroup, group);
@@ -167,11 +174,11 @@ export function createDirectorySync(config, fetcher = fetch) {
       if (!memberships.some(membership => membership.path === `/${tenant}`)) {
         throw new SyncFailure("not_found");
       }
-      const root = await namespace(tenant);
-      const unitGroup = await ensureChild(root, unit);
+      const root = await findNamespace(tenant);
+      const unitGroup = await requireChild(root, unit);
       const desired = new Map([[unitGroup.id, unitGroup]]);
       for (const name of groups) {
-        const group = await ensureChild(unitGroup, name);
+        const group = await requireChild(unitGroup, name);
         desired.set(group.id, group);
       }
       for (const membership of memberships) {
@@ -179,7 +186,9 @@ export function createDirectorySync(config, fetcher = fetch) {
           await call(`/users/${person.id}/groups/${membership.id}`, { method: "DELETE" });
         }
       }
+      const existing = new Set(memberships.map(membership => membership.id));
       for (const id of desired.keys()) {
+        if (existing.has(id)) continue;
         await call(`/users/${person.id}/groups/${id}`, { method: "PUT" });
       }
       // Read the whole membership set back: only an exact match of every
@@ -190,7 +199,7 @@ export function createDirectorySync(config, fetcher = fetch) {
       if (actual.size !== desired.size) throw new SyncFailure("unavailable");
     },
     async removeMember(tenant, unit, subject) {
-      const root = await namespace(tenant);
+      const root = await findNamespace(tenant);
       const unitGroup = await findChild(root, unit);
       if (!unitGroup?.id) return;
       let person;
