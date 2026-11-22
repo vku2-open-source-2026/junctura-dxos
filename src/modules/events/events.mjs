@@ -1,0 +1,197 @@
+// SPDX-FileCopyrightText: 2026 Junctura Contributors
+// SPDX-License-Identifier: Apache-2.0
+import { setTimeout as delay } from "node:timers/promises";
+import { HttpError } from "../../platform/http/http.mjs";
+import { signInternalToken } from "../../platform/security/internal-token.mjs";
+import { workflowRequest } from "../workflow/client.mjs";
+
+export const EVENTS_PATH = "/v1/events";
+const taskId = /^[A-Za-z0-9:_-]{1,128}$/;
+const eventNames = new Set(["record.status.changed", "consent.revoked", "workflow.task.created"]);
+const heartbeatMs = 10000;
+
+async function eventRpc(config, identity, name, body, signal) {
+  const jwt = signInternalToken(config.dataSecret, {
+    role: name === "event_observe_tasks" ? "junctura_event_observer" : "junctura_event_api",
+    aud: "junctura-data", exp: Math.floor(Date.now() / 1000) + 30,
+    tenant_id: identity.tenantId, iss: identity.issuer, sub: identity.subject, client_id: identity.clientId,
+    subject_id: identity.subjectId, groups: identity.groups,
+  });
+  try {
+    const timeout = AbortSignal.timeout(5000);
+    const response = await fetch(`${config.dataUrl}/rpc/${name}`, {
+      method: "POST", redirect: "error", signal: signal ? AbortSignal.any([timeout, signal]) : timeout,
+      headers: { Authorization: `Bearer ${jwt}`, "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    if (response.ok) {
+      const result = await response.json();
+      if (result.status === (name === "event_observe_tasks" ? 204 : 200)) return result.value;
+    }
+  } catch { /* Pass a single provider error through the stream boundary. */ }
+  throw new HttpError(503, "events_unavailable");
+}
+
+function taskReference(task, tenantId) {
+  if (task?.tenantId !== tenantId || task.suspended === true) return null;
+  const { id, processInstanceId, processDefinitionId, taskDefinitionKey, createTime } = task;
+  const created = Date.parse(createTime);
+  if (!Number.isFinite(created) || ![id, processInstanceId, processDefinitionId, taskDefinitionKey]
+    .every(value => typeof value === "string" && taskId.test(value))) return null;
+  return { taskId: id, executionId: processInstanceId, definitionId: processDefinitionId,
+    stepKey: taskDefinitionKey, createdAt: new Date(created).toISOString() };
+}
+
+async function taskStillActive(config, tenantId, target) {
+  try {
+    const current = taskReference(await workflowRequest(config, `runtime/tasks/${encodeURIComponent(target.taskId)}`), tenantId);
+    return current && Object.entries(current).every(([key, value]) => target[key] === value);
+  } catch (error) {
+    if (error.status === 404) return false;
+    throw error;
+  }
+}
+
+async function observeTasks(config, tenantId, startedAt, signal) {
+  const floor = new Date(Math.max(startedAt, Date.now() - 120000)).toISOString();
+  const params = new URLSearchParams({ tenantId, createdAfter: floor, size: "100", sort: "id", order: "asc", active: "true" });
+  const tasks = [];
+  for (let start = 0; start < 400; start += 100) {
+    signal.throwIfAborted();
+    params.set("start", String(start));
+    const page = await workflowRequest(config, `runtime/tasks?${params}`);
+    if (!Array.isArray(page?.data) || page.data.length > 100 || !Number.isInteger(page.total) || page.total > 400) {
+      throw new HttpError(503, "events_unavailable");
+    }
+    for (const row of page.data) {
+      const task = taskReference(row, tenantId);
+      if (task && Date.parse(task.createdAt) > Date.parse(floor)) tasks.push(task);
+    }
+    if (!page.data.length || start + page.data.length >= page.total) break;
+  }
+  if (tasks.length) await eventRpc(config, { tenantId }, "event_observe_tasks", { payload: tasks }, signal);
+}
+
+export function createEventStreams(config) {
+  const tenants = new Map();
+  const connections = new Set();
+  let closed = false;
+
+  function scan(tenantId, state) {
+    if (!config.workflowUrl || state.scan || Date.now() < state.nextScan) return;
+    const floor = Math.min(...state.clients.values());
+    if (!Number.isFinite(floor)) return;
+    state.nextScan = Date.now() + 1000;
+    state.scan = observeTasks(config, tenantId, floor, state.control.signal)
+      .catch(error => {
+        if (error instanceof HttpError && error.message === "events_unavailable" && !state.control.signal.aborted) {
+          for (const stop of state.clients.keys()) stop();
+        }
+      }).finally(() => { state.scan = null; });
+  }
+
+  async function handle(request, response, identity, reauthorize, url) {
+    if (request.method !== "GET") {
+      response.setHeader("Allow", "GET");
+      throw new HttpError(405, "method_not_allowed");
+    }
+    if (url.search) throw new HttpError(400, "invalid_query");
+    if (!identity.clientId) throw new HttpError(403, "verified_client_required");
+    if (!config.dataUrl || closed) throw new HttpError(503, "events_unavailable");
+
+    const tenantId = identity.tenantId;
+    const state = tenants.get(tenantId) ?? { clients: new Map(), control: new AbortController(), nextScan: 0 };
+    if (connections.size >= 64 || state.clients.size >= 8) throw new HttpError(429, "rate_limited");
+    const control = new AbortController();
+    const stop = () => {
+      control.abort();
+      if (!response.destroyed) response.destroy();
+    };
+    const { signal } = control;
+    const expiresAt = identity.credentialExpiresAt;
+    if (!Number.isFinite(expiresAt) || expiresAt <= Date.now()) throw new HttpError(401, "invalid_token");
+    const timer = setTimeout(stop, Math.min(expiresAt - Date.now(), 2 ** 31 - 1));
+    connections.add(stop);
+    tenants.set(tenantId, state);
+    state.clients.set(stop, Infinity);
+    response.once("close", stop);
+
+    const command = (operation, payload, caller = identity) =>
+      eventRpc(config, caller, "event_stream_command", { operation, payload }, signal);
+    const currentIdentity = async () => {
+      const current = await reauthorize();
+      if (Date.now() >= expiresAt || current.credentialExpiresAt <= Date.now() ||
+          current.tenantId !== tenantId || current.issuer !== identity.issuer ||
+          current.subject !== identity.subject || current.clientId !== identity.clientId) {
+        throw new HttpError(401, "invalid_token");
+      }
+      signal.throwIfAborted();
+      return current;
+    };
+    const write = frame => {
+      signal.throwIfAborted();
+      if (!response.write(frame)) stop();
+    };
+
+    try {
+      const first = await command("start", {});
+      const startedAt = Date.parse(first?.startedAt);
+      if (!Number.isFinite(startedAt) || !/^\d+$/.test(first?.sequence ?? "")) throw new HttpError(503, "events_unavailable");
+      state.clients.set(stop, startedAt);
+      signal.throwIfAborted();
+      response.writeHead(200, {
+        "Content-Type": "text/event-stream; charset=utf-8",
+        "Cache-Control": "no-store",
+        "X-Content-Type-Options": "nosniff",
+        "X-Accel-Buffering": "no",
+      });
+      write(": connected\n\n");
+      let after = first.sequence;
+      let heartbeatAt = Date.now() + heartbeatMs;
+      while (!signal.aborted) {
+        scan(tenantId, state);
+        const page = await command("poll", { after });
+        if (!page || page.overflow || !Array.isArray(page.items) || page.items.length > 64) break;
+        for (const item of page.items) {
+          if (!eventNames.has(item.event) || typeof item.sequence !== "string" || !/^\d+$/.test(item.sequence) ||
+              BigInt(item.sequence) !== BigInt(after) + 1n) throw new HttpError(503, "events_unavailable");
+          after = item.sequence;
+          if (item.event === "workflow.task.created") {
+            if (!item.task || !(Date.parse(item.task.createdAt) > startedAt) || !await taskStillActive(config, tenantId, item.task)) continue;
+          }
+          const caller = await currentIdentity();
+          const data = await command("deliver", { sequence: after }, caller);
+          if (data && Date.now() < Math.min(expiresAt, caller.credentialExpiresAt)) {
+            write(`event: ${item.event}\ndata: ${JSON.stringify(data)}\n\n`);
+          }
+        }
+        if (Date.now() >= heartbeatAt) {
+          await currentIdentity();
+          write(": heartbeat\n\n");
+          heartbeatAt = Date.now() + heartbeatMs;
+        }
+        await delay(1000, undefined, { signal });
+      }
+    } catch (error) {
+      if (!response.headersSent && !signal.aborted) throw error;
+    } finally {
+      clearTimeout(timer);
+      response.off("close", stop);
+      connections.delete(stop);
+      state.clients.delete(stop);
+      if (state.clients.size === 0) {
+        state.control.abort();
+        tenants.delete(tenantId);
+      }
+      if (response.headersSent && !response.destroyed) response.end();
+    }
+  }
+
+  return {
+    handle,
+    close() {
+      closed = true;
+      for (const stop of connections) stop();
+    },
+  };
+}

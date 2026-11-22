@@ -1,6 +1,6 @@
 // SPDX-FileCopyrightText: 2026 Junctura Contributors
 // SPDX-License-Identifier: Apache-2.0
-import type { AuditEventEntry } from "../../../types";
+import type { AuditQueryEntry } from "../../../types";
 
 export type RangeFilter = "24h" | "7d" | "30d" | "all";
 export type ResultFilter = "success" | "denied" | "error" | "all";
@@ -33,8 +33,16 @@ export function resultOf(outcome: string): AuditResult {
   return "success";
 }
 
-export function buildAuditRows(entries: AuditEventEntry[]): AuditRow[] {
-  return entries.map((entry) => ({
+export function buildAuditRows(entries: AuditQueryEntry[]): AuditRow[] {
+  return entries.map((entry) => entry.source === "application" ? {
+    id: entry.eventId,
+    timestamp: entry.occurredAt,
+    actor: entry.appId,
+    action: entry.action,
+    target: entry.unit ?? "",
+    result: resultOf(entry.outcome),
+    outcome: entry.outcome,
+  } : {
     id: entry.eventId,
     timestamp: entry.occurredAt,
     actor:
@@ -49,7 +57,7 @@ export function buildAuditRows(entries: AuditEventEntry[]): AuditRow[] {
       .join(" · "),
     result: resultOf(entry.outcome),
     outcome: entry.outcome,
-  }));
+  });
 }
 
 export function filterAuditRows(

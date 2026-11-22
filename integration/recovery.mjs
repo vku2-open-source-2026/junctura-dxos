@@ -69,7 +69,9 @@ test("pg_dump/pg_restore preserves real data and tenant RLS in an isolated tempo
     }
     assert.ok(ready, "Isolated PostgreSQL completed initialization");
     await docker(["exec", target, "createdb", "-U", "junctura_admin", "recovered"]);
-    await docker(["exec", target, "psql", "-U", "junctura_admin", "-d", "recovered", "-v", "ON_ERROR_STOP=1", "-c", "CREATE ROLE junctura_api NOLOGIN NOBYPASSRLS; CREATE ROLE junctura_app_api NOLOGIN NOBYPASSRLS; CREATE ROLE junctura_app_owner NOLOGIN NOBYPASSRLS; CREATE ROLE junctura_resource_api NOLOGIN NOBYPASSRLS; CREATE ROLE junctura_record_api NOLOGIN NOBYPASSRLS; ALTER ROLE junctura_record_api SET statement_timeout='4s'; CREATE ROLE junctura_audit_api NOLOGIN NOBYPASSRLS; CREATE ROLE junctura_capability_api NOLOGIN NOBYPASSRLS; CREATE ROLE junctura_trust_api NOLOGIN NOBYPASSRLS; CREATE ROLE junctura_execution_api NOLOGIN NOBYPASSRLS; CREATE ROLE junctura_composition_api NOLOGIN NOBYPASSRLS; CREATE ROLE junctura_subject_api NOLOGIN NOBYPASSRLS; CREATE ROLE junctura_directory_api NOLOGIN NOBYPASSRLS; CREATE ROLE junctura_directory_worker NOLOGIN NOBYPASSRLS; CREATE ROLE junctura_storage_api NOLOGIN NOBYPASSRLS; CREATE ROLE junctura_storage_collections_api NOLOGIN NOBYPASSRLS; CREATE ROLE junctura_workflow_audit_api NOLOGIN NOBYPASSRLS; CREATE ROLE junctura_workflow_api NOLOGIN NOBYPASSRLS; CREATE ROLE junctura_workflow_worker NOLOGIN NOBYPASSRLS; CREATE ROLE junctura_application_stats_api NOLOGIN NOBYPASSRLS;"]);
+    await docker(["exec", target, "psql", "-U", "junctura_admin", "-d", "recovered", "-v", "ON_ERROR_STOP=1", "-c", "CREATE ROLE junctura_api NOLOGIN NOBYPASSRLS; CREATE ROLE junctura_app_api NOLOGIN NOBYPASSRLS; CREATE ROLE junctura_app_owner NOLOGIN NOBYPASSRLS; CREATE ROLE junctura_resource_api NOLOGIN NOBYPASSRLS; CREATE ROLE junctura_record_api NOLOGIN NOBYPASSRLS; ALTER ROLE junctura_record_api SET statement_timeout='4s'; CREATE ROLE junctura_audit_api NOLOGIN NOBYPASSRLS; CREATE ROLE junctura_capability_api NOLOGIN NOBYPASSRLS; CREATE ROLE junctura_trust_api NOLOGIN NOBYPASSRLS; CREATE ROLE junctura_execution_api NOLOGIN NOBYPASSRLS; CREATE ROLE junctura_composition_api NOLOGIN NOBYPASSRLS; CREATE ROLE junctura_subject_api NOLOGIN NOBYPASSRLS; CREATE ROLE junctura_directory_api NOLOGIN NOBYPASSRLS; CREATE ROLE junctura_directory_worker NOLOGIN NOBYPASSRLS; CREATE ROLE junctura_storage_api NOLOGIN NOBYPASSRLS; CREATE ROLE junctura_storage_collections_api NOLOGIN NOBYPASSRLS; CREATE ROLE junctura_workflow_audit_api NOLOGIN NOBYPASSRLS; CREATE ROLE junctura_workflow_api NOLOGIN NOBYPASSRLS; CREATE ROLE junctura_workflow_worker NOLOGIN NOBYPASSRLS; CREATE ROLE junctura_application_stats_api NOLOGIN NOBYPASSRLS;" +
+      "CREATE ROLE junctura_event_api NOLOGIN NOBYPASSRLS; CREATE ROLE junctura_event_observer NOLOGIN NOBYPASSRLS; " +
+      "CREATE ROLE junctura_search_worker NOLOGIN NOBYPASSRLS;"]);
     await sourceSql(`INSERT INTO app_private.subject_bindings(tenant_id,issuer,subject_id,login_subject)
       VALUES('tenant-a','https://recovery.example.invalid','subject-${id}','recovery-${id}');`);
     bindingSeeded = true;
@@ -155,6 +157,22 @@ test("pg_dump/pg_restore preserves real data and tenant RLS in an isolated tempo
     const auditAcl=await docker(['exec',target,'psql','-U','junctura_admin','-d','recovered','-Atc',
       "SELECT has_function_privilege('junctura_audit_api','core.audit_query(jsonb)','EXECUTE'),has_table_privilege('junctura_audit_api','app_private.audit','INSERT'),has_table_privilege('junctura_app_api','app_private.audit','INSERT');"]);
     assert.equal(auditAcl.stdout.trim(),'t|f|f','Restore preserves audit role separation');
+    const eventAcl = await docker(["exec", target, "psql", "-U", "junctura_admin", "-d", "recovered", "-Atc",
+      `SELECT has_function_privilege('junctura_event_api','core.event_stream_command(text,jsonb)','EXECUTE'),
+        has_function_privilege('junctura_event_observer','core.event_observe_tasks(jsonb)','EXECUTE'),
+        has_function_privilege('junctura_event_api','core.event_observe_tasks(jsonb)','EXECUTE'),
+        has_table_privilege('junctura_event_api','app_private.event_notifications','SELECT'),
+        has_table_privilege('junctura_audit_api','app_private.audit_app_payloads','SELECT'),
+        has_function_privilege('junctura_subject_api','core.subject_access_command(text,jsonb)','EXECUTE'),
+        has_table_privilege('junctura_subject_api','app_private.subject_access_reports','UPDATE'),
+        count(*), bool_and(relrowsecurity AND relforcerowsecurity)
+        FROM pg_class WHERE oid IN ('app_private.audit_app_payloads'::regclass,
+          'app_private.audit_export_snapshots'::regclass, 'app_private.event_notifications'::regclass,
+          'app_private.event_observed_tasks'::regclass, 'app_private.object_quotas'::regclass,
+          'app_private.search_index_jobs'::regclass, 'app_private.subject_access_reports'::regclass,
+          'app_private.emergency_feedback'::regclass);`]);
+    assert.equal(eventAcl.stdout.trim(), "t|t|f|f|f|t|f|8|t",
+      "Restore preserves private audit, event, quota and search authorities");
     const capabilityAcl=await docker(['exec',target,'psql','-U','junctura_admin','-d','recovered','-Atc',
       "SELECT has_function_privilege('junctura_capability_api','core.capability_command(text,jsonb)','EXECUTE'),has_function_privilege('junctura_capability_api','core.application_command(text,jsonb)','EXECUTE'),has_table_privilege('junctura_capability_api','app_private.capability_versions','SELECT');"]);
     assert.equal(capabilityAcl.stdout.trim(),'t|f|f','Restore preserves capability registry role separation');

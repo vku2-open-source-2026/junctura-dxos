@@ -29,6 +29,7 @@ export function loadConfig(env = process.env) {
   if (env.CLAMAV_TIMEOUT_MS && (!/^\d+$/.test(env.CLAMAV_TIMEOUT_MS) || Number(env.CLAMAV_TIMEOUT_MS) < 1000)) {
     throw new Error("CLAMAV_TIMEOUT_MS must be an integer >= 1000");
   }
+  if (env.MEILI_URL && !env.MEILI_MASTER_KEY) throw new Error("Search configuration is incomplete");
   if (env.WORKFLOW_URL && !env.WORKFLOW_ADMIN_PASSWORD) throw new Error("Workflow configuration is incomplete");
   if (env.SECRETS_URL && !env.SECRETS_TOKEN && !env.SECRETS_TOKEN_FILE) {
     throw new Error("Secrets manager configuration is incomplete");
@@ -53,6 +54,8 @@ export function loadConfig(env = process.env) {
     secretsToken: env.SECRETS_TOKEN,
     secretsTokenFile: env.SECRETS_TOKEN_FILE,
     secretsMount: env.SECRETS_MOUNT || "secret",
+    searchUrl: env.MEILI_URL,
+    searchKey: env.MEILI_MASTER_KEY,
     workflowUrl: env.WORKFLOW_URL,
     workflowPassword: env.WORKFLOW_ADMIN_PASSWORD,
     // Without a client secret the directory sync stays disabled and Core still

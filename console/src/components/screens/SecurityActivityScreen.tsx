@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Download, RefreshCw } from "lucide-react";
-import type { AuditEventEntry, AuditVerification } from "../../types";
+import type { AuditQueryEntry, AuditVerification } from "../../types";
 import { ApiError, api } from "../../services/apiClient";
 import { useI18n } from "../../locales/i18n";
 import { PageHeader } from "../layout/PageHeader";
@@ -24,7 +24,7 @@ export const SecurityActivityScreen: React.FC = () => {
   const { showToast } = useToast();
   const a = t.audit;
 
-  const [entries, setEntries] = useState<AuditEventEntry[]>([]);
+  const [entries, setEntries] = useState<AuditQueryEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
   const [loadForbidden, setLoadForbidden] = useState(false);

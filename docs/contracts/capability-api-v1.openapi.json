@@ -3517,251 +3517,215 @@
     },
     "/v1/audit-events": {
       "get": {
-        "operationId": "listAuditEvents",
-        "summary": "List the caller tenant's audit events, newest first",
-        "description": "Implemented. Returns a page of the caller tenant's protected audit events, newest first, filtered by time. Requires a verified management principal with audit.read in its own tenant; the database function enforces the tenant and the permission. The response never carries tokens, secrets or request bodies.",
+        "operationId": "queryAppAuditEvents",
+        "summary": "Query authorized audit events",
+        "description": "app=self selects only events of the verified app. Otherwise a caller with the verified regulator role sees application events for assigned units, with actor, subjectId, resourceRef, purpose and meta withheld for restricted events. A management principal with audit.read can see tenant platform audit items and the structural projection of app events. subjectId filtering is unavailable in the management view. Unit and actor context come from verified identity. Results are ordered by occurredAt and eventId descending. Keep scope and filters unchanged with nextCursor. Existing management clients may use since and until and keep the same platform item fields. The action filter matches the event field on platform items.",
         "tags": [
           "audit-events"
         ],
-        "responses": {
-          "200": {
-            "description": "Success",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AuditLogPage"
-                }
-              }
-            }
-          },
-          "400": {
-            "$ref": "#/components/responses/BadRequest"
-          },
-          "401": {
-            "$ref": "#/components/responses/Unauthorized"
-          },
-          "403": {
-            "$ref": "#/components/responses/Forbidden"
-          },
-          "404": {
-            "$ref": "#/components/responses/NotFound"
-          },
-          "429": {
-            "$ref": "#/components/responses/TooManyRequests"
-          },
-          "503": {
-            "$ref": "#/components/responses/Unavailable"
-          }
-        },
-        "x-junctura-required-permissions": [
-          "audit.read"
-        ],
-        "parameters": [
-          {
-            "name": "since",
-            "in": "query",
-            "description": "Inclusive lower bound on occurredAt (RFC 3339 timestamp).",
-            "schema": {
-              "type": "string",
-              "maxLength": 1024
-            }
-          },
-          {
-            "name": "until",
-            "in": "query",
-            "description": "Inclusive upper bound on occurredAt (RFC 3339 timestamp); must not be earlier than since.",
-            "schema": {
-              "type": "string",
-              "maxLength": 1024
-            }
-          },
-          {
-            "name": "limit",
-            "in": "query",
-            "schema": {
-              "type": "integer",
-              "minimum": 1,
-              "maximum": 100,
-              "default": 50
-            }
-          },
-          {
-            "name": "cursor",
-            "in": "query",
-            "description": "Opaque token returned as nextCursor.",
-            "schema": {
-              "type": "string",
-              "maxLength": 1024
-            }
-          }
-        ],
-        "x-junctura-status": "implemented-audit-query",
+        "x-junctura-status": "implemented-application-audit",
         "x-junctura-source": "src/modules/audit/audit.mjs",
-        "x-junctura-test-suite": "audit",
-        "x-junctura-planned-operation": {
-          "operationId": "queryAppAuditEvents",
-          "summary": "Query authorized audit events",
-          "description": "app=self selects only events of the verified app. Otherwise a caller with the verified regulator role sees application events for assigned units, with actor, subjectId, resourceRef, purpose and meta withheld for restricted events. A management principal with audit.read can see tenant platform audit items and the structural projection of app events. subjectId filtering is unavailable in the management view. Unit and actor context come from verified identity. Results are ordered by occurredAt and eventId descending. Keep scope and filters unchanged with nextCursor. Existing management clients may use since and until and keep the same platform item fields. The action filter matches the event field on platform items.",
-          "tags": ["tenant"],
-          "x-junctura-status": "planned",
-          "x-junctura-query-policy": "closed",
-          "security": [
-            {
-              "oidcBearer": []
-            }
-          ],
-          "x-junctura-core-roles": ["core-reader"],
-          "x-junctura-authority": "tenant",
-          "parameters": [
-            {
-              "name": "app",
-              "in": "query",
-              "schema": {
-                "const": "self"
-              },
-              "example": "self",
-              "description": "Scope to the verified calling app. Required for the app view. Mutually exclusive with unit."
-            },
-            {
-              "name": "action",
-              "in": "query",
-              "schema": {"$ref": "./foundation-api.openapi.json#/components/schemas/AuditAction"},
-              "example": "record.viewed"
-            },
-            {
-              "name": "subjectId",
-              "in": "query",
-              "schema": {"$ref": "./foundation-api.openapi.json#/components/schemas/SubjectId"},
-              "example": "subject-42",
-              "description": "Available to the app and the authorized regulator within their scopes."
-            },
-            {
-              "name": "unit",
-              "in": "query",
-              "schema": {
-                "type": "string",
-                "pattern": "^[a-z][a-z0-9-]{1,63}$"
-              },
-              "example": "unit-a",
-              "description": "Regulator filter for an assigned unit."
-            },
-            {
-              "name": "from",
-              "in": "query",
-              "schema": {
-                "type": "string",
-                "format": "date-time"
-              },
-              "example": "2030-01-10T09:00:00Z",
-              "description": "Inclusive lower timestamp."
-            },
-            {
-              "name": "to",
-              "in": "query",
-              "schema": {
-                "type": "string",
-                "format": "date-time"
-              },
-              "example": "2030-01-12T12:00:00Z",
-              "description": "Inclusive upper timestamp."
-            },
-            {
-              "name": "since",
-              "in": "query",
-              "schema": {
-                "type": "string",
-                "format": "date-time"
-              },
-              "example": "2030-01-10T09:00:00Z",
-              "description": "Legacy alias for from. Supply at most one."
-            },
-            {
-              "name": "until",
-              "in": "query",
-              "schema": {
-                "type": "string",
-                "format": "date-time"
-              },
-              "example": "2030-01-12T12:00:00Z",
-              "description": "Legacy alias for to. Supply at most one."
-            },
-            {"$ref": "./foundation-api.openapi.json#/components/parameters/PlannedLimit"},
-            {"$ref": "./foundation-api.openapi.json#/components/parameters/PlannedCursor"}
-          ],
-          "responses": {
-            "200": {
-              "description": "Successful response.",
-              "headers": {
-                "Cache-Control": {"$ref": "./foundation-api.openapi.json#/components/headers/CacheControl"},
-                "X-Content-Type-Options": {"$ref": "./foundation-api.openapi.json#/components/headers/NoSniff"}
-              },
-              "content": {
-                "application/json": {
-                  "schema": {"$ref": "#/components/schemas/AuditQueryPage"},
-                  "example": {
-                    "items": [
-                      {
-                        "source": "application",
-                        "eventId": "55555555-5555-4555-8555-555555555555",
-                        "appId": "22222222-2222-4222-8222-222222222222",
-                        "occurredAt": "2030-01-10T09:00:00Z",
-                        "actor": {
-                          "kind": "application"
-                        },
-                        "unit": null,
-                        "sensitivity": "restricted",
-                        "action": "record.viewed",
-                        "subjectId": "subject-42",
-                        "resourceRef": {
-                          "type": "record",
-                          "collection": "entries",
-                          "id": "44444444-4444-4444-8444-444444444444"
-                        },
-                        "outcome": "success",
-                        "purpose": "service_review",
-                        "meta": {
-                          "channel": "app"
-                        }
-                      }
-                    ],
-                    "nextCursor": null
-                  }
-                }
-              }
-            },
-            "400": {"$ref": "./foundation-api.openapi.json#/components/responses/PlannedBadRequest"},
-            "401": {"$ref": "./foundation-api.openapi.json#/components/responses/Unauthorized"},
-            "403": {"$ref": "./foundation-api.openapi.json#/components/responses/PlannedForbidden"},
-            "404": {"$ref": "./foundation-api.openapi.json#/components/responses/NotFound"},
-            "429": {"$ref": "./foundation-api.openapi.json#/components/responses/PlannedRateLimited"},
-            "502": {"$ref": "./foundation-api.openapi.json#/components/responses/BadGateway"},
-            "503": {"$ref": "./foundation-api.openapi.json#/components/responses/Unavailable"},
-            "504": {"$ref": "./foundation-api.openapi.json#/components/responses/GatewayTimeout"}
-          }
-        }
-      },
-      "post": {
-        "operationId": "appendAppAuditEvent",
-        "summary": "Append an application audit event",
-        "description": "An active registered app sends only the declared event fields. Core resolves the actor from the app credential or a verified delegated user context bound to the app, stamps the app, unit when verified, and time, and appends to the tenant hash chain. subjectId is supplied only when the event concerns that subject. Use opaque references, coded purpose and non-sensitive meta. An identical retry replays the original 201 receipt. A changed request with the same key returns 422 idempotency_key_reused. Apply app-level event rate limits.",
-        "tags": ["tenant"],
-        "x-junctura-status": "planned",
+        "x-junctura-test-suite": "audit-app",
         "x-junctura-query-policy": "closed",
         "security": [
           {
             "oidcBearer": []
           }
         ],
-        "x-junctura-core-roles": ["core-reader", "core-writer"],
+        "x-junctura-core-roles": [
+          "core-reader"
+        ],
         "x-junctura-authority": "tenant",
         "parameters": [
-          {"$ref": "./foundation-api.openapi.json#/components/parameters/PlannedIdempotencyKey"}
+          {
+            "name": "app",
+            "in": "query",
+            "schema": {
+              "const": "self"
+            },
+            "example": "self",
+            "description": "Scope to the verified calling app. Required for the app view. Mutually exclusive with unit."
+          },
+          {
+            "name": "action",
+            "in": "query",
+            "schema": {
+              "$ref": "./foundation-api.openapi.json#/components/schemas/AuditAction"
+            },
+            "example": "record.viewed"
+          },
+          {
+            "name": "subjectId",
+            "in": "query",
+            "schema": {
+              "$ref": "./foundation-api.openapi.json#/components/schemas/SubjectId"
+            },
+            "example": "subject-42",
+            "description": "Available to the app and the authorized regulator within their scopes."
+          },
+          {
+            "name": "unit",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9-]{1,63}$"
+            },
+            "example": "unit-a",
+            "description": "Regulator filter for an assigned unit."
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "example": "2030-01-10T09:00:00Z",
+            "description": "Inclusive lower timestamp."
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "example": "2030-01-12T12:00:00Z",
+            "description": "Inclusive upper timestamp."
+          },
+          {
+            "name": "since",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "example": "2030-01-10T09:00:00Z",
+            "description": "Legacy alias for from. Supply at most one."
+          },
+          {
+            "name": "until",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "example": "2030-01-12T12:00:00Z",
+            "description": "Legacy alias for to. Supply at most one."
+          },
+          {
+            "$ref": "./foundation-api.openapi.json#/components/parameters/PlannedLimit"
+          },
+          {
+            "$ref": "./foundation-api.openapi.json#/components/parameters/PlannedCursor"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response.",
+            "headers": {
+              "Cache-Control": {
+                "$ref": "./foundation-api.openapi.json#/components/headers/CacheControl"
+              },
+              "X-Content-Type-Options": {
+                "$ref": "./foundation-api.openapi.json#/components/headers/NoSniff"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuditQueryPage"
+                },
+                "example": {
+                  "items": [
+                    {
+                      "source": "application",
+                      "eventId": "55555555-5555-4555-8555-555555555555",
+                      "appId": "22222222-2222-4222-8222-222222222222",
+                      "occurredAt": "2030-01-10T09:00:00Z",
+                      "actor": {
+                        "kind": "application"
+                      },
+                      "unit": null,
+                      "sensitivity": "restricted",
+                      "action": "record.viewed",
+                      "subjectId": "subject-42",
+                      "resourceRef": {
+                        "type": "record",
+                        "collection": "entries",
+                        "id": "44444444-4444-4444-8444-444444444444"
+                      },
+                      "outcome": "success",
+                      "purpose": "service_review",
+                      "meta": {
+                        "channel": "app"
+                      }
+                    }
+                  ],
+                  "nextCursor": null
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "./foundation-api.openapi.json#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "./foundation-api.openapi.json#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "./foundation-api.openapi.json#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "./foundation-api.openapi.json#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "./foundation-api.openapi.json#/components/responses/PlannedRateLimited"
+          },
+          "502": {
+            "$ref": "./foundation-api.openapi.json#/components/responses/BadGateway"
+          },
+          "503": {
+            "$ref": "./foundation-api.openapi.json#/components/responses/Unavailable"
+          },
+          "504": {
+            "$ref": "./foundation-api.openapi.json#/components/responses/GatewayTimeout"
+          }
+        }
+      },
+      "post": {
+        "operationId": "appendAppAuditEvent",
+        "summary": "Append an application audit event",
+        "description": "An active registered app sends only the declared event fields. Core resolves the actor from the app credential or a verified delegated user context bound to the app, stamps the app, unit when verified, and time, and appends to the tenant hash chain. subjectId is supplied only when the event concerns that subject. Use opaque references, coded purpose and non-sensitive meta. An identical retry replays the original 201 receipt. A changed request with the same key returns 422 idempotency_key_reused. Up to 120 new entries per app per minute.",
+        "tags": [
+          "audit-events"
+        ],
+        "x-junctura-status": "implemented-application-audit",
+        "x-junctura-source": "src/modules/audit/audit.mjs",
+        "x-junctura-test-suite": "audit-app",
+        "x-junctura-query-policy": "closed",
+        "security": [
+          {
+            "oidcBearer": []
+          }
+        ],
+        "x-junctura-core-roles": [
+          "core-reader",
+          "core-writer"
+        ],
+        "x-junctura-authority": "tenant",
+        "parameters": [
+          {
+            "$ref": "./foundation-api.openapi.json#/components/parameters/PlannedIdempotencyKey"
+          }
         ],
         "requestBody": {
           "required": true,
           "content": {
             "application/json": {
-              "schema": {"$ref": "#/components/schemas/AppAuditWrite"},
+              "schema": {
+                "$ref": "#/components/schemas/AppAuditWrite"
+              },
               "example": {
                 "action": "record.viewed",
                 "subjectId": "subject-42",
@@ -3784,12 +3748,18 @@
           "201": {
             "description": "Successful response.",
             "headers": {
-              "Cache-Control": {"$ref": "./foundation-api.openapi.json#/components/headers/CacheControl"},
-              "X-Content-Type-Options": {"$ref": "./foundation-api.openapi.json#/components/headers/NoSniff"}
+              "Cache-Control": {
+                "$ref": "./foundation-api.openapi.json#/components/headers/CacheControl"
+              },
+              "X-Content-Type-Options": {
+                "$ref": "./foundation-api.openapi.json#/components/headers/NoSniff"
+              }
             },
             "content": {
               "application/json": {
-                "schema": {"$ref": "#/components/schemas/AppAuditReceipt"},
+                "schema": {
+                  "$ref": "#/components/schemas/AppAuditReceipt"
+                },
                 "example": {
                   "eventId": "55555555-5555-4555-8555-555555555555",
                   "appId": "22222222-2222-4222-8222-222222222222",
@@ -3801,17 +3771,39 @@
               }
             }
           },
-          "400": {"$ref": "./foundation-api.openapi.json#/components/responses/PlannedBadRequest"},
-          "401": {"$ref": "./foundation-api.openapi.json#/components/responses/Unauthorized"},
-          "403": {"$ref": "./foundation-api.openapi.json#/components/responses/PlannedForbidden"},
-          "404": {"$ref": "./foundation-api.openapi.json#/components/responses/NotFound"},
-          "413": {"$ref": "./foundation-api.openapi.json#/components/responses/PlannedTooLarge"},
-          "415": {"$ref": "./foundation-api.openapi.json#/components/responses/UnsupportedMedia"},
-          "422": {"$ref": "#/components/responses/AppAuditWriteUnprocessable"},
-          "429": {"$ref": "./foundation-api.openapi.json#/components/responses/PlannedRateLimited"},
-          "502": {"$ref": "./foundation-api.openapi.json#/components/responses/BadGateway"},
-          "503": {"$ref": "./foundation-api.openapi.json#/components/responses/Unavailable"},
-          "504": {"$ref": "./foundation-api.openapi.json#/components/responses/GatewayTimeout"}
+          "400": {
+            "$ref": "./foundation-api.openapi.json#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "./foundation-api.openapi.json#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "./foundation-api.openapi.json#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "./foundation-api.openapi.json#/components/responses/NotFound"
+          },
+          "413": {
+            "$ref": "./foundation-api.openapi.json#/components/responses/PlannedTooLarge"
+          },
+          "415": {
+            "$ref": "./foundation-api.openapi.json#/components/responses/UnsupportedMedia"
+          },
+          "422": {
+            "$ref": "#/components/responses/AppAuditWriteUnprocessable"
+          },
+          "429": {
+            "$ref": "./foundation-api.openapi.json#/components/responses/PlannedRateLimited"
+          },
+          "502": {
+            "$ref": "./foundation-api.openapi.json#/components/responses/BadGateway"
+          },
+          "503": {
+            "$ref": "./foundation-api.openapi.json#/components/responses/Unavailable"
+          },
+          "504": {
+            "$ref": "./foundation-api.openapi.json#/components/responses/GatewayTimeout"
+          }
         }
       }
     },
@@ -3819,16 +3811,22 @@
       "get": {
         "operationId": "exportAppAuditEvents",
         "summary": "Export an authorized audit view",
-        "description": "app=self selects only events of the verified app. Otherwise a caller with the verified regulator role sees application events for assigned units, with actor, subjectId, resourceRef, purpose and meta withheld for restricted events. A management principal with audit.read can see tenant platform audit items and the structural projection of app events. subjectId filtering is unavailable in the management view. Unit and actor context come from verified identity. Export a consistent snapshot up to the tenant chain head. The first line identifies the head even for an empty result. An empty tenant chain has sequence 0 and a null hash. Event lines carry their chain sequence and stored digest for reconciliation. Scoped exports can have gaps and redacted fields; verify the full tenant chain through the existing privileged verify endpoint.",
-        "tags": ["tenant"],
-        "x-junctura-status": "planned",
+        "description": "app=self selects only events of the verified app. Otherwise a caller with the verified regulator role sees application events for assigned units, with actor, subjectId, resourceRef, purpose and meta withheld for restricted events. A management principal with audit.read can see tenant platform audit items and the structural projection of app events. subjectId filtering is unavailable in the management view. Unit and actor context come from verified identity. Export a consistent snapshot up to the tenant chain head. Each tenant can open two snapshots at a time. Narrow the time range to export more than 10,000 matching events. The first line identifies the head even for an empty result. An empty tenant chain has sequence 0 and a null hash. Event lines carry their chain sequence and stored digest for reconciliation. Scoped exports can have gaps and redacted fields; verify the full tenant chain through the existing privileged verify endpoint.",
+        "tags": [
+          "audit-events"
+        ],
+        "x-junctura-status": "implemented-application-audit",
+        "x-junctura-source": "src/modules/audit/audit.mjs",
+        "x-junctura-test-suite": "audit-app",
         "x-junctura-query-policy": "closed",
         "security": [
           {
             "oidcBearer": []
           }
         ],
-        "x-junctura-core-roles": ["core-reader"],
+        "x-junctura-core-roles": [
+          "core-reader"
+        ],
         "x-junctura-authority": "tenant",
         "parameters": [
           {
@@ -3843,13 +3841,17 @@
           {
             "name": "action",
             "in": "query",
-            "schema": {"$ref": "./foundation-api.openapi.json#/components/schemas/AuditAction"},
+            "schema": {
+              "$ref": "./foundation-api.openapi.json#/components/schemas/AuditAction"
+            },
             "example": "record.viewed"
           },
           {
             "name": "subjectId",
             "in": "query",
-            "schema": {"$ref": "./foundation-api.openapi.json#/components/schemas/SubjectId"},
+            "schema": {
+              "$ref": "./foundation-api.openapi.json#/components/schemas/SubjectId"
+            },
             "example": "subject-42",
             "description": "Available to the app and the authorized regulator within their scopes."
           },
@@ -3888,8 +3890,12 @@
           "200": {
             "description": "The first line is AuditExportHead; subsequent lines are authorized events in increasing chain sequence.",
             "headers": {
-              "Cache-Control": {"$ref": "./foundation-api.openapi.json#/components/headers/CacheControl"},
-              "X-Content-Type-Options": {"$ref": "./foundation-api.openapi.json#/components/headers/NoSniff"}
+              "Cache-Control": {
+                "$ref": "./foundation-api.openapi.json#/components/headers/CacheControl"
+              },
+              "X-Content-Type-Options": {
+                "$ref": "./foundation-api.openapi.json#/components/headers/NoSniff"
+              }
             },
             "content": {
               "application/x-ndjson": {
@@ -3898,19 +3904,39 @@
                   "description": "UTF-8 JSON lines. Each line follows the schema AuditExportLine unless otherwise specified."
                 },
                 "example": "{\"type\":\"chainHead\",\"sequence\":17,\"hash\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"generatedAt\":\"2030-01-12T12:00:00Z\"}\n{\"type\":\"event\",\"sequence\":17,\"hash\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"event\":{\"source\":\"application\",\"eventId\":\"55555555-5555-4555-8555-555555555555\",\"appId\":\"22222222-2222-4222-8222-222222222222\",\"occurredAt\":\"2030-01-10T09:00:00Z\",\"actor\":{\"kind\":\"application\"},\"unit\":null,\"sensitivity\":\"restricted\",\"action\":\"record.viewed\",\"subjectId\":\"subject-42\",\"resourceRef\":{\"type\":\"record\",\"collection\":\"entries\",\"id\":\"44444444-4444-4444-8444-444444444444\"},\"outcome\":\"success\",\"purpose\":\"service_review\",\"meta\":{\"channel\":\"app\"}}}\n",
-                "x-junctura-first-line-schema": {"$ref": "#/components/schemas/AuditExportHead"},
-                "x-junctura-line-schema": {"$ref": "#/components/schemas/AuditExportLine"}
+                "x-junctura-first-line-schema": {
+                  "$ref": "#/components/schemas/AuditExportHead"
+                },
+                "x-junctura-line-schema": {
+                  "$ref": "#/components/schemas/AuditExportLine"
+                }
               }
             }
           },
-          "400": {"$ref": "./foundation-api.openapi.json#/components/responses/PlannedBadRequest"},
-          "401": {"$ref": "./foundation-api.openapi.json#/components/responses/Unauthorized"},
-          "403": {"$ref": "./foundation-api.openapi.json#/components/responses/PlannedForbidden"},
-          "404": {"$ref": "./foundation-api.openapi.json#/components/responses/NotFound"},
-          "429": {"$ref": "./foundation-api.openapi.json#/components/responses/PlannedRateLimited"},
-          "502": {"$ref": "./foundation-api.openapi.json#/components/responses/BadGateway"},
-          "503": {"$ref": "./foundation-api.openapi.json#/components/responses/Unavailable"},
-          "504": {"$ref": "./foundation-api.openapi.json#/components/responses/GatewayTimeout"}
+          "400": {
+            "$ref": "./foundation-api.openapi.json#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "./foundation-api.openapi.json#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "./foundation-api.openapi.json#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "./foundation-api.openapi.json#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "./foundation-api.openapi.json#/components/responses/PlannedRateLimited"
+          },
+          "502": {
+            "$ref": "./foundation-api.openapi.json#/components/responses/BadGateway"
+          },
+          "503": {
+            "$ref": "./foundation-api.openapi.json#/components/responses/Unavailable"
+          },
+          "504": {
+            "$ref": "./foundation-api.openapi.json#/components/responses/GatewayTimeout"
+          }
         }
       }
     },
@@ -4206,143 +4232,128 @@
     },
     "/v1/me/data-access": {
       "get": {
-        "operationId": "getSubjectAccessLog",
-        "summary": "List capability calls that concerned the caller",
-        "description": "Implemented. Returns the newest 200 capability invocations whose consumer named the caller as dataSubject, with purpose, consumer, provider, capability and state. Any verified principal may ask, only about itself, in its own tenant and issuer. No inputs, outputs, tickets or operator identities are returned. Purpose and a SHA-256 of the declared identifier are sealed in the audit chain (event execution.subject_accessed). The hash also covers the kind for canonical identifiers.",
+        "operationId": "listSubjectAccessEvents",
+        "summary": "List the data subject's visible access events",
+        "description": "Use the verified token subjectId, tenant and issuer; a supplied subject identifier never selects another person. A missing verified claim returns 403. Merge capability calls and application events declared visible to this data subject at append time. Order by accessedAt descending and accessId descending. Use accessId for flagging either source. Preserve entries, generatedAt and truncated; truncated is true when nextCursor is present.",
         "tags": [
-          "audit-events"
+          "tenant"
+        ],
+        "x-junctura-query-policy": "closed",
+        "security": [
+          {
+            "oidcBearer": []
+          }
+        ],
+        "x-junctura-core-roles": [
+          "core-reader"
+        ],
+        "x-junctura-authority": "tenant",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200,
+              "default": 200
+            },
+            "example": 100
+          },
+          {
+            "$ref": "./foundation-api.openapi.json#/components/parameters/PlannedCursor"
+          }
         ],
         "responses": {
           "200": {
-            "description": "Access log of the caller",
+            "description": "Successful response.",
+            "headers": {
+              "Cache-Control": {
+                "$ref": "./foundation-api.openapi.json#/components/headers/CacheControl"
+              },
+              "X-Content-Type-Options": {
+                "$ref": "./foundation-api.openapi.json#/components/headers/NoSniff"
+              }
+            },
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/SubjectAccessLog"
+                  "$ref": "#/components/schemas/SubjectAccessPage"
+                },
+                "example": {
+                  "entries": [
+                    {
+                      "source": "application",
+                      "accessId": "app:55555555-5555-4555-8555-555555555555",
+                      "accessedAt": "2030-01-12T12:00:00Z",
+                      "purpose": "service_review",
+                      "flaggedAt": null,
+                      "app": {
+                        "appId": "22222222-2222-4222-8222-222222222222",
+                        "displayName": "Example App"
+                      },
+                      "action": "record.viewed",
+                      "outcome": "success"
+                    },
+                    {
+                      "source": "capability",
+                      "accessId": "capability:11111111-1111-4111-8111-111111111111",
+                      "executionId": "11111111-1111-4111-8111-111111111111",
+                      "accessedAt": "2030-01-10T09:00:00Z",
+                      "purpose": "service_review",
+                      "flaggedAt": null,
+                      "state": "succeeded",
+                      "emergency": true,
+                      "review": null,
+                      "consumer": {
+                        "appId": "22222222-2222-4222-8222-222222222222",
+                        "displayName": "Example App"
+                      },
+                      "provider": {
+                        "appId": "33333333-3333-4333-8333-333333333333",
+                        "displayName": "Example Provider"
+                      },
+                      "capability": {
+                        "capabilityId": "urn:junctura:capability:33333333-3333-4333-8333-333333333333:lookup",
+                        "version": "1.0.0",
+                        "title": "Lookup"
+                      }
+                    }
+                  ],
+                  "nextCursor": null,
+                  "truncated": false,
+                  "generatedAt": "2030-01-12T12:00:00Z"
                 }
               }
             }
           },
           "400": {
-            "$ref": "#/components/responses/BadRequest"
+            "$ref": "./foundation-api.openapi.json#/components/responses/PlannedBadRequest"
           },
           "401": {
-            "$ref": "#/components/responses/Unauthorized"
+            "$ref": "./foundation-api.openapi.json#/components/responses/Unauthorized"
           },
           "403": {
-            "$ref": "#/components/responses/Forbidden"
+            "$ref": "./foundation-api.openapi.json#/components/responses/PlannedForbidden"
+          },
+          "404": {
+            "$ref": "./foundation-api.openapi.json#/components/responses/NotFound"
           },
           "429": {
-            "$ref": "#/components/responses/TooManyRequests"
+            "$ref": "./foundation-api.openapi.json#/components/responses/PlannedRateLimited"
+          },
+          "502": {
+            "$ref": "./foundation-api.openapi.json#/components/responses/BadGateway"
           },
           "503": {
-            "$ref": "#/components/responses/Unavailable"
+            "$ref": "./foundation-api.openapi.json#/components/responses/Unavailable"
+          },
+          "504": {
+            "$ref": "./foundation-api.openapi.json#/components/responses/GatewayTimeout"
           }
         },
-        "x-junctura-required-permissions": [
-          "verified-subject"
-        ],
-        "x-junctura-status": "implemented-subject-access",
-        "x-junctura-source": "src/modules/audit/audit.mjs",
-        "x-junctura-test-suite": "capabilities",
-        "x-junctura-core-roles": [
-          "core-reader"
-        ],
-        "x-junctura-planned-operation": {
-          "operationId": "listSubjectAccessEvents",
-          "summary": "List the data subject's visible access events",
-          "description": "Use the verified token subjectId, tenant and issuer; a supplied subject identifier never selects another person. A missing verified claim returns 403. Merge capability calls and application events declared visible to this data subject at append time. Order by accessedAt descending and accessId descending. Use accessId for flagging either source. Preserve entries, generatedAt and truncated; truncated is true when nextCursor is present.",
-          "tags": ["tenant"],
-          "x-junctura-status": "planned",
-          "x-junctura-query-policy": "closed",
-          "security": [
-            {
-              "oidcBearer": []
-            }
-          ],
-          "x-junctura-core-roles": ["core-reader"],
-          "x-junctura-authority": "tenant",
-          "parameters": [
-            {
-              "name": "limit",
-              "in": "query",
-              "schema": {
-                "type": "integer",
-                "minimum": 1,
-                "maximum": 200,
-                "default": 200
-              },
-              "example": 100
-            },
-            {"$ref": "./foundation-api.openapi.json#/components/parameters/PlannedCursor"}
-          ],
-          "responses": {
-            "200": {
-              "description": "Successful response.",
-              "headers": {
-                "Cache-Control": {"$ref": "./foundation-api.openapi.json#/components/headers/CacheControl"},
-                "X-Content-Type-Options": {"$ref": "./foundation-api.openapi.json#/components/headers/NoSniff"}
-              },
-              "content": {
-                "application/json": {
-                  "schema": {"$ref": "#/components/schemas/SubjectAccessPage"},
-                  "example": {
-                    "entries": [
-                      {
-                        "source": "application",
-                        "accessId": "app:55555555-5555-4555-8555-555555555555",
-                        "accessedAt": "2030-01-12T12:00:00Z",
-                        "purpose": "service_review",
-                        "flaggedAt": null,
-                        "app": {
-                          "appId": "22222222-2222-4222-8222-222222222222",
-                          "displayName": "Example App"
-                        },
-                        "action": "record.viewed",
-                        "outcome": "success"
-                      },
-                      {
-                        "source": "capability",
-                        "accessId": "capability:11111111-1111-4111-8111-111111111111",
-                        "executionId": "11111111-1111-4111-8111-111111111111",
-                        "accessedAt": "2030-01-10T09:00:00Z",
-                        "purpose": "service_review",
-                        "flaggedAt": null,
-                        "state": "succeeded",
-                        "emergency": true,
-                        "review": null,
-                        "consumer": {
-                          "appId": "22222222-2222-4222-8222-222222222222",
-                          "displayName": "Example App"
-                        },
-                        "provider": {
-                          "appId": "33333333-3333-4333-8333-333333333333",
-                          "displayName": "Example Provider"
-                        },
-                        "capability": {
-                          "capabilityId": "urn:junctura:capability:33333333-3333-4333-8333-333333333333:lookup",
-                          "version": "1.0.0",
-                          "title": "Lookup"
-                        }
-                      }
-                    ],
-                    "nextCursor": null,
-                    "truncated": false,
-                    "generatedAt": "2030-01-12T12:00:00Z"
-                  }
-                }
-              }
-            },
-            "400": {"$ref": "./foundation-api.openapi.json#/components/responses/PlannedBadRequest"},
-            "401": {"$ref": "./foundation-api.openapi.json#/components/responses/Unauthorized"},
-            "403": {"$ref": "./foundation-api.openapi.json#/components/responses/PlannedForbidden"},
-            "404": {"$ref": "./foundation-api.openapi.json#/components/responses/NotFound"},
-            "429": {"$ref": "./foundation-api.openapi.json#/components/responses/PlannedRateLimited"},
-            "502": {"$ref": "./foundation-api.openapi.json#/components/responses/BadGateway"},
-            "503": {"$ref": "./foundation-api.openapi.json#/components/responses/Unavailable"},
-            "504": {"$ref": "./foundation-api.openapi.json#/components/responses/GatewayTimeout"}
-          }
-        }
+        "x-junctura-source": "src/modules/subject-access/subject-access.mjs",
+        "x-junctura-test-suite": "subject-access"
       }
     },
     "/v1/me/data-access/{id}/flag": {
@@ -4350,15 +4361,18 @@
         "operationId": "flagSubjectAccessEvent",
         "summary": "Flag an access event for review",
         "description": "Use the verified token subjectId, tenant and issuer; a supplied subject identifier never selects another person. A missing verified claim returns 403. Applies to either visible source. Store a separate report. Retrying the same reason returns the original report; attempting to change it returns 409. Nonvisible entries return 404.",
-        "tags": ["tenant"],
-        "x-junctura-status": "planned",
+        "tags": [
+          "tenant"
+        ],
         "x-junctura-query-policy": "closed",
         "security": [
           {
             "oidcBearer": []
           }
         ],
-        "x-junctura-core-roles": ["core-reader"],
+        "x-junctura-core-roles": [
+          "core-reader"
+        ],
         "x-junctura-authority": "tenant",
         "parameters": [
           {
@@ -4376,7 +4390,9 @@
           "required": true,
           "content": {
             "application/json": {
-              "schema": {"$ref": "#/components/schemas/AccessFlagWrite"},
+              "schema": {
+                "$ref": "#/components/schemas/AccessFlagWrite"
+              },
               "example": {
                 "reason": "unrecognized"
               }
@@ -4388,12 +4404,18 @@
           "201": {
             "description": "Successful response.",
             "headers": {
-              "Cache-Control": {"$ref": "./foundation-api.openapi.json#/components/headers/CacheControl"},
-              "X-Content-Type-Options": {"$ref": "./foundation-api.openapi.json#/components/headers/NoSniff"}
+              "Cache-Control": {
+                "$ref": "./foundation-api.openapi.json#/components/headers/CacheControl"
+              },
+              "X-Content-Type-Options": {
+                "$ref": "./foundation-api.openapi.json#/components/headers/NoSniff"
+              }
             },
             "content": {
               "application/json": {
-                "schema": {"$ref": "#/components/schemas/AccessFlagResult"},
+                "schema": {
+                  "$ref": "#/components/schemas/AccessFlagResult"
+                },
                 "example": {
                   "accessId": "app:55555555-5555-4555-8555-555555555555",
                   "flaggedAt": "2030-01-12T12:00:00Z"
@@ -4404,12 +4426,18 @@
           "200": {
             "description": "Identical report replayed.",
             "headers": {
-              "Cache-Control": {"$ref": "./foundation-api.openapi.json#/components/headers/CacheControl"},
-              "X-Content-Type-Options": {"$ref": "./foundation-api.openapi.json#/components/headers/NoSniff"}
+              "Cache-Control": {
+                "$ref": "./foundation-api.openapi.json#/components/headers/CacheControl"
+              },
+              "X-Content-Type-Options": {
+                "$ref": "./foundation-api.openapi.json#/components/headers/NoSniff"
+              }
             },
             "content": {
               "application/json": {
-                "schema": {"$ref": "#/components/schemas/AccessFlagResult"},
+                "schema": {
+                  "$ref": "#/components/schemas/AccessFlagResult"
+                },
                 "example": {
                   "accessId": "app:55555555-5555-4555-8555-555555555555",
                   "flaggedAt": "2030-01-12T12:00:00Z"
@@ -4417,18 +4445,42 @@
               }
             }
           },
-          "400": {"$ref": "./foundation-api.openapi.json#/components/responses/PlannedBadRequest"},
-          "401": {"$ref": "./foundation-api.openapi.json#/components/responses/Unauthorized"},
-          "403": {"$ref": "./foundation-api.openapi.json#/components/responses/PlannedForbidden"},
-          "404": {"$ref": "./foundation-api.openapi.json#/components/responses/NotFound"},
-          "409": {"$ref": "./foundation-api.openapi.json#/components/responses/PlannedConflict"},
-          "413": {"$ref": "./foundation-api.openapi.json#/components/responses/PlannedTooLarge"},
-          "415": {"$ref": "./foundation-api.openapi.json#/components/responses/UnsupportedMedia"},
-          "429": {"$ref": "./foundation-api.openapi.json#/components/responses/PlannedRateLimited"},
-          "502": {"$ref": "./foundation-api.openapi.json#/components/responses/BadGateway"},
-          "503": {"$ref": "./foundation-api.openapi.json#/components/responses/Unavailable"},
-          "504": {"$ref": "./foundation-api.openapi.json#/components/responses/GatewayTimeout"}
-        }
+          "400": {
+            "$ref": "./foundation-api.openapi.json#/components/responses/PlannedBadRequest"
+          },
+          "401": {
+            "$ref": "./foundation-api.openapi.json#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "./foundation-api.openapi.json#/components/responses/PlannedForbidden"
+          },
+          "404": {
+            "$ref": "./foundation-api.openapi.json#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "./foundation-api.openapi.json#/components/responses/PlannedConflict"
+          },
+          "413": {
+            "$ref": "./foundation-api.openapi.json#/components/responses/PlannedTooLarge"
+          },
+          "415": {
+            "$ref": "./foundation-api.openapi.json#/components/responses/UnsupportedMedia"
+          },
+          "429": {
+            "$ref": "./foundation-api.openapi.json#/components/responses/PlannedRateLimited"
+          },
+          "502": {
+            "$ref": "./foundation-api.openapi.json#/components/responses/BadGateway"
+          },
+          "503": {
+            "$ref": "./foundation-api.openapi.json#/components/responses/Unavailable"
+          },
+          "504": {
+            "$ref": "./foundation-api.openapi.json#/components/responses/GatewayTimeout"
+          }
+        },
+        "x-junctura-source": "src/modules/subject-access/subject-access.mjs",
+        "x-junctura-test-suite": "subject-access"
       }
     },
     "/v1/me/consents": {
@@ -4436,7 +4488,9 @@
         "operationId": "listConsentsBySubjectId",
         "summary": "List the data subject's consents",
         "description": "Return the latest 200 consents belonging to the data subject. Uses the authenticated login, tenant and issuer for compatibility. A supplied subjectId claim must match the operator binding or the request returns 403.",
-        "tags": ["tenant"],
+        "tags": [
+          "tenant"
+        ],
         "x-junctura-status": "implemented-verified-subject",
         "x-junctura-source": "src/modules/consent/consent.mjs",
         "x-junctura-test-suite": "capabilities",
@@ -4446,18 +4500,26 @@
             "oidcBearer": []
           }
         ],
-        "x-junctura-core-roles": ["core-reader"],
+        "x-junctura-core-roles": [
+          "core-reader"
+        ],
         "x-junctura-authority": "tenant",
         "responses": {
           "200": {
             "description": "Successful response.",
             "headers": {
-              "Cache-Control": {"$ref": "./foundation-api.openapi.json#/components/headers/CacheControl"},
-              "X-Content-Type-Options": {"$ref": "./foundation-api.openapi.json#/components/headers/NoSniff"}
+              "Cache-Control": {
+                "$ref": "./foundation-api.openapi.json#/components/headers/CacheControl"
+              },
+              "X-Content-Type-Options": {
+                "$ref": "./foundation-api.openapi.json#/components/headers/NoSniff"
+              }
             },
             "content": {
               "application/json": {
-                "schema": {"$ref": "#/components/schemas/SubjectConsents"},
+                "schema": {
+                  "$ref": "#/components/schemas/SubjectConsents"
+                },
                 "example": {
                   "consents": [
                     {
@@ -4468,7 +4530,9 @@
                       },
                       "capabilityId": "urn:junctura:capability:33333333-3333-4333-8333-333333333333:lookup",
                       "capabilityTitle": "Lookup",
-                      "purposes": ["service_review"],
+                      "purposes": [
+                        "service_review"
+                      ],
                       "createdAt": "2030-01-10T09:00:00Z",
                       "expiresAt": "2030-01-12T12:00:00Z",
                       "revokedAt": null,
@@ -4479,22 +4543,39 @@
               }
             }
           },
-          "400": {"$ref": "./foundation-api.openapi.json#/components/responses/PlannedBadRequest"},
-          "401": {"$ref": "./foundation-api.openapi.json#/components/responses/Unauthorized"},
-          "403": {"$ref": "./foundation-api.openapi.json#/components/responses/PlannedForbidden"},
-          "404": {"$ref": "./foundation-api.openapi.json#/components/responses/NotFound"},
-          "429": {"$ref": "./foundation-api.openapi.json#/components/responses/PlannedRateLimited"},
-          "502": {"$ref": "./foundation-api.openapi.json#/components/responses/BadGateway"},
-          "503": {"$ref": "./foundation-api.openapi.json#/components/responses/Unavailable"},
-          "504": {"$ref": "./foundation-api.openapi.json#/components/responses/GatewayTimeout"}
+          "400": {
+            "$ref": "./foundation-api.openapi.json#/components/responses/PlannedBadRequest"
+          },
+          "401": {
+            "$ref": "./foundation-api.openapi.json#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "./foundation-api.openapi.json#/components/responses/PlannedForbidden"
+          },
+          "404": {
+            "$ref": "./foundation-api.openapi.json#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "./foundation-api.openapi.json#/components/responses/PlannedRateLimited"
+          },
+          "502": {
+            "$ref": "./foundation-api.openapi.json#/components/responses/BadGateway"
+          },
+          "503": {
+            "$ref": "./foundation-api.openapi.json#/components/responses/Unavailable"
+          },
+          "504": {
+            "$ref": "./foundation-api.openapi.json#/components/responses/GatewayTimeout"
+          }
         }
-      
       },
       "post": {
         "operationId": "createConsentBySubjectId",
         "summary": "Grant consent as the data subject",
         "description": "Grant the active registered app the declared purposes for an existing capability, expiring within 366 days. Uses the authenticated login, tenant and issuer for compatibility. A supplied subjectId claim must match the operator binding or the request returns 403.",
-        "tags": ["tenant"],
+        "tags": [
+          "tenant"
+        ],
         "x-junctura-status": "implemented-verified-subject",
         "x-junctura-source": "src/modules/consent/consent.mjs",
         "x-junctura-test-suite": "capabilities",
@@ -4504,17 +4585,23 @@
             "oidcBearer": []
           }
         ],
-        "x-junctura-core-roles": ["core-reader"],
+        "x-junctura-core-roles": [
+          "core-reader"
+        ],
         "x-junctura-authority": "tenant",
         "requestBody": {
           "required": true,
           "content": {
             "application/json": {
-              "schema": {"$ref": "#/components/schemas/ConsentCreatePlanned"},
+              "schema": {
+                "$ref": "#/components/schemas/ConsentCreatePlanned"
+              },
               "example": {
                 "consumerAppId": "22222222-2222-4222-8222-222222222222",
                 "capabilityId": "urn:junctura:capability:33333333-3333-4333-8333-333333333333:lookup",
-                "purposes": ["service_review"],
+                "purposes": [
+                  "service_review"
+                ],
                 "expiresAt": "2030-01-12T12:00:00Z"
               }
             }
@@ -4525,13 +4612,21 @@
           "201": {
             "description": "Successful response.",
             "headers": {
-              "Cache-Control": {"$ref": "./foundation-api.openapi.json#/components/headers/CacheControl"},
-              "X-Content-Type-Options": {"$ref": "./foundation-api.openapi.json#/components/headers/NoSniff"},
-              "Location": {"$ref": "./foundation-api.openapi.json#/components/headers/Location"}
+              "Cache-Control": {
+                "$ref": "./foundation-api.openapi.json#/components/headers/CacheControl"
+              },
+              "X-Content-Type-Options": {
+                "$ref": "./foundation-api.openapi.json#/components/headers/NoSniff"
+              },
+              "Location": {
+                "$ref": "./foundation-api.openapi.json#/components/headers/Location"
+              }
             },
             "content": {
               "application/json": {
-                "schema": {"$ref": "#/components/schemas/PlannedSubjectConsent"},
+                "schema": {
+                  "$ref": "#/components/schemas/PlannedSubjectConsent"
+                },
                 "example": {
                   "consentId": "11111111-1111-4111-8111-111111111111",
                   "consumer": {
@@ -4540,7 +4635,9 @@
                   },
                   "capabilityId": "urn:junctura:capability:33333333-3333-4333-8333-333333333333:lookup",
                   "capabilityTitle": "Lookup",
-                  "purposes": ["service_review"],
+                  "purposes": [
+                    "service_review"
+                  ],
                   "createdAt": "2030-01-10T09:00:00Z",
                   "expiresAt": "2030-01-12T12:00:00Z",
                   "revokedAt": null,
@@ -4549,22 +4646,45 @@
               }
             }
           },
-          "400": {"$ref": "./foundation-api.openapi.json#/components/responses/PlannedBadRequest"},
-          "401": {"$ref": "./foundation-api.openapi.json#/components/responses/Unauthorized"},
-          "403": {"$ref": "./foundation-api.openapi.json#/components/responses/PlannedForbidden"},
-          "404": {"$ref": "./foundation-api.openapi.json#/components/responses/NotFound"},
-          "413": {"$ref": "./foundation-api.openapi.json#/components/responses/PlannedTooLarge"},
-          "415": {"$ref": "./foundation-api.openapi.json#/components/responses/UnsupportedMedia"},
-          "422": {"$ref": "./foundation-api.openapi.json#/components/responses/IdempotencyKeyReused"},
-          "429": {"$ref": "./foundation-api.openapi.json#/components/responses/PlannedRateLimited"},
-          "502": {"$ref": "./foundation-api.openapi.json#/components/responses/BadGateway"},
-          "503": {"$ref": "./foundation-api.openapi.json#/components/responses/Unavailable"},
-          "504": {"$ref": "./foundation-api.openapi.json#/components/responses/GatewayTimeout"}
+          "400": {
+            "$ref": "./foundation-api.openapi.json#/components/responses/PlannedBadRequest"
+          },
+          "401": {
+            "$ref": "./foundation-api.openapi.json#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "./foundation-api.openapi.json#/components/responses/PlannedForbidden"
+          },
+          "404": {
+            "$ref": "./foundation-api.openapi.json#/components/responses/NotFound"
+          },
+          "413": {
+            "$ref": "./foundation-api.openapi.json#/components/responses/PlannedTooLarge"
+          },
+          "415": {
+            "$ref": "./foundation-api.openapi.json#/components/responses/UnsupportedMedia"
+          },
+          "422": {
+            "$ref": "./foundation-api.openapi.json#/components/responses/IdempotencyKeyReused"
+          },
+          "429": {
+            "$ref": "./foundation-api.openapi.json#/components/responses/PlannedRateLimited"
+          },
+          "502": {
+            "$ref": "./foundation-api.openapi.json#/components/responses/BadGateway"
+          },
+          "503": {
+            "$ref": "./foundation-api.openapi.json#/components/responses/Unavailable"
+          },
+          "504": {
+            "$ref": "./foundation-api.openapi.json#/components/responses/GatewayTimeout"
+          }
         },
         "parameters": [
-          {"$ref": "./foundation-api.openapi.json#/components/parameters/PlannedIdempotencyKey"}
+          {
+            "$ref": "./foundation-api.openapi.json#/components/parameters/PlannedIdempotencyKey"
+          }
         ]
-      
       }
     },
     "/v1/me/consents/{consentId}/revoke": {
@@ -4572,7 +4692,9 @@
         "operationId": "revokeConsentBySubjectId",
         "summary": "Revoke the data subject's consent",
         "description": "Revoking an already revoked consent returns its current representation. Uses the authenticated login, tenant and issuer for compatibility. A supplied subjectId claim must match the operator binding or the request returns 403.",
-        "tags": ["tenant"],
+        "tags": [
+          "tenant"
+        ],
         "x-junctura-status": "implemented-verified-subject",
         "x-junctura-source": "src/modules/consent/consent.mjs",
         "x-junctura-test-suite": "capabilities",
@@ -4582,14 +4704,18 @@
             "oidcBearer": []
           }
         ],
-        "x-junctura-core-roles": ["core-reader"],
+        "x-junctura-core-roles": [
+          "core-reader"
+        ],
         "x-junctura-authority": "tenant",
         "parameters": [
           {
             "name": "consentId",
             "in": "path",
             "required": true,
-            "schema": {"$ref": "./foundation-api.openapi.json#/components/schemas/Uuid"},
+            "schema": {
+              "$ref": "./foundation-api.openapi.json#/components/schemas/Uuid"
+            },
             "example": "11111111-1111-4111-8111-111111111111"
           }
         ],
@@ -4597,7 +4723,9 @@
           "required": true,
           "content": {
             "application/json": {
-              "schema": {"$ref": "./foundation-api.openapi.json#/components/schemas/EmptyObject"},
+              "schema": {
+                "$ref": "./foundation-api.openapi.json#/components/schemas/EmptyObject"
+              },
               "example": {}
             }
           }
@@ -4607,12 +4735,18 @@
           "200": {
             "description": "Successful response.",
             "headers": {
-              "Cache-Control": {"$ref": "./foundation-api.openapi.json#/components/headers/CacheControl"},
-              "X-Content-Type-Options": {"$ref": "./foundation-api.openapi.json#/components/headers/NoSniff"}
+              "Cache-Control": {
+                "$ref": "./foundation-api.openapi.json#/components/headers/CacheControl"
+              },
+              "X-Content-Type-Options": {
+                "$ref": "./foundation-api.openapi.json#/components/headers/NoSniff"
+              }
             },
             "content": {
               "application/json": {
-                "schema": {"$ref": "#/components/schemas/PlannedSubjectConsent"},
+                "schema": {
+                  "$ref": "#/components/schemas/PlannedSubjectConsent"
+                },
                 "example": {
                   "consentId": "11111111-1111-4111-8111-111111111111",
                   "consumer": {
@@ -4621,7 +4755,9 @@
                   },
                   "capabilityId": "urn:junctura:capability:33333333-3333-4333-8333-333333333333:lookup",
                   "capabilityTitle": "Lookup",
-                  "purposes": ["service_review"],
+                  "purposes": [
+                    "service_review"
+                  ],
                   "createdAt": "2030-01-10T09:00:00Z",
                   "expiresAt": "2030-01-12T12:00:00Z",
                   "revokedAt": "2030-01-12T12:00:00Z",
@@ -4630,18 +4766,37 @@
               }
             }
           },
-          "400": {"$ref": "./foundation-api.openapi.json#/components/responses/PlannedBadRequest"},
-          "401": {"$ref": "./foundation-api.openapi.json#/components/responses/Unauthorized"},
-          "403": {"$ref": "./foundation-api.openapi.json#/components/responses/PlannedForbidden"},
-          "404": {"$ref": "./foundation-api.openapi.json#/components/responses/NotFound"},
-          "413": {"$ref": "./foundation-api.openapi.json#/components/responses/PlannedTooLarge"},
-          "415": {"$ref": "./foundation-api.openapi.json#/components/responses/UnsupportedMedia"},
-          "429": {"$ref": "./foundation-api.openapi.json#/components/responses/PlannedRateLimited"},
-          "502": {"$ref": "./foundation-api.openapi.json#/components/responses/BadGateway"},
-          "503": {"$ref": "./foundation-api.openapi.json#/components/responses/Unavailable"},
-          "504": {"$ref": "./foundation-api.openapi.json#/components/responses/GatewayTimeout"}
+          "400": {
+            "$ref": "./foundation-api.openapi.json#/components/responses/PlannedBadRequest"
+          },
+          "401": {
+            "$ref": "./foundation-api.openapi.json#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "./foundation-api.openapi.json#/components/responses/PlannedForbidden"
+          },
+          "404": {
+            "$ref": "./foundation-api.openapi.json#/components/responses/NotFound"
+          },
+          "413": {
+            "$ref": "./foundation-api.openapi.json#/components/responses/PlannedTooLarge"
+          },
+          "415": {
+            "$ref": "./foundation-api.openapi.json#/components/responses/UnsupportedMedia"
+          },
+          "429": {
+            "$ref": "./foundation-api.openapi.json#/components/responses/PlannedRateLimited"
+          },
+          "502": {
+            "$ref": "./foundation-api.openapi.json#/components/responses/BadGateway"
+          },
+          "503": {
+            "$ref": "./foundation-api.openapi.json#/components/responses/Unavailable"
+          },
+          "504": {
+            "$ref": "./foundation-api.openapi.json#/components/responses/GatewayTimeout"
+          }
         }
-      
       }
     },
     "/v1/me/emergency-accesses/{id}/feedback": {
@@ -4649,22 +4804,27 @@
         "operationId": "submitEmergencyAccessFeedback",
         "summary": "Submit feedback on the subject's own emergency access",
         "description": "Use the verified token subjectId, tenant and issuer; a supplied subject identifier never selects another person. A missing verified claim returns 403. Use the execution ID from the emergency access entry. Feedback is separate from the management review and the original audit event. Identical retries return the saved receipt; different feedback after submission conflicts. Keep personal content out of message.",
-        "tags": ["tenant"],
-        "x-junctura-status": "planned",
+        "tags": [
+          "tenant"
+        ],
         "x-junctura-query-policy": "closed",
         "security": [
           {
             "oidcBearer": []
           }
         ],
-        "x-junctura-core-roles": ["core-reader"],
+        "x-junctura-core-roles": [
+          "core-reader"
+        ],
         "x-junctura-authority": "tenant",
         "parameters": [
           {
             "name": "id",
             "in": "path",
             "required": true,
-            "schema": {"$ref": "./foundation-api.openapi.json#/components/schemas/Uuid"},
+            "schema": {
+              "$ref": "./foundation-api.openapi.json#/components/schemas/Uuid"
+            },
             "example": "11111111-1111-4111-8111-111111111111"
           }
         ],
@@ -4672,7 +4832,9 @@
           "required": true,
           "content": {
             "application/json": {
-              "schema": {"$ref": "#/components/schemas/EmergencyFeedbackWrite"},
+              "schema": {
+                "$ref": "#/components/schemas/EmergencyFeedbackWrite"
+              },
               "example": {
                 "decision": "unrecognized"
               }
@@ -4684,12 +4846,18 @@
           "201": {
             "description": "Successful response.",
             "headers": {
-              "Cache-Control": {"$ref": "./foundation-api.openapi.json#/components/headers/CacheControl"},
-              "X-Content-Type-Options": {"$ref": "./foundation-api.openapi.json#/components/headers/NoSniff"}
+              "Cache-Control": {
+                "$ref": "./foundation-api.openapi.json#/components/headers/CacheControl"
+              },
+              "X-Content-Type-Options": {
+                "$ref": "./foundation-api.openapi.json#/components/headers/NoSniff"
+              }
             },
             "content": {
               "application/json": {
-                "schema": {"$ref": "#/components/schemas/EmergencyFeedbackResult"},
+                "schema": {
+                  "$ref": "#/components/schemas/EmergencyFeedbackResult"
+                },
                 "example": {
                   "executionId": "11111111-1111-4111-8111-111111111111",
                   "submittedAt": "2030-01-12T12:00:00Z"
@@ -4700,12 +4868,18 @@
           "200": {
             "description": "Identical feedback replayed.",
             "headers": {
-              "Cache-Control": {"$ref": "./foundation-api.openapi.json#/components/headers/CacheControl"},
-              "X-Content-Type-Options": {"$ref": "./foundation-api.openapi.json#/components/headers/NoSniff"}
+              "Cache-Control": {
+                "$ref": "./foundation-api.openapi.json#/components/headers/CacheControl"
+              },
+              "X-Content-Type-Options": {
+                "$ref": "./foundation-api.openapi.json#/components/headers/NoSniff"
+              }
             },
             "content": {
               "application/json": {
-                "schema": {"$ref": "#/components/schemas/EmergencyFeedbackResult"},
+                "schema": {
+                  "$ref": "#/components/schemas/EmergencyFeedbackResult"
+                },
                 "example": {
                   "executionId": "11111111-1111-4111-8111-111111111111",
                   "submittedAt": "2030-01-12T12:00:00Z"
@@ -4713,18 +4887,42 @@
               }
             }
           },
-          "400": {"$ref": "./foundation-api.openapi.json#/components/responses/PlannedBadRequest"},
-          "401": {"$ref": "./foundation-api.openapi.json#/components/responses/Unauthorized"},
-          "403": {"$ref": "./foundation-api.openapi.json#/components/responses/PlannedForbidden"},
-          "404": {"$ref": "./foundation-api.openapi.json#/components/responses/NotFound"},
-          "409": {"$ref": "./foundation-api.openapi.json#/components/responses/PlannedConflict"},
-          "413": {"$ref": "./foundation-api.openapi.json#/components/responses/PlannedTooLarge"},
-          "415": {"$ref": "./foundation-api.openapi.json#/components/responses/UnsupportedMedia"},
-          "429": {"$ref": "./foundation-api.openapi.json#/components/responses/PlannedRateLimited"},
-          "502": {"$ref": "./foundation-api.openapi.json#/components/responses/BadGateway"},
-          "503": {"$ref": "./foundation-api.openapi.json#/components/responses/Unavailable"},
-          "504": {"$ref": "./foundation-api.openapi.json#/components/responses/GatewayTimeout"}
-        }
+          "400": {
+            "$ref": "./foundation-api.openapi.json#/components/responses/PlannedBadRequest"
+          },
+          "401": {
+            "$ref": "./foundation-api.openapi.json#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "./foundation-api.openapi.json#/components/responses/PlannedForbidden"
+          },
+          "404": {
+            "$ref": "./foundation-api.openapi.json#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "./foundation-api.openapi.json#/components/responses/PlannedConflict"
+          },
+          "413": {
+            "$ref": "./foundation-api.openapi.json#/components/responses/PlannedTooLarge"
+          },
+          "415": {
+            "$ref": "./foundation-api.openapi.json#/components/responses/UnsupportedMedia"
+          },
+          "429": {
+            "$ref": "./foundation-api.openapi.json#/components/responses/PlannedRateLimited"
+          },
+          "502": {
+            "$ref": "./foundation-api.openapi.json#/components/responses/BadGateway"
+          },
+          "503": {
+            "$ref": "./foundation-api.openapi.json#/components/responses/Unavailable"
+          },
+          "504": {
+            "$ref": "./foundation-api.openapi.json#/components/responses/GatewayTimeout"
+          }
+        },
+        "x-junctura-source": "src/modules/subject-access/subject-access.mjs",
+        "x-junctura-test-suite": "subject-access"
       }
     },
     "/v1/emergency-accesses": {
@@ -5418,7 +5616,10 @@
             "format": "date-time"
           }
         },
-        "required": ["accessId", "flaggedAt"],
+        "required": [
+          "accessId",
+          "flaggedAt"
+        ],
         "additionalProperties": false
       },
       "AccessFlagWrite": {
@@ -5426,10 +5627,15 @@
         "properties": {
           "reason": {
             "type": "string",
-            "enum": ["unrecognized", "other"]
+            "enum": [
+              "unrecognized",
+              "other"
+            ]
           }
         },
-        "required": ["reason"],
+        "required": [
+          "reason"
+        ],
         "additionalProperties": false
       },
       "AppAuditEntry": {
@@ -5438,13 +5644,19 @@
           "source": {
             "const": "application"
           },
-          "eventId": {"$ref": "./foundation-api.openapi.json#/components/schemas/Uuid"},
-          "appId": {"$ref": "./foundation-api.openapi.json#/components/schemas/Uuid"},
+          "eventId": {
+            "$ref": "./foundation-api.openapi.json#/components/schemas/Uuid"
+          },
+          "appId": {
+            "$ref": "./foundation-api.openapi.json#/components/schemas/Uuid"
+          },
           "occurredAt": {
             "type": "string",
             "format": "date-time"
           },
-          "actor": {"$ref": "#/components/schemas/AuditActor"},
+          "actor": {
+            "$ref": "#/components/schemas/AuditActor"
+          },
           "unit": {
             "anyOf": [
               {
@@ -5456,52 +5668,106 @@
               }
             ]
           },
-          "action": {"$ref": "./foundation-api.openapi.json#/components/schemas/AuditAction"},
-          "outcome": {"$ref": "#/components/schemas/AuditOutcome"},
+          "action": {
+            "$ref": "./foundation-api.openapi.json#/components/schemas/AuditAction"
+          },
+          "outcome": {
+            "$ref": "#/components/schemas/AuditOutcome"
+          },
           "sensitivity": {
             "type": "string",
-            "enum": ["standard", "restricted"]
+            "enum": [
+              "standard",
+              "restricted"
+            ]
           },
-          "subjectId": {"$ref": "./foundation-api.openapi.json#/components/schemas/SubjectId"},
-          "resourceRef": {"$ref": "#/components/schemas/AuditResourceRef"},
-          "purpose": {"$ref": "#/components/schemas/PurposeCode"},
-          "meta": {"$ref": "#/components/schemas/AuditMeta"}
+          "subjectId": {
+            "$ref": "./foundation-api.openapi.json#/components/schemas/SubjectId"
+          },
+          "resourceRef": {
+            "$ref": "#/components/schemas/AuditResourceRef"
+          },
+          "purpose": {
+            "$ref": "#/components/schemas/PurposeCode"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/AuditMeta"
+          }
         },
-        "required": ["source", "eventId", "appId", "occurredAt", "unit", "action", "outcome", "sensitivity"],
+        "required": [
+          "source",
+          "eventId",
+          "appId",
+          "occurredAt",
+          "unit",
+          "action",
+          "outcome",
+          "sensitivity"
+        ],
         "additionalProperties": false,
         "description": "Actor and contextual fields are withheld from management structural views."
       },
       "AppAuditReceipt": {
         "type": "object",
         "properties": {
-          "eventId": {"$ref": "./foundation-api.openapi.json#/components/schemas/Uuid"},
-          "appId": {"$ref": "./foundation-api.openapi.json#/components/schemas/Uuid"},
+          "eventId": {
+            "$ref": "./foundation-api.openapi.json#/components/schemas/Uuid"
+          },
+          "appId": {
+            "$ref": "./foundation-api.openapi.json#/components/schemas/Uuid"
+          },
           "occurredAt": {
             "type": "string",
             "format": "date-time"
           },
-          "actor": {"$ref": "#/components/schemas/AuditActor"}
+          "actor": {
+            "$ref": "#/components/schemas/AuditActor"
+          }
         },
-        "required": ["eventId", "appId", "occurredAt", "actor"],
+        "required": [
+          "eventId",
+          "appId",
+          "occurredAt",
+          "actor"
+        ],
         "additionalProperties": false
       },
       "AppAuditWrite": {
         "type": "object",
         "properties": {
-          "action": {"$ref": "./foundation-api.openapi.json#/components/schemas/AuditAction"},
-          "subjectId": {"$ref": "./foundation-api.openapi.json#/components/schemas/SubjectId"},
-          "resourceRef": {"$ref": "#/components/schemas/AuditResourceRef"},
-          "outcome": {"$ref": "#/components/schemas/AuditOutcome"},
-          "purpose": {"$ref": "#/components/schemas/PurposeCode"},
-          "meta": {"$ref": "#/components/schemas/AuditMeta"}
+          "action": {
+            "$ref": "./foundation-api.openapi.json#/components/schemas/AuditAction"
+          },
+          "subjectId": {
+            "$ref": "./foundation-api.openapi.json#/components/schemas/SubjectId"
+          },
+          "resourceRef": {
+            "$ref": "#/components/schemas/AuditResourceRef"
+          },
+          "outcome": {
+            "$ref": "#/components/schemas/AuditOutcome"
+          },
+          "purpose": {
+            "$ref": "#/components/schemas/PurposeCode"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/AuditMeta"
+          }
         },
-        "required": ["action", "resourceRef", "outcome", "purpose"],
+        "required": [
+          "action",
+          "resourceRef",
+          "outcome",
+          "purpose"
+        ],
         "additionalProperties": false
       },
       "AppDisplay": {
         "type": "object",
         "properties": {
-          "appId": {"$ref": "./foundation-api.openapi.json#/components/schemas/Uuid"},
+          "appId": {
+            "$ref": "./foundation-api.openapi.json#/components/schemas/Uuid"
+          },
           "displayName": {
             "anyOf": [
               {
@@ -5513,7 +5779,10 @@
             ]
           }
         },
-        "required": ["appId", "displayName"],
+        "required": [
+          "appId",
+          "displayName"
+        ],
         "additionalProperties": false
       },
       "AppSubjectAccessEntry": {
@@ -5530,7 +5799,9 @@
             "type": "string",
             "format": "date-time"
           },
-          "purpose": {"$ref": "#/components/schemas/PurposeCode"},
+          "purpose": {
+            "$ref": "#/components/schemas/PurposeCode"
+          },
           "flaggedAt": {
             "anyOf": [
               {
@@ -5542,11 +5813,26 @@
               }
             ]
           },
-          "app": {"$ref": "#/components/schemas/AppDisplay"},
-          "action": {"$ref": "./foundation-api.openapi.json#/components/schemas/AuditAction"},
-          "outcome": {"$ref": "#/components/schemas/AuditOutcome"}
+          "app": {
+            "$ref": "#/components/schemas/AppDisplay"
+          },
+          "action": {
+            "$ref": "./foundation-api.openapi.json#/components/schemas/AuditAction"
+          },
+          "outcome": {
+            "$ref": "#/components/schemas/AuditOutcome"
+          }
         },
-        "required": ["source", "accessId", "accessedAt", "purpose", "flaggedAt", "app", "action", "outcome"],
+        "required": [
+          "source",
+          "accessId",
+          "accessedAt",
+          "purpose",
+          "flaggedAt",
+          "app",
+          "action",
+          "outcome"
+        ],
         "additionalProperties": false
       },
       "AuditActor": {
@@ -5558,7 +5844,9 @@
                 "const": "application"
               }
             },
-            "required": ["kind"],
+            "required": [
+              "kind"
+            ],
             "additionalProperties": false
           },
           {
@@ -5567,9 +5855,14 @@
               "kind": {
                 "const": "user"
               },
-              "subject": {"$ref": "./foundation-api.openapi.json#/components/schemas/SubjectId"}
+              "subject": {
+                "$ref": "./foundation-api.openapi.json#/components/schemas/SubjectId"
+              }
             },
-            "required": ["kind", "subject"],
+            "required": [
+              "kind",
+              "subject"
+            ],
             "additionalProperties": false
           }
         ],
@@ -5601,7 +5894,12 @@
             "format": "date-time"
           }
         },
-        "required": ["type", "sequence", "hash", "generatedAt"],
+        "required": [
+          "type",
+          "sequence",
+          "hash",
+          "generatedAt"
+        ],
         "additionalProperties": false
       },
       "AuditExportLine": {
@@ -5619,28 +5917,50 @@
             "type": "string",
             "pattern": "^sha256:[0-9a-f]{64}$"
           },
-          "event": {"$ref": "#/components/schemas/AuditQueryEntry"}
+          "event": {
+            "$ref": "#/components/schemas/AuditQueryEntry"
+          }
         },
-        "required": ["type", "sequence", "hash", "event"],
+        "required": [
+          "type",
+          "sequence",
+          "hash",
+          "event"
+        ],
         "additionalProperties": false
       },
       "AuditMeta": {
         "type": "object",
-        "propertyNames": {"$ref": "./foundation-api.openapi.json#/components/schemas/RecordField"},
+        "propertyNames": {
+          "$ref": "./foundation-api.openapi.json#/components/schemas/RecordField"
+        },
         "additionalProperties": {
-          "type": ["string", "number", "boolean", "null"]
+          "type": [
+            "string",
+            "number",
+            "boolean",
+            "null"
+          ]
         },
         "x-max-utf8-bytes": 2048,
         "description": "Non-sensitive scalar metadata. Maximum 2,048 bytes as compact UTF-8 JSON."
       },
       "AuditOutcome": {
         "type": "string",
-        "enum": ["success", "denied", "failed"]
+        "enum": [
+          "success",
+          "denied",
+          "failed"
+        ]
       },
       "AuditQueryEntry": {
         "oneOf": [
-          {"$ref": "#/components/schemas/AppAuditEntry"},
-          {"$ref": "#/components/schemas/PlatformAuditEntry"}
+          {
+            "$ref": "#/components/schemas/AppAuditEntry"
+          },
+          {
+            "$ref": "#/components/schemas/PlatformAuditEntry"
+          }
         ]
       },
       "AuditQueryPage": {
@@ -5648,19 +5968,26 @@
         "properties": {
           "items": {
             "type": "array",
-            "items": {"$ref": "#/components/schemas/AuditQueryEntry"},
+            "items": {
+              "$ref": "#/components/schemas/AuditQueryEntry"
+            },
             "maxItems": 100
           },
           "nextCursor": {
             "anyOf": [
-              {"$ref": "./foundation-api.openapi.json#/components/schemas/PlannedCursor"},
+              {
+                "$ref": "./foundation-api.openapi.json#/components/schemas/PlannedCursor"
+              },
               {
                 "type": "null"
               }
             ]
           }
         },
-        "required": ["items", "nextCursor"],
+        "required": [
+          "items",
+          "nextCursor"
+        ],
         "additionalProperties": false
       },
       "AuditResourceRef": {
@@ -5675,9 +6002,15 @@
                 "type": "string",
                 "pattern": "^[a-z][a-z0-9_-]{0,62}$"
               },
-              "id": {"$ref": "./foundation-api.openapi.json#/components/schemas/Uuid"}
+              "id": {
+                "$ref": "./foundation-api.openapi.json#/components/schemas/Uuid"
+              }
             },
-            "required": ["type", "collection", "id"],
+            "required": [
+              "type",
+              "collection",
+              "id"
+            ],
             "additionalProperties": false
           },
           {
@@ -5686,9 +6019,14 @@
               "type": {
                 "const": "object"
               },
-              "id": {"$ref": "./foundation-api.openapi.json#/components/schemas/Uuid"}
+              "id": {
+                "$ref": "./foundation-api.openapi.json#/components/schemas/Uuid"
+              }
             },
-            "required": ["type", "id"],
+            "required": [
+              "type",
+              "id"
+            ],
             "additionalProperties": false
           },
           {
@@ -5702,7 +6040,10 @@
                 "pattern": "^[A-Za-z0-9:_-]{1,128}$"
               }
             },
-            "required": ["type", "id"],
+            "required": [
+              "type",
+              "id"
+            ],
             "additionalProperties": false
           }
         ]
@@ -5721,7 +6062,9 @@
             "type": "string",
             "format": "date-time"
           },
-          "purpose": {"$ref": "#/components/schemas/PurposeCode"},
+          "purpose": {
+            "$ref": "#/components/schemas/PurposeCode"
+          },
           "flaggedAt": {
             "anyOf": [
               {
@@ -5733,7 +6076,9 @@
               }
             ]
           },
-          "executionId": {"$ref": "./foundation-api.openapi.json#/components/schemas/Uuid"},
+          "executionId": {
+            "$ref": "./foundation-api.openapi.json#/components/schemas/Uuid"
+          },
           "state": {
             "type": "string",
             "minLength": 1
@@ -5752,8 +6097,12 @@
               }
             ]
           },
-          "consumer": {"$ref": "#/components/schemas/AppDisplay"},
-          "provider": {"$ref": "#/components/schemas/AppDisplay"},
+          "consumer": {
+            "$ref": "#/components/schemas/AppDisplay"
+          },
+          "provider": {
+            "$ref": "#/components/schemas/AppDisplay"
+          },
           "capability": {
             "type": "object",
             "properties": {
@@ -5775,7 +6124,11 @@
                 ]
               }
             },
-            "required": ["capabilityId", "version", "title"],
+            "required": [
+              "capabilityId",
+              "version",
+              "title"
+            ],
             "additionalProperties": false
           }
         },
@@ -5798,14 +6151,18 @@
       "ConsentCreatePlanned": {
         "type": "object",
         "properties": {
-          "consumerAppId": {"$ref": "./foundation-api.openapi.json#/components/schemas/Uuid"},
+          "consumerAppId": {
+            "$ref": "./foundation-api.openapi.json#/components/schemas/Uuid"
+          },
           "capabilityId": {
             "type": "string",
             "pattern": "^urn:junctura:capability:[0-9a-f-]{36}:[a-z][a-z0-9-]{0,62}$"
           },
           "purposes": {
             "type": "array",
-            "items": {"$ref": "#/components/schemas/PurposeCode"},
+            "items": {
+              "$ref": "#/components/schemas/PurposeCode"
+            },
             "minItems": 1,
             "maxItems": 8,
             "uniqueItems": true
@@ -5815,19 +6172,29 @@
             "format": "date-time"
           }
         },
-        "required": ["consumerAppId", "capabilityId", "purposes", "expiresAt"],
+        "required": [
+          "consumerAppId",
+          "capabilityId",
+          "purposes",
+          "expiresAt"
+        ],
         "additionalProperties": false
       },
       "EmergencyFeedbackResult": {
         "type": "object",
         "properties": {
-          "executionId": {"$ref": "./foundation-api.openapi.json#/components/schemas/Uuid"},
+          "executionId": {
+            "$ref": "./foundation-api.openapi.json#/components/schemas/Uuid"
+          },
           "submittedAt": {
             "type": "string",
             "format": "date-time"
           }
         },
-        "required": ["executionId", "submittedAt"],
+        "required": [
+          "executionId",
+          "submittedAt"
+        ],
         "additionalProperties": false
       },
       "EmergencyFeedbackWrite": {
@@ -5835,7 +6202,11 @@
         "properties": {
           "decision": {
             "type": "string",
-            "enum": ["recognized", "unrecognized", "other"]
+            "enum": [
+              "recognized",
+              "unrecognized",
+              "other"
+            ]
           },
           "message": {
             "type": "string",
@@ -5843,18 +6214,24 @@
             "maxLength": 500
           }
         },
-        "required": ["decision"],
+        "required": [
+          "decision"
+        ],
         "additionalProperties": false
       },
       "PlatformAuditEntry": {
         "type": "object",
         "properties": {
-          "eventId": {"$ref": "./foundation-api.openapi.json#/components/schemas/Uuid"},
+          "eventId": {
+            "$ref": "./foundation-api.openapi.json#/components/schemas/Uuid"
+          },
           "occurredAt": {
             "type": "string",
             "format": "date-time"
           },
-          "tenantId": {"$ref": "./foundation-api.openapi.json#/components/schemas/TenantId"},
+          "tenantId": {
+            "$ref": "./foundation-api.openapi.json#/components/schemas/TenantId"
+          },
           "schemaVersion": {
             "type": "integer",
             "minimum": 1,
@@ -5868,7 +6245,9 @@
           },
           "resourceId": {
             "anyOf": [
-              {"$ref": "./foundation-api.openapi.json#/components/schemas/Uuid"},
+              {
+                "$ref": "./foundation-api.openapi.json#/components/schemas/Uuid"
+              },
               {
                 "type": "null"
               }
@@ -5887,7 +6266,9 @@
           },
           "actorAppId": {
             "anyOf": [
-              {"$ref": "./foundation-api.openapi.json#/components/schemas/Uuid"},
+              {
+                "$ref": "./foundation-api.openapi.json#/components/schemas/Uuid"
+              },
               {
                 "type": "null"
               }
@@ -5963,15 +6344,21 @@
             "type": "array",
             "items": {
               "oneOf": [
-                {"$ref": "#/components/schemas/CapabilitySubjectAccessEntry"},
-                {"$ref": "#/components/schemas/AppSubjectAccessEntry"}
+                {
+                  "$ref": "#/components/schemas/CapabilitySubjectAccessEntry"
+                },
+                {
+                  "$ref": "#/components/schemas/AppSubjectAccessEntry"
+                }
               ]
             },
             "maxItems": 200
           },
           "nextCursor": {
             "anyOf": [
-              {"$ref": "./foundation-api.openapi.json#/components/schemas/PlannedCursor"},
+              {
+                "$ref": "./foundation-api.openapi.json#/components/schemas/PlannedCursor"
+              },
               {
                 "type": "null"
               }
@@ -5985,14 +6372,23 @@
             "format": "date-time"
           }
         },
-        "required": ["entries", "nextCursor", "truncated", "generatedAt"],
+        "required": [
+          "entries",
+          "nextCursor",
+          "truncated",
+          "generatedAt"
+        ],
         "additionalProperties": false
       },
       "PlannedSubjectConsent": {
         "type": "object",
         "properties": {
-          "consentId": {"$ref": "./foundation-api.openapi.json#/components/schemas/Uuid"},
-          "consumer": {"$ref": "#/components/schemas/AppDisplay"},
+          "consentId": {
+            "$ref": "./foundation-api.openapi.json#/components/schemas/Uuid"
+          },
+          "consumer": {
+            "$ref": "#/components/schemas/AppDisplay"
+          },
           "capabilityId": {
             "type": "string",
             "pattern": "^urn:junctura:capability:[0-9a-f-]{36}:[a-z][a-z0-9-]{0,62}$"
@@ -6009,7 +6405,9 @@
           },
           "purposes": {
             "type": "array",
-            "items": {"$ref": "#/components/schemas/PurposeCode"},
+            "items": {
+              "$ref": "#/components/schemas/PurposeCode"
+            },
             "minItems": 1,
             "maxItems": 8,
             "uniqueItems": true
@@ -6035,7 +6433,11 @@
           },
           "state": {
             "type": "string",
-            "enum": ["active", "expired", "revoked"]
+            "enum": [
+              "active",
+              "expired",
+              "revoked"
+            ]
           }
         },
         "required": [
@@ -6056,11 +6458,15 @@
         "properties": {
           "consents": {
             "type": "array",
-            "items": {"$ref": "#/components/schemas/PlannedSubjectConsent"},
+            "items": {
+              "$ref": "#/components/schemas/PlannedSubjectConsent"
+            },
             "maxItems": 200
           }
         },
-        "required": ["consents"],
+        "required": [
+          "consents"
+        ],
         "additionalProperties": false
       },
       "Uuid": {
@@ -7262,7 +7668,9 @@
           },
           "dataSubjectKind": {
             "type": "string",
-            "enum": ["canonical"],
+            "enum": [
+              "canonical"
+            ],
             "description": "Identifies an operator-bound subjectId. A missing kind means login."
           },
           "emergency": {
@@ -8218,7 +8626,10 @@
           },
           "dataSubjectKind": {
             "type": "string",
-            "enum": ["login", "canonical"],
+            "enum": [
+              "login",
+              "canonical"
+            ],
             "description": "Use canonical for an operator-bound subjectId. A missing kind means login."
           },
           "emergency": {
@@ -8233,7 +8644,9 @@
           }
         },
         "dependentRequired": {
-          "dataSubjectKind": ["dataSubject"],
+          "dataSubjectKind": [
+            "dataSubject"
+          ],
           "emergency": [
             "dataSubject",
             "justification"
@@ -9546,7 +9959,9 @@
       "UnknownAuditAction": {
         "description": "The action is absent from the caller's registered audit action catalog.",
         "headers": {
-          "X-Request-Id": {"$ref": "./foundation-api.openapi.json#/components/headers/PlannedRequestId"}
+          "X-Request-Id": {
+            "$ref": "./foundation-api.openapi.json#/components/headers/PlannedRequestId"
+          }
         },
         "content": {
           "application/json": {
@@ -9555,11 +9970,18 @@
               "properties": {
                 "error": {
                   "type": "string",
-                  "enum": ["unknown_action"]
+                  "enum": [
+                    "unknown_action"
+                  ]
                 },
-                "requestId": {"$ref": "./foundation-api.openapi.json#/components/schemas/Uuid"}
+                "requestId": {
+                  "$ref": "./foundation-api.openapi.json#/components/schemas/Uuid"
+                }
               },
-              "required": ["error", "requestId"],
+              "required": [
+                "error",
+                "requestId"
+              ],
               "additionalProperties": false
             },
             "examples": {
@@ -9722,14 +10144,20 @@
       "AppAuditWriteUnprocessable": {
         "description": "The action is undeclared or the idempotency key was reused with a changed request.",
         "headers": {
-          "X-Request-Id": {"$ref": "./foundation-api.openapi.json#/components/headers/PlannedRequestId"}
+          "X-Request-Id": {
+            "$ref": "./foundation-api.openapi.json#/components/headers/PlannedRequestId"
+          }
         },
         "content": {
           "application/json": {
             "schema": {
               "oneOf": [
-                {"$ref": "#/components/responses/UnknownAuditAction/content/application~1json/schema"},
-                {"$ref": "./foundation-api.openapi.json#/components/responses/IdempotencyKeyReused/content/application~1json/schema"}
+                {
+                  "$ref": "#/components/responses/UnknownAuditAction/content/application~1json/schema"
+                },
+                {
+                  "$ref": "./foundation-api.openapi.json#/components/responses/IdempotencyKeyReused/content/application~1json/schema"
+                }
               ]
             },
             "examples": {

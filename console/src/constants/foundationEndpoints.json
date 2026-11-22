@@ -1302,6 +1302,107 @@
     "successHasBody": false
   },
   {
+    "path": "/v1/search",
+    "method": "GET",
+    "operationId": "searchReadableResources",
+    "summary": "Search readable records and clean text files",
+    "description": "Search registered searchable record fields and text extracted from clean files. Core applies live tenant, ownership and exact read-share checks before returning results. Sensitive field matches are excluded for management viewers. Results contain references only. Order by relevance with a stable resource ID tie-breaker. Index updates are asynchronous.",
+    "tags": [
+      "tenant"
+    ],
+    "security": [
+      {
+        "coreBearer": []
+      }
+    ],
+    "responses": [
+      "200",
+      "400",
+      "401",
+      "403",
+      "404",
+      "429",
+      "502",
+      "503",
+      "504"
+    ],
+    "hasRequestBody": false,
+    "requestContentTypes": [],
+    "pathParameters": [],
+    "queryParameters": [
+      {
+        "name": "q",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "description": ""
+      },
+      {
+        "name": "limit",
+        "required": false,
+        "schema": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100,
+          "default": 50
+        },
+        "description": ""
+      },
+      {
+        "name": "cursor",
+        "required": false,
+        "schema": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1024,
+          "description": "Opaque cursor. Reuse with the same filters and sort."
+        },
+        "description": ""
+      }
+    ],
+    "headerParameters": [],
+    "successStatus": "200",
+    "successContentType": "application/json",
+    "successHasBody": true
+  },
+  {
+    "path": "/v1/events",
+    "method": "GET",
+    "operationId": "streamAuthorizedEvents",
+    "summary": "Stream authorized notifications",
+    "description": "Connect with the Authorization bearer header. Receive new workflow tasks for eligible groups, record status changes for readable records and consent revocations for the subject or affected app. Each SSE event has a named event field and one JSON data line containing references only. The connection is live-only and has no event IDs or replay. Reconnect and refresh source lists after disconnect. Core closes the stream when authentication expires and rechecks authorization before delivery.",
+    "tags": [
+      "tenant"
+    ],
+    "security": [
+      {
+        "coreBearer": []
+      }
+    ],
+    "responses": [
+      "200",
+      "400",
+      "401",
+      "403",
+      "404",
+      "429",
+      "502",
+      "503",
+      "504"
+    ],
+    "hasRequestBody": false,
+    "requestContentTypes": [],
+    "pathParameters": [],
+    "queryParameters": [],
+    "headerParameters": [],
+    "successStatus": "200",
+    "successContentType": "text/event-stream",
+    "successHasBody": true
+  },
+  {
     "path": "/health",
     "method": "GET",
     "operationId": "getHealth",
@@ -2437,9 +2538,9 @@
   {
     "path": "/v2/objects",
     "method": "POST",
-    "operationId": "v2UploadObject",
-    "summary": "V2 upload object",
-    "description": "Active registered backend resolved from verified tenant/issuer/client_id and exact operator-enrolled resource_subject. Owner-only mutations; individually shared reads. Suspension/revocation and disabled enrollment block access. Upload 1 byte to 5 MiB. Stable-UUID PUT with identical bytes is retryable; POST creates a new ID and is not blindly retried. V2 DELETE tombstones permanently; bytes/old versions retained. PUT publishes immutable versions after DB reauthorization; concurrent owner PUTs use last publication. UUIDs are tenant-scoped, so a foreign tenant may create independent bytes at the same UUID.",
+    "operationId": "uploadObjectWithMetadata",
+    "summary": "Upload an object with optional metadata",
+    "description": "The file part must be 1 byte–5 MiB and is published only after a clean scan. A recordRef may point to a live record owned by the caller. The link and tags confer no read access. Charge the bytes of current published objects to the per-app quota before publication. Replacement charges the size delta; deletion releases the current size. The octet-stream form creates an unlinked and untagged object. For multipart uploads the logical request includes file bytes, link and tags. Multipart boundaries are transport framing and do not change the logical request.",
     "tags": [
       "app-resource"
     ],
@@ -2453,9 +2554,10 @@
       "400",
       "401",
       "403",
-      "405",
+      "404",
       "413",
       "415",
+      "422",
       "429",
       "502",
       "503",
@@ -2463,21 +2565,121 @@
     ],
     "hasRequestBody": true,
     "requestContentTypes": [
-      "application/octet-stream"
+      "application/octet-stream",
+      "multipart/form-data"
     ],
     "pathParameters": [],
     "queryParameters": [],
-    "headerParameters": [],
+    "headerParameters": [
+      {
+        "name": "Idempotency-Key",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        },
+        "description": "Required UUID for this write. A missing or malformed key returns 400 invalid_request. Core retains the first recorded result for 24 hours, scoped to the verified tenant and caller, HTTP method and concrete request path. Within that window, the same key and logical request replay the first status, body and resource headers without another write. A changed body or write precondition for the same key returns 422 idempotency_key_reused. Concurrent identical requests share one result; every replay requires current authorization."
+      }
+    ],
     "successStatus": "201",
+    "successContentType": "application/json",
+    "successHasBody": true
+  },
+  {
+    "path": "/v2/objects",
+    "method": "GET",
+    "operationId": "listObjectsByMetadata",
+    "summary": "List authorized objects by record or tag",
+    "description": "Return current clean object metadata readable with existing ownership or exact share grants. Match both filters when supplied. Use recordRef[collection] and recordRef[id] together. Sort by object ID. Record links alone never grant visibility.",
+    "tags": [
+      "app-resource"
+    ],
+    "security": [
+      {
+        "coreBearer": []
+      }
+    ],
+    "responses": [
+      "200",
+      "400",
+      "401",
+      "403",
+      "404",
+      "429",
+      "502",
+      "503",
+      "504"
+    ],
+    "hasRequestBody": false,
+    "requestContentTypes": [],
+    "pathParameters": [],
+    "queryParameters": [
+      {
+        "name": "limit",
+        "required": false,
+        "schema": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100,
+          "default": 50
+        },
+        "description": ""
+      },
+      {
+        "name": "cursor",
+        "required": false,
+        "schema": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1024,
+          "description": "Opaque cursor. Reuse with the same filters and sort."
+        },
+        "description": ""
+      },
+      {
+        "name": "recordRef",
+        "required": false,
+        "schema": {
+          "type": "object",
+          "properties": {
+            "collection": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9_-]{0,62}$"
+            },
+            "id": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+            }
+          },
+          "required": [
+            "collection",
+            "id"
+          ],
+          "additionalProperties": false
+        },
+        "description": ""
+      },
+      {
+        "name": "tag",
+        "required": false,
+        "schema": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_-]{0,63}$"
+        },
+        "description": ""
+      }
+    ],
+    "headerParameters": [],
+    "successStatus": "200",
     "successContentType": "application/json",
     "successHasBody": true
   },
   {
     "path": "/v2/objects/{id}",
     "method": "PUT",
-    "operationId": "v2PutObject",
-    "summary": "V2 put object",
-    "description": "Active registered backend resolved from verified tenant/issuer/client_id and exact operator-enrolled resource_subject. Owner-only mutations; individually shared reads. Suspension/revocation and disabled enrollment block access. Upload 1 byte to 5 MiB. Stable-UUID PUT with identical bytes is retryable; POST creates a new ID and is not blindly retried. V2 DELETE tombstones permanently; bytes/old versions retained. PUT publishes immutable versions after DB reauthorization; concurrent owner PUTs use last publication. UUIDs are tenant-scoped, so a foreign tenant may create independent bytes at the same UUID.",
+    "operationId": "replaceObjectWithMetadata",
+    "summary": "Create or replace an object with optional metadata",
+    "description": "The file part must be 1 byte–5 MiB and is published only after a clean scan. A recordRef may point to a live record owned by the caller. The link and tags confer no read access. Charge the bytes of current published objects to the per-app quota before publication. Replacement charges the size delta; deletion releases the current size. For an existing object, omitted metadata preserves the previous value. Use null to clear recordRef and [] to clear tags. A new object defaults to no link or tags. For multipart uploads the logical request includes file bytes, link and tags. Multipart boundaries are transport framing and do not change the logical request.",
     "tags": [
       "app-resource"
     ],
@@ -2493,9 +2695,9 @@
       "401",
       "403",
       "404",
-      "405",
       "413",
       "415",
+      "422",
       "429",
       "502",
       "503",
@@ -2503,7 +2705,8 @@
     ],
     "hasRequestBody": true,
     "requestContentTypes": [
-      "application/octet-stream"
+      "application/octet-stream",
+      "multipart/form-data"
     ],
     "pathParameters": [
       {
@@ -2517,7 +2720,17 @@
       }
     ],
     "queryParameters": [],
-    "headerParameters": [],
+    "headerParameters": [
+      {
+        "name": "Idempotency-Key",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        },
+        "description": "Required UUID for this write. A missing or malformed key returns 400 invalid_request. Core retains the first recorded result for 24 hours, scoped to the verified tenant and caller, HTTP method and concrete request path. Within that window, the same key and logical request replay the first status, body and resource headers without another write. A changed body or write precondition for the same key returns 422 idempotency_key_reused. Concurrent identical requests share one result; every replay requires current authorization."
+      }
+    ],
     "successStatus": "200",
     "successContentType": "application/json",
     "successHasBody": true
