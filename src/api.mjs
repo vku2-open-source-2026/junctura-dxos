@@ -296,7 +296,13 @@ export function createApi(config) {
       return handleWorkflow(request, response, identity, config, new URL(request.url, "http://core"));
     }
     if (path === "/internal/auth" || path === "/v1/identity") {
-      const identity = await authorize(request, true);
+      let identity;
+      try { identity = await authorize(request, true); }
+      catch (error) {
+        // The gateway drops auth_request bodies; the header lets it answer with the same JSON code.
+        if (path === "/internal/auth" && error instanceof HttpError) response.setHeader("X-Junctura-Auth-Error", error.message);
+        throw error;
+      }
       if (path === "/internal/auth") {
         response.writeHead(204);
         return response.end();
