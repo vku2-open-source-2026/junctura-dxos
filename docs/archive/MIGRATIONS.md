@@ -239,3 +239,27 @@ that retain source record IDs.
 
 Adds tenant-scoped app groups and membership, plus the optional group recipient
 on record read shares. Existing exact app grants are preserved.
+
+## Subject bindings (036)
+
+Adds the tenant-scoped table binding an operator-assigned `subjectId` to exactly
+one OIDC login subject per (tenant, issuer), plus the read-side check RPC that
+verifies a caller's own claim against that binding. Nothing here is writable
+through Core; provisioning inserts rows directly.
+
+## Directory management (037)
+
+Extends the management permission vocabulary with `directory.write` and adds
+the durable desired state for unit types, flat units, per-unit groups and unit
+memberships. Every row carries a generation and a synchronization status; a
+change is confirmed only after the identity provider state has been read back,
+and confirmations are keyed by generation so an older job never overwrites a
+newer one.
+
+## Verified subject consents (038)
+
+Consent list, grant and revoke now require a verified subject identity and use
+the bound `subjectId` as the canonical data subject. Consent checks during
+capability execution resolve the named person through the same bindings, so
+consents granted before verified subjects keep their authority, while rows no
+allowed binding can reach stay quarantined.

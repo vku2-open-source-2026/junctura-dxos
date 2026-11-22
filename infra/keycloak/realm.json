@@ -4,7 +4,10 @@
   "displayName": "Junctura",
   "loginTheme": "junctura",
   "internationalizationEnabled": true,
-  "supportedLocales": ["vi", "en"],
+  "supportedLocales": [
+    "vi",
+    "en"
+  ],
   "defaultLocale": "vi",
   "sslRequired": "none",
   "registrationAllowed": false,
@@ -66,6 +69,29 @@
             "introspection.token.claim": "true"
           },
           "protocol": "openid-connect"
+        },
+        {
+          "name": "org-groups",
+          "protocolMapper": "oidc-group-membership-mapper",
+          "config": {
+            "access.token.claim": "true",
+            "claim.name": "groups",
+            "full.path": "true",
+            "introspection.token.claim": "true"
+          },
+          "protocol": "openid-connect"
+        },
+        {
+          "name": "subject-id",
+          "protocolMapper": "oidc-usermodel-attribute-mapper",
+          "config": {
+            "user.attribute": "subject_id",
+            "claim.name": "subject_id",
+            "jsonType.label": "String",
+            "access.token.claim": "true",
+            "introspection.token.claim": "true"
+          },
+          "protocol": "openid-connect"
         }
       ]
     },
@@ -108,6 +134,29 @@
             "introspection.token.claim": "true"
           },
           "protocol": "openid-connect"
+        },
+        {
+          "name": "org-groups",
+          "protocolMapper": "oidc-group-membership-mapper",
+          "config": {
+            "access.token.claim": "true",
+            "claim.name": "groups",
+            "full.path": "true",
+            "introspection.token.claim": "true"
+          },
+          "protocol": "openid-connect"
+        },
+        {
+          "name": "subject-id",
+          "protocolMapper": "oidc-usermodel-attribute-mapper",
+          "config": {
+            "user.attribute": "subject_id",
+            "claim.name": "subject_id",
+            "jsonType.label": "String",
+            "access.token.claim": "true",
+            "introspection.token.claim": "true"
+          },
+          "protocol": "openid-connect"
         }
       ]
     },
@@ -147,6 +196,29 @@
             "access.token.claim": "true",
             "claim.name": "tenant_memberships",
             "full.path": "false",
+            "introspection.token.claim": "true"
+          },
+          "protocol": "openid-connect"
+        },
+        {
+          "name": "org-groups",
+          "protocolMapper": "oidc-group-membership-mapper",
+          "config": {
+            "access.token.claim": "true",
+            "claim.name": "groups",
+            "full.path": "true",
+            "introspection.token.claim": "true"
+          },
+          "protocol": "openid-connect"
+        },
+        {
+          "name": "subject-id",
+          "protocolMapper": "oidc-usermodel-attribute-mapper",
+          "config": {
+            "user.attribute": "subject_id",
+            "claim.name": "subject_id",
+            "jsonType.label": "String",
+            "access.token.claim": "true",
             "introspection.token.claim": "true"
           },
           "protocol": "openid-connect"
@@ -195,6 +267,29 @@
             "access.token.claim": "true",
             "claim.name": "tenant_memberships",
             "full.path": "false",
+            "introspection.token.claim": "true"
+          },
+          "protocol": "openid-connect"
+        },
+        {
+          "name": "org-groups",
+          "protocolMapper": "oidc-group-membership-mapper",
+          "config": {
+            "access.token.claim": "true",
+            "claim.name": "groups",
+            "full.path": "true",
+            "introspection.token.claim": "true"
+          },
+          "protocol": "openid-connect"
+        },
+        {
+          "name": "subject-id",
+          "protocolMapper": "oidc-usermodel-attribute-mapper",
+          "config": {
+            "user.attribute": "subject_id",
+            "claim.name": "subject_id",
+            "jsonType.label": "String",
+            "access.token.claim": "true",
             "introspection.token.claim": "true"
           },
           "protocol": "openid-connect"
@@ -252,6 +347,29 @@
             "introspection.token.claim": "true"
           },
           "protocol": "openid-connect"
+        },
+        {
+          "name": "org-groups",
+          "protocolMapper": "oidc-group-membership-mapper",
+          "config": {
+            "access.token.claim": "true",
+            "claim.name": "groups",
+            "full.path": "true",
+            "introspection.token.claim": "true"
+          },
+          "protocol": "openid-connect"
+        },
+        {
+          "name": "subject-id",
+          "protocolMapper": "oidc-usermodel-attribute-mapper",
+          "config": {
+            "user.attribute": "subject_id",
+            "claim.name": "subject_id",
+            "jsonType.label": "String",
+            "access.token.claim": "true",
+            "introspection.token.claim": "true"
+          },
+          "protocol": "openid-connect"
         }
       ],
       "name": "Junctura Console",
@@ -263,6 +381,15 @@
         "http://127.0.0.1:8080",
         "http://localhost:8080"
       ]
+    },
+    {
+      "clientId": "junctura-directory-sync",
+      "secret": "${DIRECTORY_SYNC_CLIENT_SECRET}",
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "serviceAccountsEnabled": true,
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": false
     }
   ],
   "users": [
@@ -327,6 +454,20 @@
       "groups": [
         "tenant-a"
       ]
+    },
+    {
+      "username": "service-account-junctura-directory-sync",
+      "enabled": true,
+      "serviceAccountClientId": "junctura-directory-sync",
+      "clientRoles": {
+        "realm-management": [
+          "view-realm",
+          "query-users",
+          "query-groups",
+          "manage-users",
+          "manage-realm"
+        ]
+      }
     }
   ],
   "groups": [

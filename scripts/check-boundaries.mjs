@@ -24,6 +24,7 @@ const PUBLIC = new Set([
   "modules/applications/stats.mjs",
   "modules/audit/audit.mjs",
   "modules/directory/directory.mjs",
+  "modules/identity/identity.mjs",
   "modules/metrics/metrics.mjs",
   "modules/consent/consent.mjs",
   "modules/resources/resources.mjs",

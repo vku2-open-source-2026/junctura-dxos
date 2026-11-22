@@ -88,6 +88,12 @@ EXPECTED = {
     '/v1/workflows/definitions': {'get'}, '/v1/workflows/executions': {'post'},
     '/v1/workflows/executions/{executionId}': {'get', 'delete'},
     '/v1/workflows/executions/{executionId}/complete': {'post'},
+    '/v1/directory/unit-types': {'get'}, '/v1/directory/unit-types/{unitType}': {'put', 'delete'},
+    '/v1/directory/units': {'get'}, '/v1/directory/units/{unit}': {'put', 'delete'},
+    '/v1/directory/units/{unit}/groups': {'get'},
+    '/v1/directory/units/{unit}/groups/{group}': {'put', 'delete'},
+    '/v1/directory/units/{unit}/members': {'get'},
+    '/v1/directory/units/{unit}/members/{subject}': {'put', 'delete'},
 }
 for version in ('v1', 'v2'):
     EXPECTED.update({f'/{version}/data/{{collection}}': {'get', 'post'},
@@ -197,7 +203,7 @@ def validate_paths(spec, dereference, *, foundation=False):
             return
         if not planned:
             require((ROOT / operation['x-junctura-source']).is_file(), oid + ': source missing')
-            require(operation['x-junctura-test-suite'] in ('core', 'applications', 'records', 'record-queries', 'record-archives', 'app-group-shares'), oid + ': coverage suite missing')
+            require(operation['x-junctura-test-suite'] in ('core', 'applications', 'records', 'record-queries', 'record-archives', 'app-group-shares', 'directory'), oid + ': coverage suite missing')
         parameters = [dereference(p) for p in operation.get('parameters', [])]
         require(len({(p['in'], p['name']) for p in parameters}) == len(parameters), oid + ': duplicate parameter')
         require({p['name'] for p in parameters if p['in'] == 'path'} == set(re.findall(r'{([^}]+)}', path)), oid + ': path parameters differ')
@@ -411,7 +417,8 @@ def self_test(spec):
             continue
         raise ContractError('Static validator accepted a deliberate ' + change + ' regression')
     protected = copy.deepcopy(good)
-    protected.update(path='/v1/identity', responseBody={'subject':'fixture','tenantId':'tenant-a','roles':['core-reader']})
+    protected.update(path='/v1/identity',
+                     responseBody={'subject':'fixture','tenantId':'tenant-a','roles':['core-reader'],'units':[],'groups':[]})
     try:
         validate_observations(spec, [protected])
     except ContractError:
@@ -422,11 +429,37 @@ def self_test(spec):
     validate_observations(spec, [protected])
     capability = json.loads(CAPABILITY_CONTRACT.read_text(encoding='utf-8'))
     registry = capability_registry()
-    path = '/v1/me/consents/{consentId}/revoke'
+    # The consent overlays are promoted; overlay regressions run on a synthetic
+    # implemented operation with the same shape (path parameter and body).
     extension = 'x-junctura-planned-operation'
-    parent = capability['paths'][path]['post']
-    projected = validate_capability_plans(capability, registry)
-    require(not is_planned(parent) and projected['paths'][path]['post'] == parent[extension],
+    path = '/v1/me/fixtures/{id}'
+    parent = {
+        'operationId': 'fixtureConsentParent', 'summary': 'Fixture', 'tags': ['tenant'],
+        'x-junctura-status': 'implemented-verified-subject', 'x-junctura-query-policy': 'closed',
+        'security': [{'oidcBearer': []}], 'x-junctura-core-roles': ['core-reader'],
+        'x-junctura-authority': 'tenant', 'x-junctura-required-permissions': ['verified-subject'],
+        'x-junctura-source': 'src/modules/consent/consent.mjs', 'x-junctura-test-suite': 'capabilities',
+        'parameters': [{'name': 'id', 'in': 'path', 'required': True,
+                        'schema': {'$ref': './foundation-api.openapi.json#/components/schemas/Uuid'}}],
+        'requestBody': {'required': True, 'content': {'application/json': {
+            'schema': {'$ref': './foundation-api.openapi.json#/components/schemas/EmptyObject'}}}},
+        'responses': {'200': {'description': 'Fixture response'}},
+        extension: {
+            'operationId': 'fixtureConsentPlanned', 'summary': 'Fixture', 'tags': ['tenant'],
+            'x-junctura-status': 'planned', 'x-junctura-query-policy': 'closed',
+            'security': [{'oidcBearer': []}], 'x-junctura-core-roles': ['core-reader'],
+            'x-junctura-authority': 'tenant',
+            'parameters': [{'name': 'id', 'in': 'path', 'required': True,
+                            'schema': {'$ref': './foundation-api.openapi.json#/components/schemas/Uuid'}}],
+            'requestBody': {'required': True, 'content': {'application/json': {
+                'schema': {'$ref': './foundation-api.openapi.json#/components/schemas/EmptyObject'}}}},
+            'responses': {'200': {'description': 'Fixture response'}},
+        },
+    }
+    fixture = copy.deepcopy(capability)
+    fixture['paths'][path] = {'get': copy.deepcopy(parent)}
+    projected = validate_capability_plans(fixture, registry)
+    require(not is_planned(parent) and projected['paths'][path]['get'] == parent[extension],
             'Capability plan did not replace only the implemented operation in the planned view')
     for on_parent, key, value, expected in (
         (True, 'x-junctura-status', 'design-only', 'Future operation must be planned'),
@@ -437,8 +470,8 @@ def self_test(spec):
         (False, 'requestBody', {'$ref': './foundation-api.openapi.json#/components/schemas/Absent'},
          'Unresolved Capability reference'),
     ):
-        bad = copy.deepcopy(capability)
-        operation = bad['paths'][path]['post']
+        bad = copy.deepcopy(fixture)
+        operation = bad['paths'][path]['get']
         target = operation if on_parent else operation[extension]
         target[key] = value
         try:

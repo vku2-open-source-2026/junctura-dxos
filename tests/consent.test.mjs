@@ -10,7 +10,7 @@ import { HttpError, json } from "../src/platform/http/http.mjs";
 
 const CONSENT = "dcf6b718-7d02-41cc-8a2b-bb4aa9026d71";
 const EXECUTION = "aaaaaaaa-0000-4000-8000-000000000005";
-let identity = { tenantId: "tenant-a", subject: "subject-1", issuer: "https://id.example", clientId: "portal", roles: ["core-reader"] };
+let identity = { tenantId: "tenant-a", subject: "subject-1", issuer: "https://id.example", clientId: "portal", roles: ["core-reader"], subjectId: "person-1" };
 let reply = () => ({ status: 200, value: { consents: [] } });
 let seen = [];
 let data, core, base;
@@ -20,7 +20,7 @@ before(async () => {
     const chunks = []; for await (const chunk of request) chunks.push(chunk);
     const body = JSON.parse(Buffer.concat(chunks).toString());
     const claims = JSON.parse(Buffer.from(request.headers.authorization.split(".")[1], "base64url"));
-    seen.push({ url: request.url, body, role: claims.role, sub: claims.sub });
+    seen.push({ url: request.url, body, role: claims.role, sub: claims.sub, subjectId: claims.subject_id });
     const value = reply(body);
     if (value === "down") { response.writeHead(503); return response.end(); }
     response.writeHead(200, { "Content-Type": "application/json" }); response.end(JSON.stringify(value));
@@ -47,18 +47,23 @@ test("people list, create and revoke only their own consents through the subject
   assert.equal((await call("/v1/me/consents")).status, 200);
   const proposal = { consumerAppId: "11111111-1111-4111-8111-111111111111", capabilityId: "urn:junctura:capability:22222222-2222-4222-8222-222222222222:vaccination", purposes: ["review"], expiresAt: "2026-12-01T00:00:00.000Z" };
   reply = () => ({ status: 201, value: { consentId: CONSENT, state: "active" } });
-  const created = await call("/v1/me/consents", "POST", proposal);
+  const created = await fetch(base + "/v1/me/consents", { method: "POST",
+    headers: { "Content-Type": "application/json", "Idempotency-Key": "11111111-1111-4111-8111-111111111111" },
+    body: JSON.stringify(proposal) });
   assert.equal(created.status, 201);
   assert.equal(created.headers.get("location"), `/v1/me/consents/${CONSENT}`);
   assert.equal(created.headers.get("cache-control"), "no-store");
+  assert.equal((await call("/v1/me/consents", "POST", proposal)).status, 400, "the key is required for grants");
   reply = () => ({ status: 200, value: { consentId: CONSENT, state: "revoked" } });
   assert.equal((await call(`/v1/me/consents/${CONSENT}/revoke`, "POST", {})).status, 200);
-  assert.deepEqual(seen.map(item => [item.url, item.role, item.sub, item.body.operation]), [
-    ["/rpc/subject_consent", "junctura_subject_api", "subject-1", "list"],
-    ["/rpc/subject_consent", "junctura_subject_api", "subject-1", "create"],
-    ["/rpc/subject_consent", "junctura_subject_api", "subject-1", "revoke"],
+  assert.deepEqual(seen.map(item => [item.url, item.role, item.sub, item.subjectId, item.body.operation]), [
+    ["/rpc/subject_consent", "junctura_subject_api", "subject-1", "person-1", "list"],
+    ["/rpc/subject_consent", "junctura_subject_api", "subject-1", "person-1", "create"],
+    ["/rpc/subject_consent", "junctura_subject_api", "subject-1", "person-1", "revoke"],
   ]);
-  assert.deepEqual(seen[1].body.payload, proposal);
+  assert.deepEqual(seen[1].body.payload.consent, proposal);
+  assert.equal(seen[1].body.payload.key, "11111111-1111-4111-8111-111111111111");
+  assert.match(seen[1].body.payload.digest, /^[0-9a-f]{64}$/);
   assert.deepEqual(seen[2].body.payload, { consentId: CONSENT });
 });
 
@@ -71,9 +76,26 @@ test("consent requests are strict and failures stay closed", async () => {
   assert.equal((await call(`/v1/me/consents/${CONSENT}/revoke`, "POST", { reason: "x" })).status, 400);
   assert.equal((await call("/v1/me/consents", "DELETE")).status, 405);
   reply = () => ({ status: 404, error: "not_found" });
-  assert.equal((await call("/v1/me/consents", "POST", {})).status, 404);
+  const refused = await fetch(base + "/v1/me/consents", { method: "POST",
+    headers: { "Content-Type": "application/json", "Idempotency-Key": "11111111-1111-4111-8111-111111111111" },
+    body: JSON.stringify({ consumerAppId: "11111111-1111-4111-8111-111111111111", capabilityId: "urn:junctura:capability:22222222-2222-4222-8222-222222222222:vaccination", purposes: ["review"], expiresAt: "2026-12-01T00:00:00.000Z" }) });
+  assert.equal(refused.status, 404);
   reply = () => "down";
   assert.equal((await call("/v1/me/consents")).status, 503);
+});
+
+test("consent operations refuse callers without a verified subject claim", async () => {
+  seen = [];
+  identity = { ...identity, subjectId: undefined };
+  for (const [method, body] of [["GET", undefined], ["POST", { consumerAppId: "11111111-1111-4111-8111-111111111111", capabilityId: "urn:junctura:capability:22222222-2222-4222-8222-222222222222:vaccination", purposes: ["review"], expiresAt: "2026-12-01T00:00:00.000Z" }]]) {
+    const response = await call("/v1/me/consents", method, body);
+    assert.equal(response.status, 403, String(method));
+    assert.equal((await response.json()).error, "verified_subject_required");
+  }
+  const revoke = await call(`/v1/me/consents/${CONSENT}/revoke`, "POST", {});
+  assert.equal(revoke.status, 403);
+  assert.equal((await revoke.json()).error, "verified_subject_required");
+  assert.deepEqual(seen, [], "no data store call without a verified subject");
 });
 
 test("emergency reviews use the trust role and need a writer to decide", async () => {

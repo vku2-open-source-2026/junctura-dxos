@@ -2,6 +2,28 @@
 // SPDX-License-Identifier: Apache-2.0
 import { HttpError } from "../http/http.mjs";
 
+const subjectIdPattern = /^[A-Za-z0-9:_-]{1,128}$/;
+const orgPathPattern = /^\/[a-z][a-z0-9-]{1,63}(?:\/[a-z][a-z0-9-]{1,63})?$/;
+
+// Verified organization membership comes from the token's group paths under
+// the tenant namespace, e.g. /tenant-a/unit-a/reviewers. Paths outside the
+// namespace or deeper than /unit/group never name a unit or a group here.
+export function organizationContext(groups, tenantId) {
+  const units = new Set();
+  const paths = new Set();
+  const prefix = `/${tenantId}/`;
+  if (!Array.isArray(groups)) return { units: [], groups: [] };
+  for (const claim of groups) {
+    if (typeof claim !== "string" || !claim.startsWith(prefix)) continue;
+    const path = claim.slice(tenantId.length + 1);
+    if (!orgPathPattern.test(path)) continue;
+    const [unit, group] = path.slice(1).split("/");
+    units.add(unit);
+    if (group !== undefined) paths.add(path);
+  }
+  return { units: [...units].sort(), groups: [...paths].sort() };
+}
+
 export function validateIdentity(claims, issuer, now = Date.now() / 1000) {
   const audiences = Array.isArray(claims.aud) ? claims.aud : [claims.aud];
   if (claims.active !== true || claims.iss !== issuer || !audiences.includes("junctura-core") ||
@@ -18,8 +40,12 @@ export function validateIdentity(claims, issuer, now = Date.now() / 1000) {
     claims.preferred_username.isWellFormed() && claims.preferred_username.trim().length > 0 &&
     [...claims.preferred_username].length <= 255 && !/[\u0000-\u001f\u007f]/u.test(claims.preferred_username)
     ? claims.preferred_username : undefined;
+  const subjectId = typeof claims.subject_id === "string" && subjectIdPattern.test(claims.subject_id)
+    ? claims.subject_id : undefined;
   return { subject: claims.sub, tenantId: claims.tenant_id,
     roles: roles.filter((role) => ["core-reader", "core-writer"].includes(role)),
+    ...organizationContext(claims.groups, claims.tenant_id),
+    ...(subjectId ? { subjectId } : {}),
     ...(preferredUsername ? { preferredUsername } : {}) };
 }
 

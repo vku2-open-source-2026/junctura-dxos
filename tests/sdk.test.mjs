@@ -143,3 +143,40 @@ test("SDK redeems provider tickets once and never sends malformed tickets", asyn
   assert.deepEqual(sent, [{ path: "/v1/capability-authorizations/introspect",
     body: { ticket, invocationId, inputDigest: inputDigest({ subject: "p1" }) } }]);
 });
+
+test("SDK directory and consent calls hit the documented routes and bodies", async () => {
+  const calls = [];
+  const client = createJuncturaClient({ ...options, fetcher: async (url, init) => {
+    if (url.pathname.includes("/token")) return auth();
+    calls.push({ path: url.pathname, query: [...url.searchParams], method: init.method,
+      key: init.headers.get("Idempotency-Key"), body: init.body === undefined || init.body === null ? undefined : JSON.parse(init.body) });
+    return json({ unitType: "office", name: "Office" });
+  } });
+  await client.listDirectoryUnitTypes({ limit: 10, cursor: "next" });
+  await client.putDirectoryUnitType("office", "Office");
+  await client.deleteDirectoryUnitType("office");
+  await client.putDirectoryUnit("unit-a", { unitType: "office", name: "Unit A" });
+  await client.putDirectoryGroup("unit-a", "reviewers", "Reviewers");
+  await client.putDirectoryMember("unit-a", "subject-42", ["reviewers"]);
+  await client.listDirectoryMembers("unit-a", {});
+  await client.deleteDirectoryMember("unit-a", "subject-42");
+  await client.createConsent({ consumerAppId: "22222222-2222-4222-8222-222222222222",
+    capabilityId: "urn:junctura:capability:33333333-3333-4333-8333-333333333333:lookup",
+    purposes: ["service_review"], expiresAt: "2030-01-12T12:00:00Z" }, "consent-key");
+  await client.revokeConsent("11111111-1111-4111-8111-111111111111");
+  assert.deepEqual(calls, [
+    { path: "/v1/directory/unit-types", query: [["limit", "10"], ["cursor", "next"]], method: "GET", key: null, body: undefined },
+    { path: "/v1/directory/unit-types/office", query: [], method: "PUT", key: null, body: { name: "Office" } },
+    { path: "/v1/directory/unit-types/office", query: [], method: "DELETE", key: null, body: undefined },
+    { path: "/v1/directory/units/unit-a", query: [], method: "PUT", key: null, body: { unitType: "office", name: "Unit A" } },
+    { path: "/v1/directory/units/unit-a/groups/reviewers", query: [], method: "PUT", key: null, body: { name: "Reviewers" } },
+    { path: "/v1/directory/units/unit-a/members/subject-42", query: [], method: "PUT", key: null, body: { groups: ["reviewers"] } },
+    { path: "/v1/directory/units/unit-a/members", query: [], method: "GET", key: null, body: undefined },
+    { path: "/v1/directory/units/unit-a/members/subject-42", query: [], method: "DELETE", key: null, body: undefined },
+    { path: "/v1/me/consents", query: [], method: "POST", key: "consent-key",
+      body: { consumerAppId: "22222222-2222-4222-8222-222222222222",
+        capabilityId: "urn:junctura:capability:33333333-3333-4333-8333-333333333333:lookup",
+        purposes: ["service_review"], expiresAt: "2030-01-12T12:00:00Z" } },
+    { path: "/v1/me/consents/11111111-1111-4111-8111-111111111111/revoke", query: [], method: "POST", key: null, body: {} },
+  ]);
+});

@@ -379,6 +379,670 @@
     "successHasBody": true
   },
   {
+    "path": "/v1/directory/unit-types",
+    "method": "GET",
+    "operationId": "listDirectoryUnitType",
+    "summary": "List unit types",
+    "description": "An enrolled tenant directory administrator reads rows in ascending identifier order. The existing principal and organization tree are separate views.",
+    "tags": [
+      "application-admin"
+    ],
+    "security": [
+      {
+        "coreBearer": []
+      }
+    ],
+    "responses": [
+      "200",
+      "400",
+      "401",
+      "403",
+      "404",
+      "429",
+      "502",
+      "503",
+      "504"
+    ],
+    "hasRequestBody": false,
+    "requestContentTypes": [],
+    "pathParameters": [],
+    "queryParameters": [
+      {
+        "name": "limit",
+        "required": false,
+        "schema": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100,
+          "default": 50
+        },
+        "description": ""
+      },
+      {
+        "name": "cursor",
+        "required": false,
+        "schema": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1024,
+          "description": "Opaque cursor. Reuse with the same filters and sort."
+        },
+        "description": ""
+      }
+    ],
+    "headerParameters": [],
+    "successStatus": "200",
+    "successContentType": "application/json",
+    "successHasBody": true
+  },
+  {
+    "path": "/v1/directory/unit-types/{unitType}",
+    "method": "PUT",
+    "operationId": "putDirectoryUnitType",
+    "summary": "Create or replace a directory unittype",
+    "description": "An enrolled directory administrator sets the desired state at the named key. Referenced unit types and parent units must already exist. Success confirms synchronization with the identity provider. Retry the same desired state if synchronization is unavailable. Previously issued tokens can retain old claims until renewed.",
+    "tags": [
+      "application-admin"
+    ],
+    "security": [
+      {
+        "coreBearer": []
+      }
+    ],
+    "responses": [
+      "200",
+      "201",
+      "400",
+      "401",
+      "403",
+      "404",
+      "409",
+      "413",
+      "415",
+      "429",
+      "502",
+      "503",
+      "504"
+    ],
+    "hasRequestBody": true,
+    "requestContentTypes": [
+      "application/json"
+    ],
+    "pathParameters": [
+      {
+        "name": "unitType",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]{1,63}$"
+        },
+        "description": ""
+      }
+    ],
+    "queryParameters": [],
+    "headerParameters": [],
+    "successStatus": "200",
+    "successContentType": "application/json",
+    "successHasBody": true
+  },
+  {
+    "path": "/v1/directory/unit-types/{unitType}",
+    "method": "DELETE",
+    "operationId": "deleteDirectoryUnitType",
+    "summary": "Remove a directory unittype",
+    "description": "Deletion conflicts while a unit references the type. Repeating a successful deletion returns 204. Success confirms synchronization with the identity provider. Retry the same desired state if synchronization is unavailable. Previously issued tokens can retain old claims until renewed.",
+    "tags": [
+      "application-admin"
+    ],
+    "security": [
+      {
+        "coreBearer": []
+      }
+    ],
+    "responses": [
+      "204",
+      "400",
+      "401",
+      "403",
+      "404",
+      "409",
+      "429",
+      "502",
+      "503",
+      "504"
+    ],
+    "hasRequestBody": false,
+    "requestContentTypes": [],
+    "pathParameters": [
+      {
+        "name": "unitType",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]{1,63}$"
+        },
+        "description": ""
+      }
+    ],
+    "queryParameters": [],
+    "headerParameters": [],
+    "successStatus": "204",
+    "successContentType": null,
+    "successHasBody": false
+  },
+  {
+    "path": "/v1/directory/units",
+    "method": "GET",
+    "operationId": "listDirectoryUnit",
+    "summary": "List units",
+    "description": "An enrolled tenant directory administrator reads rows in ascending identifier order. The existing principal and organization tree are separate views.",
+    "tags": [
+      "application-admin"
+    ],
+    "security": [
+      {
+        "coreBearer": []
+      }
+    ],
+    "responses": [
+      "200",
+      "400",
+      "401",
+      "403",
+      "404",
+      "429",
+      "502",
+      "503",
+      "504"
+    ],
+    "hasRequestBody": false,
+    "requestContentTypes": [],
+    "pathParameters": [],
+    "queryParameters": [
+      {
+        "name": "limit",
+        "required": false,
+        "schema": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100,
+          "default": 50
+        },
+        "description": ""
+      },
+      {
+        "name": "cursor",
+        "required": false,
+        "schema": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1024,
+          "description": "Opaque cursor. Reuse with the same filters and sort."
+        },
+        "description": ""
+      }
+    ],
+    "headerParameters": [],
+    "successStatus": "200",
+    "successContentType": "application/json",
+    "successHasBody": true
+  },
+  {
+    "path": "/v1/directory/units/{unit}",
+    "method": "PUT",
+    "operationId": "putDirectoryUnit",
+    "summary": "Create or replace a directory unit",
+    "description": "An enrolled directory administrator sets the desired state at the named key. Referenced unit types and parent units must already exist. Success confirms synchronization with the identity provider. Retry the same desired state if synchronization is unavailable. Previously issued tokens can retain old claims until renewed.",
+    "tags": [
+      "application-admin"
+    ],
+    "security": [
+      {
+        "coreBearer": []
+      }
+    ],
+    "responses": [
+      "200",
+      "201",
+      "400",
+      "401",
+      "403",
+      "404",
+      "409",
+      "413",
+      "415",
+      "429",
+      "502",
+      "503",
+      "504"
+    ],
+    "hasRequestBody": true,
+    "requestContentTypes": [
+      "application/json"
+    ],
+    "pathParameters": [
+      {
+        "name": "unit",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]{1,63}$"
+        },
+        "description": ""
+      }
+    ],
+    "queryParameters": [],
+    "headerParameters": [],
+    "successStatus": "200",
+    "successContentType": "application/json",
+    "successHasBody": true
+  },
+  {
+    "path": "/v1/directory/units/{unit}",
+    "method": "DELETE",
+    "operationId": "deleteDirectoryUnit",
+    "summary": "Remove a directory unit",
+    "description": "Deletion conflicts while the unit has groups or members. Repeating a successful deletion returns 204. Success confirms synchronization with the identity provider. Retry the same desired state if synchronization is unavailable. Previously issued tokens can retain old claims until renewed.",
+    "tags": [
+      "application-admin"
+    ],
+    "security": [
+      {
+        "coreBearer": []
+      }
+    ],
+    "responses": [
+      "204",
+      "400",
+      "401",
+      "403",
+      "404",
+      "409",
+      "429",
+      "502",
+      "503",
+      "504"
+    ],
+    "hasRequestBody": false,
+    "requestContentTypes": [],
+    "pathParameters": [
+      {
+        "name": "unit",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]{1,63}$"
+        },
+        "description": ""
+      }
+    ],
+    "queryParameters": [],
+    "headerParameters": [],
+    "successStatus": "204",
+    "successContentType": null,
+    "successHasBody": false
+  },
+  {
+    "path": "/v1/directory/units/{unit}/groups",
+    "method": "GET",
+    "operationId": "listDirectoryGroup",
+    "summary": "List unit groups",
+    "description": "An enrolled tenant directory administrator reads rows in ascending identifier order. The existing principal and organization tree are separate views.",
+    "tags": [
+      "application-admin"
+    ],
+    "security": [
+      {
+        "coreBearer": []
+      }
+    ],
+    "responses": [
+      "200",
+      "400",
+      "401",
+      "403",
+      "404",
+      "429",
+      "502",
+      "503",
+      "504"
+    ],
+    "hasRequestBody": false,
+    "requestContentTypes": [],
+    "pathParameters": [
+      {
+        "name": "unit",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]{1,63}$"
+        },
+        "description": ""
+      }
+    ],
+    "queryParameters": [
+      {
+        "name": "limit",
+        "required": false,
+        "schema": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100,
+          "default": 50
+        },
+        "description": ""
+      },
+      {
+        "name": "cursor",
+        "required": false,
+        "schema": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1024,
+          "description": "Opaque cursor. Reuse with the same filters and sort."
+        },
+        "description": ""
+      }
+    ],
+    "headerParameters": [],
+    "successStatus": "200",
+    "successContentType": "application/json",
+    "successHasBody": true
+  },
+  {
+    "path": "/v1/directory/units/{unit}/groups/{group}",
+    "method": "PUT",
+    "operationId": "putDirectoryGroup",
+    "summary": "Create or replace a directory group",
+    "description": "An enrolled directory administrator sets the desired state at the named key. Referenced unit types and parent units must already exist. Success confirms synchronization with the identity provider. Retry the same desired state if synchronization is unavailable. Previously issued tokens can retain old claims until renewed.",
+    "tags": [
+      "application-admin"
+    ],
+    "security": [
+      {
+        "coreBearer": []
+      }
+    ],
+    "responses": [
+      "200",
+      "201",
+      "400",
+      "401",
+      "403",
+      "404",
+      "409",
+      "413",
+      "415",
+      "429",
+      "502",
+      "503",
+      "504"
+    ],
+    "hasRequestBody": true,
+    "requestContentTypes": [
+      "application/json"
+    ],
+    "pathParameters": [
+      {
+        "name": "unit",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]{1,63}$"
+        },
+        "description": ""
+      },
+      {
+        "name": "group",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]{1,63}$"
+        },
+        "description": ""
+      }
+    ],
+    "queryParameters": [],
+    "headerParameters": [],
+    "successStatus": "200",
+    "successContentType": "application/json",
+    "successHasBody": true
+  },
+  {
+    "path": "/v1/directory/units/{unit}/groups/{group}",
+    "method": "DELETE",
+    "operationId": "deleteDirectoryGroup",
+    "summary": "Remove a directory group",
+    "description": "Deletion conflicts while members belong to the group. Repeating a successful deletion returns 204. Success confirms synchronization with the identity provider. Retry the same desired state if synchronization is unavailable. Previously issued tokens can retain old claims until renewed.",
+    "tags": [
+      "application-admin"
+    ],
+    "security": [
+      {
+        "coreBearer": []
+      }
+    ],
+    "responses": [
+      "204",
+      "400",
+      "401",
+      "403",
+      "404",
+      "409",
+      "429",
+      "502",
+      "503",
+      "504"
+    ],
+    "hasRequestBody": false,
+    "requestContentTypes": [],
+    "pathParameters": [
+      {
+        "name": "unit",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]{1,63}$"
+        },
+        "description": ""
+      },
+      {
+        "name": "group",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]{1,63}$"
+        },
+        "description": ""
+      }
+    ],
+    "queryParameters": [],
+    "headerParameters": [],
+    "successStatus": "204",
+    "successContentType": null,
+    "successHasBody": false
+  },
+  {
+    "path": "/v1/directory/units/{unit}/members",
+    "method": "GET",
+    "operationId": "listDirectoryMember",
+    "summary": "List unit members",
+    "description": "An enrolled tenant directory administrator reads rows in ascending identifier order. The existing principal and organization tree are separate views.",
+    "tags": [
+      "application-admin"
+    ],
+    "security": [
+      {
+        "coreBearer": []
+      }
+    ],
+    "responses": [
+      "200",
+      "400",
+      "401",
+      "403",
+      "404",
+      "429",
+      "502",
+      "503",
+      "504"
+    ],
+    "hasRequestBody": false,
+    "requestContentTypes": [],
+    "pathParameters": [
+      {
+        "name": "unit",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]{1,63}$"
+        },
+        "description": ""
+      }
+    ],
+    "queryParameters": [
+      {
+        "name": "limit",
+        "required": false,
+        "schema": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100,
+          "default": 50
+        },
+        "description": ""
+      },
+      {
+        "name": "cursor",
+        "required": false,
+        "schema": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1024,
+          "description": "Opaque cursor. Reuse with the same filters and sort."
+        },
+        "description": ""
+      }
+    ],
+    "headerParameters": [],
+    "successStatus": "200",
+    "successContentType": "application/json",
+    "successHasBody": true
+  },
+  {
+    "path": "/v1/directory/units/{unit}/members/{subject}",
+    "method": "PUT",
+    "operationId": "putDirectoryMember",
+    "summary": "Create or replace a directory member",
+    "description": "An enrolled directory administrator sets the desired state at the named key. The OIDC login subject must already exist in the tenant. The groups array replaces that unit's group assignments and accepts only existing groups in that unit. Success confirms synchronization with the identity provider. Retry the same desired state if synchronization is unavailable. Previously issued tokens can retain old claims until renewed.",
+    "tags": [
+      "application-admin"
+    ],
+    "security": [
+      {
+        "coreBearer": []
+      }
+    ],
+    "responses": [
+      "200",
+      "201",
+      "400",
+      "401",
+      "403",
+      "404",
+      "409",
+      "413",
+      "415",
+      "429",
+      "502",
+      "503",
+      "504"
+    ],
+    "hasRequestBody": true,
+    "requestContentTypes": [
+      "application/json"
+    ],
+    "pathParameters": [
+      {
+        "name": "unit",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]{1,63}$"
+        },
+        "description": ""
+      },
+      {
+        "name": "subject",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9:_-]{1,128}$"
+        },
+        "description": ""
+      }
+    ],
+    "queryParameters": [],
+    "headerParameters": [],
+    "successStatus": "200",
+    "successContentType": "application/json",
+    "successHasBody": true
+  },
+  {
+    "path": "/v1/directory/units/{unit}/members/{subject}",
+    "method": "DELETE",
+    "operationId": "deleteDirectoryMember",
+    "summary": "Remove a directory member",
+    "description": "Deleting membership removes all of the member's group assignments in this unit. Repeating a successful deletion returns 204. Success confirms synchronization with the identity provider. Retry the same desired state if synchronization is unavailable. Previously issued tokens can retain old claims until renewed.",
+    "tags": [
+      "application-admin"
+    ],
+    "security": [
+      {
+        "coreBearer": []
+      }
+    ],
+    "responses": [
+      "204",
+      "400",
+      "401",
+      "403",
+      "404",
+      "409",
+      "429",
+      "502",
+      "503",
+      "504"
+    ],
+    "hasRequestBody": false,
+    "requestContentTypes": [],
+    "pathParameters": [
+      {
+        "name": "unit",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]{1,63}$"
+        },
+        "description": ""
+      },
+      {
+        "name": "subject",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9:_-]{1,128}$"
+        },
+        "description": ""
+      }
+    ],
+    "queryParameters": [],
+    "headerParameters": [],
+    "successStatus": "204",
+    "successContentType": null,
+    "successHasBody": false
+  },
+  {
     "path": "/health",
     "method": "GET",
     "operationId": "getHealth",
@@ -456,9 +1120,9 @@
   {
     "path": "/v1/identity",
     "method": "GET",
-    "operationId": "getIdentity",
-    "summary": "Get identity",
-    "description": "Verified subject, tenant and supported roles. No appId/delegated human fields are returned.",
+    "operationId": "getVerifiedIdentity",
+    "summary": "Get the caller's verified subject and organization context",
+    "description": "subjectId is optional and comes from the verified token claim of a bound data-subject account. It is distinct from the login subject. units and groups reflect verified provider membership (empty when absent). Group paths have the form /unit/group.",
     "tags": [
       "tenant"
     ],
@@ -469,9 +1133,10 @@
     ],
     "responses": [
       "200",
+      "400",
       "401",
       "403",
-      "405",
+      "404",
       "429",
       "502",
       "503",

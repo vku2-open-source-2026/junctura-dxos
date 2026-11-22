@@ -33,6 +33,9 @@ export function loadConfig(env = process.env) {
   if (env.SECRETS_URL && !env.SECRETS_TOKEN && !env.SECRETS_TOKEN_FILE) {
     throw new Error("Secrets manager configuration is incomplete");
   }
+  if (!!env.DIRECTORY_SYNC_CLIENT_ID !== !!env.DIRECTORY_SYNC_CLIENT_SECRET) {
+    throw new Error("Directory synchronization configuration is incomplete");
+  }
   const config = Object.freeze({
     issuer: env.OIDC_ISSUER,
     identityUrl: env.IDENTITY_URL,
@@ -52,6 +55,8 @@ export function loadConfig(env = process.env) {
     secretsMount: env.SECRETS_MOUNT || "secret",
     workflowUrl: env.WORKFLOW_URL,
     workflowPassword: env.WORKFLOW_ADMIN_PASSWORD,
+    directorySyncClientId: env.DIRECTORY_SYNC_CLIENT_ID || undefined,
+    directorySyncSecret: env.DIRECTORY_SYNC_CLIENT_SECRET || undefined,
   });
   const origins = name => {
     let value;

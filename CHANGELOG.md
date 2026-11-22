@@ -8,6 +8,16 @@ All notable changes to Junctura are recorded here. Versions follow
 
 ## Unreleased
 
+- **Verified identity, directory management and subject consents (issue #65):** migrations 036–038 add
+  operator-bound subject identifiers per (tenant, issuer), durable directory desired state with per-row
+  generations synced into Keycloak through a dedicated service account, and consent under the verified
+  subject identity. `GET /v1/identity` now reports verified `units`, `/unit/group` paths and a bound
+  `subjectId`; twelve `/v1/directory/*` management operations (unit types, flat units, per-unit groups,
+  unit members) confirm a change only after reading the provider back at the stored generation; consent
+  list/grant/revoke use the canonical verified subject, keep pre-binding consents authorized through the
+  same mapping and return `403 verified_subject_required` without one. The identity provider realm gains
+  organization group and subjectId mappers plus the `junctura-directory-sync` service account
+  (`npm run directory:provision` reapplies them to an existing realm).
 - **Indexed record queries, archives and app-group shares:** migrations 031, 034 and 035 add
   filtered list and aggregate RPCs, short-lived export snapshots with transactional NDJSON import,
   and operator-managed app groups whose live membership authorizes one-record read shares.

@@ -18,7 +18,7 @@ test("setup uses template, unique secrets and exclusive creation; rejects invali
     assert.equal(run("--port", "18080", "--console-port", "13000", "--project", "junctura-test").status, 0);
     const bytes = readFileSync(file, "utf8"), env = parseEnv(bytes);
     const secrets = Object.entries(env).filter(([key]) => /PASSWORD|SECRET/.test(key)).map(([, value]) => value);
-    assert.equal(secrets.length, 12);
+    assert.equal(secrets.length, 13);
     assert.equal(new Set(secrets).size, secrets.length);
     assert.ok(secrets.every(value => /^[a-f0-9]{64}$/.test(value)));
     assert.equal(env.C4A_ENABLED, "false"); assert.equal(env.C4B_ENABLED, "false");

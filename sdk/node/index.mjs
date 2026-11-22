@@ -121,6 +121,12 @@ export function createJuncturaClient({ baseUrl, clientId, clientSecret, timeoutM
   const addOwner = (query, ownerAppId) => {
     if (ownerAppId !== undefined) query.set("ownerAppId", ownerAppId);
   };
+  const directoryList = (path, { limit, cursor } = {}) => {
+    const query = new URLSearchParams();
+    if (limit !== undefined) query.set("limit", String(limit));
+    if (cursor !== undefined) query.set("cursor", cursor);
+    return request(`${path}${query.size ? `?${query}` : ""}`);
+  };
   const finish = response => response.body?.cancel();
   const client = {
     request,
@@ -218,6 +224,33 @@ export function createJuncturaClient({ baseUrl, clientId, clientSecret, timeoutM
     },
     async putObject(id, bytes) { return (await request(`/v2/objects/${segment(id)}`, { method: "PUT", body: bytes, contentType: "application/octet-stream" })).json(); },
     async getObject(id) { return (await request(`/v2/objects/${segment(id)}`)).arrayBuffer(); },
+    async listDirectoryUnitTypes(page) { return (await directoryList("/v1/directory/unit-types", page)).json(); },
+    async putDirectoryUnitType(unitType, name) {
+      return (await request(`/v1/directory/unit-types/${segment(unitType)}`, { method: "PUT", json: { name } })).json();
+    },
+    async deleteDirectoryUnitType(unitType) { await finish(await request(`/v1/directory/unit-types/${segment(unitType)}`, { method: "DELETE" })); },
+    async listDirectoryUnits(page) { return (await directoryList("/v1/directory/units", page)).json(); },
+    async putDirectoryUnit(unit, { unitType, name }) {
+      return (await request(`/v1/directory/units/${segment(unit)}`, { method: "PUT", json: { unitType, name } })).json();
+    },
+    async deleteDirectoryUnit(unit) { await finish(await request(`/v1/directory/units/${segment(unit)}`, { method: "DELETE" })); },
+    async listDirectoryGroups(unit, page) { return (await directoryList(`/v1/directory/units/${segment(unit)}/groups`, page)).json(); },
+    async putDirectoryGroup(unit, group, name) {
+      return (await request(`/v1/directory/units/${segment(unit)}/groups/${segment(group)}`, { method: "PUT", json: { name } })).json();
+    },
+    async deleteDirectoryGroup(unit, group) { await finish(await request(`/v1/directory/units/${segment(unit)}/groups/${segment(group)}`, { method: "DELETE" })); },
+    async listDirectoryMembers(unit, page) { return (await directoryList(`/v1/directory/units/${segment(unit)}/members`, page)).json(); },
+    async putDirectoryMember(unit, subject, groups) {
+      return (await request(`/v1/directory/units/${segment(unit)}/members/${segment(subject)}`, { method: "PUT", json: { groups } })).json();
+    },
+    async deleteDirectoryMember(unit, subject) { await finish(await request(`/v1/directory/units/${segment(unit)}/members/${segment(subject)}`, { method: "DELETE" })); },
+    async listConsents() { return (await request("/v1/me/consents")).json(); },
+    async createConsent(consent, idempotencyKey = randomUUID()) {
+      return (await request("/v1/me/consents", { method: "POST", json: consent, idempotencyKey })).json();
+    },
+    async revokeConsent(consentId) {
+      return (await request(`/v1/me/consents/${segment(consentId)}/revoke`, { method: "POST", json: {} })).json();
+    },
     async workflowDefinitions() { return (await request("/v1/workflows/definitions")).json(); },
     async startWorkflow(definitionId, input, idempotencyKey = randomUUID()) {
       return (await request("/v1/workflows/executions", { method: "POST", json: { definitionId, input }, idempotencyKey })).json();
