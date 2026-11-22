@@ -3736,13 +3736,13 @@
             }
           },
           "400": {
-            "$ref": "#/components/responses/PlannedBadRequest"
+            "$ref": "#/components/responses/BadRequest"
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
           },
           "403": {
-            "$ref": "#/components/responses/PlannedForbidden"
+            "$ref": "#/components/responses/Forbidden"
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
