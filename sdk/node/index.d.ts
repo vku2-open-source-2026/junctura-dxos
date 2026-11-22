@@ -187,7 +187,7 @@ export function createJuncturaClient(options: { baseUrl: string; clientId: strin
   listWorkflowTasks(filters?: WorkflowTaskFilter): Promise<{ items: WorkflowTask[]; nextCursor: string | null }>;
   claimWorkflowTask(taskId: string, options?: { ttlSeconds?: number; userToken?: string }): Promise<WorkflowTaskClaim>;
   releaseWorkflowTask(taskId: string, options?: { userToken?: string }): Promise<void>;
-  completeWorkflowTask(executionId: string, body: WorkflowTaskCompletion, options?: { idempotencyKey?: string; userToken?: string }): Promise<WorkflowPendingCompletion>;
+  completeWorkflowTask(executionId: string, body: WorkflowTaskCompletion, options: { idempotencyKey: string; userToken?: string }): Promise<WorkflowPendingCompletion>;
   cancelWorkflowWithPendingCheck(executionId: string, options?: { userToken?: string }): Promise<void>;
   listWorkflowTaskHistory(executionId: string, page?: WorkflowPageOptions): Promise<{ items: WorkflowHistoryEntry[]; nextCursor: string | null }>;
   discover(query?: { limit?: number; cursor?: string }): Promise<unknown>;

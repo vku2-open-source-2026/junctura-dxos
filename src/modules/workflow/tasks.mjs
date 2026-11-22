@@ -177,17 +177,21 @@ async function activeTasks(config, tenantId, key) {
   const tasks = new Map();
   const params = new URLSearchParams({ tenantId, size: "100", sort: "id", order: "asc" });
   if (key) params.set("processDefinitionKey", key);
-  for (let start = 0; ; ) {
+  let start = 0;
+  for (let page = 0; page < 20; page++) {
     params.set("start", String(start));
     const result = await workflowRequest(config, `runtime/tasks?${params}`);
-    if (!Array.isArray(result?.data) || !Number.isInteger(result.total)) throw new HttpError(503, "workflow_unavailable");
+    if (!Array.isArray(result?.data) || result.data.length > 100 || !Number.isInteger(result.total)) {
+      throw new HttpError(503, "workflow_unavailable");
+    }
     for (const task of result.data) {
       const identity = taskIdentity(task, tenantId);
       if (identity) tasks.set(identity.taskId, identity);
     }
     start += result.data.length;
-    if (!result.data.length || start >= result.total) return [...tasks.values()];
+    if (!result.data.length || start >= result.total) break;
   }
+  return [...tasks.values()];
 }
 
 export async function workflowTaskPage(config, identity, url, executionId) {
@@ -256,7 +260,11 @@ export async function completeTask(request, response, identity, config, executio
 }
 
 export async function reserveCancellation(config, identity, execution) {
-  rpcValue(await workflowCommand(config, identity, "task", "cancel", { executionId: execution.id, status: execution.status }));
+  return rpcValue(await workflowCommand(config, identity, "task", "cancel", { executionId: execution.id, status: execution.status }));
+}
+
+export async function releaseCancellationLease(config, identity, executionId, lease) {
+  rpcValue(await workflowCommand(config, identity, "task", "resume", { executionId, lease }));
 }
 
 function matches(job, task) {
@@ -285,32 +293,52 @@ export async function reconcileCompletion(config, job) {
   }));
   // Flowable stores the local variable and ends this task in the same engine transaction.
   variables.push({ name: markerName, value: job.marker, type: "string", scope: "local" });
+  let failure;
   try {
     await workflowRequest(config, `runtime/tasks/${encodeURIComponent(job.task_id)}`, post({ action: "complete", variables }));
   } catch (error) {
     if (!(error instanceof HttpError)) throw error;
     // The engine may have committed before Core lost its response.
+    failure = error;
   }
-  return await completionEvidence(config, job) ?? { state: "pending" };
+  const confirmed = await completionEvidence(config, job);
+  if (!confirmed && failure) throw failure;
+  return confirmed ?? { state: "pending" };
 }
 
 export function startWorkflowReconciler(config, delay = 1000) {
   if (!config.workflowUrl || !config.dataUrl) return;
   let busy = false;
+  let stopped = false;
+  const nextReport = { lease: 0, reconcile: 0, settle: 0 };
+  function report(operation, job) {
+    const now = Date.now();
+    if (now < nextReport[operation]) return;
+    nextReport[operation] = now + 60000;
+    console.warn("Workflow completion will retry", { operation, tenantId: job?.tenant_id, taskId: job?.task_id });
+  }
   const timer = setInterval(async () => {
     if (busy) return;
     busy = true;
     try {
-      const job = rpcValue(await workflowCommand(config, {}, "worker", "lease", {}));
-      if (!job) return;
-      let outcome = { state: "pending" };
-      try { outcome = await reconcileCompletion(config, job); }
-      catch { /* Resume after the durable retry delay. */ }
-      await workflowCommand(config, { tenantId: job.tenant_id }, "worker", "settle", {
-        taskId: job.task_id, lease: job.lease, ...outcome,
-      });
-    } catch { /* An unfinished lease can be acquired after it expires. */ }
+      for (let processed = 0; processed < 10 && !stopped; processed++) {
+        const job = rpcValue(await workflowCommand(config, {}, "worker", "lease", {}));
+        if (!job) break;
+        let outcome = { state: "pending" };
+        try { outcome = await reconcileCompletion(config, job); }
+        catch { report("reconcile", job); }
+        try {
+          const settled = await workflowCommand(config, { tenantId: job.tenant_id }, "worker", "settle", {
+            taskId: job.task_id, lease: job.lease, ...outcome,
+          });
+          if (settled.status !== 204) report("settle", job);
+        } catch { report("settle", job); }
+      }
+    } catch { report("lease"); }
     finally { busy = false; }
   }, delay).unref();
-  return () => clearInterval(timer);
+  return () => {
+    stopped = true;
+    clearInterval(timer);
+  };
 }

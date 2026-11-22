@@ -6,7 +6,7 @@ import { dataRequest, sendRecordResult } from "../data/data.mjs";
 import { HttpError, json, jsonObject, readRecordJson, requireWriter, uuidPattern } from "../../platform/http/http.mjs";
 import { workflowRequest } from "./client.mjs";
 import { workflowSummary } from "./summary.mjs";
-import { completeTask, engineId, executionPolicy, handleClaim, managedStart, reserveCancellation, workflowTaskPage } from "./tasks.mjs";
+import { completeTask, engineId, executionPolicy, handleClaim, managedStart, releaseCancellationLease, reserveCancellation, workflowTaskPage } from "./tasks.mjs";
 
 export { startWorkflowReconciler } from "./tasks.mjs";
 const executionStatuses = new Set(["running", "completed", "cancelled"]);
@@ -29,9 +29,10 @@ async function execution(config, tenantId, id) {
   const definition = await workflowRequest(config, `repository/process-definitions/${encodeURIComponent(item.processDefinitionId)}`);
   if (definition.tenantId !== tenantId || definition.key === "junctura_c4a_single") throw new HttpError(404, "not_found");
   const input = item.variables?.find((variable) => variable.name === "input")?.value;
-  return { id: item.id, definitionId: item.processDefinitionId,
+  const view = { id: item.id, definitionId: item.processDefinitionId,
     status: item.endTime ? (item.deleteReason ? "cancelled" : "completed") : "running",
     input: input ? JSON.parse(input) : {} };
+  return { view, definitionKey: definition.key };
 }
 
 function parseListQuery(url) {
@@ -242,7 +243,7 @@ async function start(request, identity, config) {
     }
     return item.id;
   };
-  const readExecution = (id) => execution(config, identity.tenantId, id);
+  const readExecution = async (id) => (await execution(config, identity.tenantId, id)).view;
   if (definition.key !== "junctura_checkpoint" || Object.keys(body).some(name => name !== "definitionId" && name !== "input")) {
     return managedStart(config, identity, definition, body, key, startEngine, findEngine, readExecution);
   }
@@ -323,10 +324,14 @@ export async function handleWorkflow(request, response, identity, config, url) {
   if (!match) throw new HttpError(404, "not_found");
   requireMethod(request, response, match[2] ? ["POST"] : ["GET", "DELETE"]);
   const id = decodeEngineId(match[1], "invalid_execution_id");
-  const readExecution = () => execution(config, identity.tenantId, id);
+  const readCurrent = () => execution(config, identity.tenantId, id);
+  const readExecution = async () => (await readCurrent()).view;
   if (request.method === "GET") {
     const current = await readExecution();
-    const policy = await executionPolicy(config, identity, id);
+    const policy = await executionPolicy(config, identity, id).catch(error => {
+      if (!(error instanceof HttpError) || error.status !== 503) throw error;
+      return null;
+    });
     return json(response, 200, { ...current, dueAt: policy?.dueAt ?? null });
   }
   requireWriter(identity);
@@ -334,9 +339,10 @@ export async function handleWorkflow(request, response, identity, config, url) {
     const body = await readRecordJson(request, 10 * 65536 + 16384);
     if (!jsonObject(body)) throw new HttpError(400, "invalid_request");
     if (Object.keys(body).length) return completeTask(request, response, identity, config, id, body, readExecution);
-    const current = await readExecution();
-    const policy = await executionPolicy(config, identity, id);
-    if (policy && !policy.technical) throw new HttpError(400, "invalid_request");
+    const { view: current, definitionKey } = await readCurrent();
+    if (definitionKey !== "junctura_checkpoint" && await executionPolicy(config, identity, id)) {
+      throw new HttpError(400, "invalid_request");
+    }
     if (current.status === "cancelled") throw new HttpError(409, "already_cancelled");
     if (current.status === "running") {
       const tasks = await workflowRequest(config, `runtime/tasks?${new URLSearchParams({ processInstanceId: id, tenantId: identity.tenantId, size: "2" })}`);
@@ -346,7 +352,7 @@ export async function handleWorkflow(request, response, identity, config, url) {
     return json(response, 200, await readExecution());
   }
   const current = await readExecution();
-  await reserveCancellation(config, identity, current);
+  const lease = await reserveCancellation(config, identity, current);
   if (current.status === "completed") throw new HttpError(409, "already_completed");
   if (current.status === "running") {
     try {
@@ -354,6 +360,7 @@ export async function handleWorkflow(request, response, identity, config, url) {
     } catch (error) {
       const latest = await readExecution();
       if (latest.status === "completed") throw new HttpError(409, "already_completed");
+      if (latest.status === "running" && lease) await releaseCancellationLease(config, identity, id, lease);
       if (latest.status !== "cancelled") throw error;
     }
   }

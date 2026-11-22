@@ -97,6 +97,37 @@ test("workflow migration preserves legacy reservations and scopes worker leases"
   assert.equal(await sql(`SELECT state FROM app_private.workflow_completion_outbox WHERE tenant_id='${tenant}';`), "cancelled");
 });
 
+test("workflow cancellation resume is tenant-scoped and fenced by the current lease", async () => {
+  const tenant = "workflow-cancel";
+  await sql(`INSERT INTO app_private.workflow_executions
+    (tenant_id,caller_scope,request_key,digest,definition_id,definition_key,steps,execution_id,start_result,cancel_requested)
+    VALUES ('${tenant}',sha256(''::bytea),gen_random_uuid(),sha256(''::bytea),'workflow:1:1','workflow','{}','execution','{}',true);`);
+  const command = async (operation, payload = {}, scope = tenant) => {
+    const claims = JSON.stringify({ role: "junctura_workflow_api", tenant_id: scope, resource_writer: true });
+    const output = await sql(`SET ROLE junctura_workflow_api;
+      SELECT set_config('request.jwt.claims','${claims}',false);
+      SELECT core.workflow_task_command('${operation}','${JSON.stringify({ executionId: "execution", ...payload })}');`);
+    return JSON.parse(output.split("\n").at(-1));
+  };
+  const flag = () => sql(`SELECT cancel_requested FROM app_private.workflow_executions WHERE tenant_id='${tenant}';`);
+  assert.deepEqual(await command("history"), { status: 200, value: [] });
+  assert.deepEqual(await command("history", { executionId: "legacy" }), { status: 200, value: [] });
+  const first = await command("cancel", { status: "running" });
+  assert.equal(first.status, 200);
+  assert.ok(first.value);
+  assert.equal((await command("cancel", { status: "running" })).error, "task_conflict");
+  await command("resume", { lease: first.value }, "another-tenant");
+  assert.equal(await flag(), "t");
+  await sql(`UPDATE app_private.workflow_executions SET cancel_lease_until='-infinity' WHERE tenant_id='${tenant}';`);
+  const replacement = await command("cancel", { status: "running" });
+  assert.equal(replacement.status, 200);
+  assert.notEqual(replacement.value, first.value);
+  await command("resume", { lease: first.value });
+  assert.equal(await flag(), "t");
+  assert.equal((await command("resume", { lease: replacement.value })).status, 204);
+  assert.equal(await flag(), "f");
+});
+
 test("upgrading 029 preserves records and backfills incarnations without a table rewrite", async () => {
   const database = "record_upgrade";
   const upgradeDir = join(directory, "record-upgrade");

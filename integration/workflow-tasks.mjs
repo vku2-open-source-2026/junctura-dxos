@@ -36,6 +36,7 @@ const remove = { method: "DELETE" };
 const inbox = `/v1/workflows/tasks?definitionKey=${key}`;
 const trigger = `delay_completion_${suffix}`;
 const requestKeys = [];
+const checkpointRuns = [];
 let deploymentId, definitionId, writer, peer, outsider, auditor;
 
 async function engine(path, method = "GET", body) {
@@ -144,19 +145,28 @@ before(async () => {
 
 after(async () => {
   try {
+    for (const id of checkpointRuns) {
+      const path = `history/historic-process-instances/${encodeURIComponent(id)}`;
+      const run = await engine(path);
+      if (!run.endTime) await engine(`runtime/process-instances/${encodeURIComponent(id)}`, "DELETE");
+      await engine(path, "DELETE");
+    }
     if (deploymentId) await engine(`repository/deployments/${encodeURIComponent(deploymentId)}?cascade=true`, "DELETE");
+    const keys = requestKeys.map(q).join(",") || "NULL";
     await sql(`
       DROP TRIGGER IF EXISTS ${trigger} ON app_private.workflow_completion_outbox;
       DROP FUNCTION IF EXISTS app_private.${trigger}();
       DELETE FROM app_private.workflow_completion_outbox WHERE tenant_id=${q(tenant)} AND definition_id=${q(definitionId)};
       DELETE FROM app_private.workflow_task_claims WHERE tenant_id=${q(tenant)} AND execution_id IN
         (SELECT execution_id FROM app_private.workflow_executions WHERE tenant_id=${q(tenant)} AND definition_id=${q(definitionId)});
-      DELETE FROM app_private.workflow_executions WHERE tenant_id=${q(tenant)} AND definition_id=${q(definitionId)};
+      DELETE FROM app_private.workflow_executions WHERE tenant_id=${q(tenant)}
+        AND (definition_id=${q(definitionId)} OR request_key IN (${keys}));
       DELETE FROM app_private.workflow_definition_policies WHERE tenant_id=${q(tenant)} AND definition_id=${q(definitionId)};
       DELETE FROM app_private.directory_groups WHERE tenant_id=${q(tenant)} AND unit IN (${q(unit)},${q(wrongUnit)});
       DELETE FROM app_private.directory_units WHERE tenant_id=${q(tenant)} AND unit IN (${q(unit)},${q(wrongUnit)});
       DELETE FROM app_private.directory_unit_types WHERE tenant_id=${q(tenant)} AND unit_type=${q(prefix)};
-      DELETE FROM app_private.idempotency_results WHERE tenant_id=${q(tenant)} AND key IN (${requestKeys.map(q).join(",") || "NULL"});
+      DELETE FROM app_private.idempotency_results WHERE tenant_id=${q(tenant)} AND key IN (${keys});
+      DELETE FROM core.workflow_requests WHERE tenant_id=${q(tenant)} AND key IN (${keys});
     `);
     if (writer) await cleanup([{ appId, subject: writer.id, clientId: writer.clientId }]);
     await fixture.cleanupSubjectBindings();
@@ -314,4 +324,142 @@ test("confirmed cancellation and an engine-deleted task never create completion 
   assert.equal((await lookup(path)).status, "cancelled");
   assert.deepEqual((await history(path)).items, []);
   assert.deepEqual(await jsonResult(await complete(writer, path, body, receiptKey), 202), receipt);
+});
+
+test("legacy and deadline-aware checkpoints return empty history and the same key conflict", { timeout: 90000 }, async () => {
+  const { items } = await lookup("/v1/workflows/definitions");
+  const checkpoint = items.find(item => item.key === "junctura_checkpoint");
+  assert.ok(checkpoint);
+  const legacyBody = { definitionId: checkpoint.id, input: { fixture: prefix } };
+  const datedBody = { ...legacyBody, dueAt: "2030-01-10T09:00:00Z" };
+  const startCheckpoint = (body, key) => api("/v1/workflows/executions", writer, post(body, key));
+  const expectConflict = async (body, key) =>
+    assert.equal((await jsonResult(await startCheckpoint(body, key), 409)).error, "idempotency_conflict");
+
+  const legacyKey = newKey();
+  const legacy = await jsonResult(await startCheckpoint(legacyBody, legacyKey), 201);
+  checkpointRuns.push(legacy.id);
+  const legacyPath = executionPath(legacy.id);
+  assert.deepEqual((await history(legacyPath)).items, []);
+  assert.deepEqual(await jsonResult(await startCheckpoint(legacyBody, legacyKey), 200), legacy);
+  await expectConflict(datedBody, legacyKey);
+  assert.equal((await jsonResult(await api(`${legacyPath}/complete`, writer, post({})), 200)).status, "completed");
+  assert.deepEqual((await history(legacyPath)).items, []);
+
+  const datedKey = newKey();
+  const dated = await jsonResult(await startCheckpoint(datedBody, datedKey), 201);
+  checkpointRuns.push(dated.id);
+  const datedPath = executionPath(dated.id);
+  assert.deepEqual((await history(datedPath)).items, []);
+  assert.deepEqual(await jsonResult(await startCheckpoint(datedBody, datedKey), 201), dated);
+  await expectConflict({ ...datedBody, dueAt: "2030-01-11T09:00:00Z" }, datedKey);
+  await expectConflict(legacyBody, datedKey);
+  assert.equal((await jsonResult(await api(`${datedPath}/complete`, writer, post({})), 200)).status, "completed");
+});
+
+test("two reconcilers compete for one real lease and send exactly one Flowable completion", { timeout: 90000 }, async () => {
+  const execution = await jsonResult(await start(writer), 201);
+  const path = executionPath(execution.id);
+  const [task] = (await lookup(inbox)).items;
+  assert.equal(task.executionId, execution.id);
+  await jsonResult(await complete(writer, path, { taskId: task.taskId }), 202);
+  assert.deepEqual((await history(path)).items, []);
+
+  // Restrict this row to the two fixture workers so the already running Core cannot take the lease.
+  const policy = `worker_race_${suffix}`;
+  await sql(`CREATE POLICY ${policy} ON app_private.workflow_completion_outbox
+    AS RESTRICTIVE FOR SELECT TO junctura_app_owner
+    USING (tenant_id <> ${q(tenant)} OR task_id <> ${q(task.taskId)}
+      OR nullif(current_setting('request.jwt.claims', true), '')::jsonb->>'role' IS DISTINCT FROM 'junctura_workflow_worker'
+      OR nullif(current_setting('request.headers', true), '')::jsonb->>'x-workflow-race' = ${q(suffix)});`);
+  try {
+    await resume(task.taskId);
+    await run("compose", "exec", "-T", "core", "node", "--input-type=module", "-e", `
+      import assert from "node:assert/strict";
+      import { startWorkflowReconciler } from "./src/modules/workflow/tasks.mjs";
+      const [tag, taskId] = process.argv.slice(1);
+      const config = { workflowUrl: process.env.WORKFLOW_URL, workflowPassword: process.env.WORKFLOW_ADMIN_PASSWORD,
+        dataUrl: process.env.DATA_URL, dataSecret: process.env.DATA_JWT_SECRET };
+      const upstream = globalThis.fetch;
+      const responses = [];
+      const writes = [];
+      let contenders = 0;
+      const ready = Promise.withResolvers();
+      const leased = Promise.withResolvers();
+      const settled = Promise.withResolvers();
+      globalThis.fetch = async (url, options) => {
+        if (url.endsWith("/rpc/workflow_worker_command")) {
+          const { operation, payload } = JSON.parse(options.body);
+          if (operation === "lease") {
+            if (++contenders === 2) ready.resolve();
+            await ready.promise;
+          }
+          const response = await upstream(url, { ...options, headers: { ...options.headers, "X-Workflow-Race": tag } });
+          const result = await response.clone().json();
+          if (operation === "lease") {
+            responses.push(result);
+            // Let both real lease calls return before the winner can finish the job.
+            if (responses.length === 2) {
+              for (const stop of stops) stop();
+              leased.resolve();
+            }
+            await leased.promise;
+          } else if (operation === "settle") {
+            settled.resolve({ payload, result });
+          }
+          return response;
+        }
+        if (options.method === "POST" && JSON.parse(options.body).action === "complete") writes.push(url);
+        return upstream(url, options);
+      };
+      const stops = [startWorkflowReconciler(config, 10), startWorkflowReconciler(config, 10)];
+      const timeout = setTimeout(() => settled.reject(new Error("two-worker reconciliation timed out")), 15000);
+      try {
+        const { payload, result } = await settled.promise;
+        assert.equal(responses.length, 2);
+        assert.ok(responses.every(response => response.status === 200));
+        const jobs = responses.map(response => response.value);
+        assert.equal(jobs.filter(job => job === null).length, 1);
+        const [job] = jobs.filter(Boolean);
+        assert.equal(job.task_id, taskId);
+        assert.equal(payload.lease, job.lease);
+        assert.equal(payload.state, "applied");
+        assert.equal(result.status, 204);
+        assert.deepEqual(writes, [config.workflowUrl + "/runtime/tasks/" + encodeURIComponent(taskId)]);
+      } finally {
+        clearTimeout(timeout);
+        for (const stop of stops) stop();
+      }
+    `, suffix, task.taskId);
+    const { stdout } = await sql(`SELECT state, attempts FROM app_private.workflow_completion_outbox
+      WHERE tenant_id=${q(tenant)} AND task_id=${q(task.taskId)};`);
+    assert.equal(stdout.trim(), "applied|1");
+    assert.deepEqual((await history(path)).items.map(entry => entry.taskId), [task.taskId]);
+  } finally {
+    await sql(`DROP POLICY ${policy} ON app_private.workflow_completion_outbox;`);
+  }
+  assert.equal((await api(path, writer, remove)).status, 204);
+});
+
+test("concurrent cancel and complete requests admit exactly one transition", { timeout: 90000 }, async () => {
+  const execution = await jsonResult(await start(writer), 201);
+  const path = executionPath(execution.id);
+  const [task] = (await lookup(inbox)).items;
+  assert.equal(task.executionId, execution.id);
+  const [completion, cancellation] = await Promise.all([
+    complete(writer, path, { taskId: task.taskId }), api(path, writer, remove),
+  ]);
+  const { stdout } = await sql(`SELECT state FROM app_private.workflow_completion_outbox
+    WHERE tenant_id=${q(tenant)} AND task_id=${q(task.taskId)};`);
+  if (completion.status === 202) {
+    assert.equal((await jsonResult(cancellation, 409)).error, "task_conflict");
+    assert.equal(stdout.trim(), "pending");
+    assert.equal((await lookup(path)).status, "running");
+  } else {
+    assert.equal(cancellation.status, 204);
+    assert.equal((await jsonResult(completion, 409)).error, "task_conflict");
+    assert.equal(stdout.trim(), "");
+    assert.equal((await lookup(path)).status, "cancelled");
+  }
+  assert.deepEqual((await history(path)).items, []);
 });

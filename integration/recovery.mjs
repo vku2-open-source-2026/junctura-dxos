@@ -132,12 +132,13 @@ test("pg_dump/pg_restore preserves real data and tenant RLS in an isolated tempo
         has_function_privilege('junctura_workflow_worker','core.workflow_worker_command(text,jsonb)','EXECUTE'),
         has_function_privilege('junctura_workflow_api','core.workflow_worker_command(text,jsonb)','EXECUTE'),
         has_table_privilege('junctura_workflow_api','app_private.workflow_executions','SELECT'),
+        has_column_privilege('junctura_workflow_api','app_private.workflow_executions','cancel_lease','UPDATE'),
         has_table_privilege('junctura_workflow_worker','app_private.workflow_completion_outbox','UPDATE'),
         count(*), bool_and(relrowsecurity AND relforcerowsecurity)
         FROM pg_class WHERE oid IN ('app_private.workflow_definition_policies'::regclass,
           'app_private.workflow_executions'::regclass, 'app_private.workflow_task_claims'::regclass,
           'app_private.workflow_completion_outbox'::regclass);`]);
-    assert.equal(workflowAcl.stdout.trim(), "t|t|t|f|f|f|4|t",
+    assert.equal(workflowAcl.stdout.trim(), "t|t|t|f|f|f|f|4|t",
       "Restore preserves workflow RPC grants, private ACLs and forced tenant RLS");
     for (const [tenant, expected] of [["tenant-a", "1"], ["tenant-b", "0"]]) {
       const guarded = await docker(["exec", target, "psql", "-U", "junctura_admin", "-d", "recovered", "-Atc",

@@ -1,8 +1,16 @@
 // SPDX-FileCopyrightText: 2026 Junctura Contributors
 // SPDX-License-Identifier: Apache-2.0
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { Readable } from "node:stream";
 import { test } from "node:test";
-import { canonicalInput } from "../src/modules/workflow/workflow.mjs";
+import { canonicalInput, handleWorkflow } from "../src/modules/workflow/workflow.mjs";
+import { startWorkflowReconciler, workflowTaskPage } from "../src/modules/workflow/tasks.mjs";
+
+const config = { dataUrl: "https://data.invalid", dataSecret: "fixture",
+  workflowUrl: "https://engine.invalid", workflowPassword: "fixture" };
+const identity = { tenantId: "tenant-a", issuer: "https://identity.invalid", subject: "actor", clientId: "client",
+  roles: ["core-reader", "core-writer"], groups: ["/unit-a/reviewers"] };
 
 test("workflow retries compare JSON input independently of object-key order", () => {
   assert.equal(JSON.stringify(canonicalInput({ b: [1, { z: 2, a: null }], a: true })),
@@ -81,11 +89,172 @@ test("an accepted task completion replays from PostgreSQL without calling Flowab
     assert.deepEqual(claims.groups, ["/unit-a/reviewers"]);
     return Response.json({ status: 202, value: receipt });
   });
-  const identity = { tenantId: "tenant-a", issuer: "https://identity.invalid", subject: "actor", clientId: "client",
-    roles: ["core-reader", "core-writer"], groups: ["/unit-a/reviewers"] };
   const response = { writeHead: status => assert.equal(status, 202), end: body => assert.deepEqual(JSON.parse(body), receipt) };
-  await completeTask({ headers: { "idempotency-key": key } }, response, identity,
-    { dataUrl: "https://data.invalid", dataSecret: "fixture" }, receipt.execution.id, { taskId: receipt.taskId },
+  await completeTask({ headers: { "idempotency-key": key } }, response, identity, config, receipt.execution.id, { taskId: receipt.taskId },
     () => assert.fail("a recorded receipt needs no engine request"));
   assert.equal(calls, 1);
+});
+
+test("inbox forwards the definition filter and caps the SQL input at 20 engine pages", async (t) => {
+  const offsets = [];
+  t.mock.method(globalThis, "fetch", async (input, options) => {
+    const url = new URL(input);
+    if (url.origin === config.dataUrl) {
+      const { operation, payload } = JSON.parse(options.body);
+      assert.equal(operation, "list");
+      assert.equal(payload.definitionKey, "business");
+      assert.equal(payload.tasks.length, 2000);
+      assert.equal(payload.tasks.at(-1).taskId, "task-1999");
+      return Response.json({ status: 200, value: [] });
+    }
+    assert.equal(url.pathname, "/runtime/tasks");
+    assert.equal(url.searchParams.get("processDefinitionKey"), "business");
+    assert.equal(url.searchParams.get("tenantId"), identity.tenantId);
+    assert.equal(url.searchParams.get("size"), "100");
+    assert.equal(url.searchParams.get("sort"), "id");
+    const start = Number(url.searchParams.get("start"));
+    offsets.push(start);
+    return Response.json({ total: 5000, data: Array.from({ length: 100 }, (_, index) => ({
+      id: `task-${start + index}`, tenantId: identity.tenantId, processInstanceId: "run-1",
+      processDefinitionId: "business:1:1", taskDefinitionKey: "review", executionId: "step-1",
+    })) });
+  });
+  const url = new URL("http://core/v1/workflows/tasks?definitionKey=business");
+  assert.deepEqual(await workflowTaskPage(config, identity, url), { items: [], nextCursor: null });
+  assert.deepEqual(offsets, Array.from({ length: 20 }, (_, index) => index * 100));
+});
+
+test("workflow routes return their documented 405 responses with Allow", async () => {
+  const { paths } = JSON.parse(readFileSync(new URL("../docs/contracts/foundation-api.openapi.json", import.meta.url)));
+  const execution = "/v1/workflows/executions/{executionId}";
+  const routes = [
+    [execution, "GET, DELETE"], [`${execution}/complete`, "POST"], [`${execution}/history`, "GET"],
+    ["/v1/workflows/tasks", "GET"], ["/v1/workflows/tasks/{taskId}/claim", "POST"],
+    ["/v1/workflows/tasks/{taskId}/release", "POST"],
+  ];
+  for (const [path, allow] of routes) {
+    for (const method of allow.toLowerCase().split(", ")) {
+      assert.equal(paths[path][method].responses["405"].$ref, "#/components/responses/MethodNotAllowed");
+    }
+    const response = { setHeader: (name, value) => assert.deepEqual([name, value], ["Allow", allow]) };
+    await assert.rejects(handleWorkflow({ method: "PUT" }, response, identity, config,
+      new URL(path.replace(/\{[^}]+\}/, "known-id"), "http://core")), { status: 405, message: "method_not_allowed" });
+  }
+});
+
+const executionUrl = new URL("http://core/v1/workflows/executions/run-1");
+const executionFixture = { id: "run-1", tenantId: identity.tenantId, processDefinitionId: "process:1:1" };
+
+test("execution reads degrade when deadline storage is down; only the verified checkpoint can complete without policy", async (t) => {
+  let definitionKey = "business";
+  let endTime;
+  let dataReads = 0;
+  let engineWrites = 0;
+  t.mock.method(globalThis, "fetch", async (input, options) => {
+    const url = new URL(input);
+    if (url.origin === config.dataUrl) {
+      dataReads++;
+      return new Response(null, { status: 503 });
+    }
+    if (url.pathname.startsWith("/history/")) return Response.json({ data: [{ ...executionFixture, endTime }] });
+    if (url.pathname.startsWith("/repository/")) return Response.json({ tenantId: identity.tenantId, key: definitionKey });
+    if (url.pathname === "/runtime/tasks") return Response.json({ data: [{ id: "task-1" }] });
+    assert.equal(options.method, "POST");
+    assert.equal(url.pathname, "/runtime/tasks/task-1");
+    engineWrites++;
+    endTime = "2030-01-01T00:00:00Z";
+    return new Response(null, { status: 204 });
+  });
+  let body;
+  const response = { writeHead: status => assert.equal(status, 200), end: value => { body = JSON.parse(value); } };
+  await handleWorkflow({ method: "GET" }, response, identity, config, executionUrl);
+  assert.deepEqual(body, { id: "run-1", definitionId: "process:1:1", status: "running", input: {}, dueAt: null });
+  const completeUrl = new URL(executionUrl.href + "/complete");
+  const emptyCompletion = () => Object.assign(Readable.from([Buffer.from("{}")]), {
+    method: "POST", headers: { "content-type": "application/json" },
+  });
+  await assert.rejects(handleWorkflow(emptyCompletion(), response, identity, config, completeUrl),
+    { status: 503, message: "workflow_unavailable" });
+  assert.equal(engineWrites, 0);
+  definitionKey = "junctura_checkpoint";
+  await handleWorkflow(emptyCompletion(), response, identity, config, completeUrl);
+  assert.equal(body.status, "completed");
+  assert.equal(dataReads, 2);
+  assert.equal(engineWrites, 1);
+});
+
+test("failed cancellation releases its own lease only if Flowable still reports running", async (t) => {
+  const lease = "11111111-1111-4111-8111-111111111111";
+  const commands = [];
+  let cancellationApplied;
+  let deletionAttempted;
+  t.mock.method(globalThis, "fetch", async (input, options) => {
+    const url = new URL(input);
+    if (url.origin === config.dataUrl) {
+      const command = JSON.parse(options.body);
+      commands.push(command);
+      return Response.json(command.operation === "cancel" ? { status: 200, value: lease } : { status: 204 });
+    }
+    if (url.pathname.startsWith("/history/")) {
+      const end = deletionAttempted && cancellationApplied ? { endTime: "2030-01-01T00:00:00Z", deleteReason: "cancelled" } : {};
+      return Response.json({ data: [{ ...executionFixture, ...end }] });
+    }
+    if (url.pathname.startsWith("/repository/")) return Response.json({ tenantId: identity.tenantId, key: "business" });
+    assert.equal(options.method, "DELETE");
+    deletionAttempted = true;
+    return new Response(null, { status: 503 });
+  });
+  const cancel = () => handleWorkflow({ method: "DELETE" }, {
+    writeHead: status => assert.equal(status, 204), end: () => {},
+  }, identity, config, executionUrl);
+  await assert.rejects(cancel(), { status: 503, message: "workflow_unavailable" });
+  cancellationApplied = true;
+  deletionAttempted = false;
+  await cancel();
+  const reserve = { operation: "cancel", payload: { executionId: "run-1", status: "running" } };
+  assert.deepEqual(commands, [reserve, { operation: "resume", payload: { executionId: "run-1", lease } }, reserve]);
+});
+
+test("worker processes ten jobs per tick and rate-limits lease, reconcile and settle warnings", async (t) => {
+  let tick;
+  t.mock.method(globalThis, "setInterval", callback => {
+    tick = callback;
+    return { unref() { return this; } };
+  });
+  const warnings = [];
+  t.mock.method(console, "warn", (message, fields) => warnings.push(fields));
+  const settled = [];
+  let leased = 0;
+  t.mock.method(globalThis, "fetch", async (input, options) => {
+    const url = new URL(input);
+    if (url.origin === config.dataUrl) {
+      const { operation, payload } = JSON.parse(options.body);
+      if (operation === "settle") {
+        settled.push(payload);
+        return Response.json({ status: 409, error: "fixture_error" });
+      }
+      if (leased === 11) return new Response(null, { status: 503 });
+      return Response.json({ status: 200, value: {
+        tenant_id: "tenant-a", task_id: `task-${leased++}`, execution_id: "run-1", definition_id: "process:1:1",
+        engine_execution_id: "branch-1", step_key: "review", variables: {}, marker: "marker", lease: "lease",
+      } });
+    }
+    if (url.pathname.startsWith("/history/")) return Response.json({ data: [] });
+    if (options.method === "POST") return new Response(null, { status: 503 });
+    return Response.json({ id: url.pathname.split("/").at(-1), tenantId: "tenant-a", processInstanceId: "run-1",
+      processDefinitionId: "process:1:1", executionId: "branch-1", taskDefinitionKey: "review" });
+  });
+  const stop = startWorkflowReconciler(config);
+  await Promise.all([tick(), tick()]);
+  assert.equal(settled.length, 10);
+  await tick();
+  await tick();
+  stop();
+  assert.equal(settled.length, 11);
+  assert.ok(settled.every(job => job.state === "pending" && job.lease === "lease"));
+  assert.deepEqual(warnings, [
+    { operation: "reconcile", tenantId: "tenant-a", taskId: "task-0" },
+    { operation: "settle", tenantId: "tenant-a", taskId: "task-0" },
+    { operation: "lease", tenantId: undefined, taskId: undefined },
+  ]);
 });

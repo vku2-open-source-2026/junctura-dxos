@@ -286,7 +286,8 @@ export function createJuncturaClient({ baseUrl, clientId, clientSecret, timeoutM
     async releaseWorkflowTask(taskId, { userToken } = {}) {
       await finish(await request(`/v1/workflows/tasks/${segment(taskId)}/release`, { method: "POST", bearer: userToken }));
     },
-    async completeWorkflowTask(executionId, body, { idempotencyKey = randomUUID(), userToken } = {}) {
+    async completeWorkflowTask(executionId, body, { idempotencyKey, userToken } = {}) {
+      if (typeof idempotencyKey !== "string" || !idempotencyKey.trim()) throw new TypeError("idempotencyKey is required");
       return (await request(`${workflowPath(executionId)}/complete`, { method: "POST", json: body, idempotencyKey, bearer: userToken })).json();
     },
     async cancelWorkflowWithPendingCheck(executionId, { userToken } = {}) {

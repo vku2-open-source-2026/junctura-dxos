@@ -276,7 +276,7 @@ one-way join, so consents granted before verified subjects keep their
 authority, and the data subject's access log shows calls recorded under either
 of their identifiers.
 
-## Workflow deadlines and completion (039–040)
+## Workflow deadlines and completion (039–041)
 
 Migration 039 creates operator-managed definition policies keyed by tenant and exact Flowable definition ID.
 Managed starts keep their reservation, effective unit assignments and deadlines in a private execution table
@@ -288,6 +288,10 @@ unit, candidate groups and active claim before committing records, the outbox an
 A separate internal worker role leases pending entries. It publishes task history only after seeing the
 matching task-local marker and successful end in Flowable history. Both roles use RPC grants and the private
 tables enforce tenant RLS.
+
+Migration 041 adds a cancellation lease to the workflow execution row. If Flowable still reports the
+execution as running after a failed cancellation, the holder can reopen it for tasks. It also allows
+empty history for executions without task policy and aligns checkpoint key conflicts with legacy starts.
 
 Keep the PostgreSQL execution/outbox data and Flowable history together during backup and restore. An
 unconfirmed engine outcome stays pending and retries with a capped delay. A task ended by external deletion

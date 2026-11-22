@@ -314,7 +314,7 @@ reconcile an ambiguous outcome before retrying. No upstream call is blindly retr
 | --- | --- | --- |
 | `/v1/workflows/definitions` | GET | Up to 100 latest tenant definitions with ID, key, version and name. |
 | `/v1/workflows/executions` | POST | Start by exact `definitionId` with optional `input`, `unit`, `taskUnits`, `dueAt` and `taskDueAt`. Requires a UUID `Idempotency-Key`. |
-| `/v1/workflows/executions/{executionId}` | GET | `{id,definitionId,status,input,dueAt}`. Status is `running`, `completed` or `cancelled`. |
+| `/v1/workflows/executions/{executionId}` | GET | `{id,definitionId,status,input,dueAt}`. Status is `running`, `completed` or `cancelled`. If deadline storage is unavailable, `dueAt` is null. |
 | `/v1/workflows/tasks` | GET | `{items,nextCursor}` for waiting tasks in the caller's candidate groups. |
 | `/v1/workflows/tasks/{taskId}/claim` | POST | Optional `{ttlSeconds}`. Returns `{taskId,claimedBy,claimedUntil}`. |
 | `/v1/workflows/tasks/{taskId}/release` | POST | Returns `204` when the caller's claim is released or the task is already unclaimed. |
@@ -338,6 +338,9 @@ requires a verified path for the task's unit and one of the definition's candida
 that set. Tasks sort by deadline ascending, then task ID, with undated tasks last. Each parallel step has its
 own task ID. Both inbox and history accept `limit` from 1 to 100, default 20, and an opaque `cursor` from the
 previous page with the same filters.
+Each inbox request scans at most 20 Flowable pages of 100 active tasks in task ID order before applying
+unit, candidate-group and deadline filters. Supply `definitionKey` to limit the scan to that definition key.
+The inbox cursor paginates the scanned set.
 
 An eligible writer can claim a waiting task for 1800 seconds by default or up to 28800 seconds.
 A repeated claim by the holder returns its existing expiry. An expired claim becomes available again.
@@ -359,7 +362,12 @@ logical request with the same key returns `422 idempotency_key_reused`. The work
 engine transitions and checks Flowable's tenant, process instance, execution, task and task-local completion
 marker before publishing history. History shows the actor, unit, first matching candidate group in BPMN
 order, optional decision and reason, and engine completion time. It is available to eligible execution
-members and enrolled `audit.read` principals.
+members and enrolled `audit.read` principals. Checkpoints and executions without task policy or user tasks
+return an empty page after the tenant execution is verified.
+
+A cancellation in progress returns `409 task_conflict` to a competing cancellation. If cancellation
+fails and Flowable still reports a running execution, Core releases the cancellation lease so tasks
+can resume. If confirmation is unavailable, a new cancellation can take over after 60 seconds.
 
 A business start replays its original `201`. The permanent start reservation protects against duplicate
 engine instances even after receipt expiry. If start is uncertain, retry with the same key. Core looks up
@@ -368,7 +376,8 @@ until there is a unique result. Operators resolve stranded reservations after ch
 
 The technical `junctura_checkpoint` retains its empty-object completion with `200`, including repetition
 after completion. Earlier executions without task policy can drain through the same single-task path.
-A checkpoint started with just definition and input retains the original `200` replay and `409` key conflict.
+A checkpoint started with just definition and input retains the original `200` replay. Changed input or
+options with the same checkpoint start key returns `409 idempotency_conflict`, including across the two start paths.
 
 ## Business workflow definitions
 

@@ -911,7 +911,7 @@
       "get": {
         "operationId": "listWorkflowTasks",
         "summary": "List the caller's pending group tasks",
-        "description": "Return each eligible parallel task separately. The verified group path must match the task's unit and one of its candidate groups. All filters narrow that authorized set. overdue is true if dueAt is past at response time. Sort by deadline ascending with undated tasks last, then taskId. claimedBy and claimedUntil describe the active claim and are both null when the task is unclaimed or the claim has expired.",
+        "description": "Return each eligible parallel task separately. The verified group path must match the task's unit and one of its candidate groups. All filters narrow that authorized set. Each request scans at most 20 Flowable pages of 100 active tasks in task ID order before applying the unit, candidate-group and overdue filters. The optional definitionKey narrows the engine scan. The cursor paginates the scanned set. overdue is true if dueAt is past at response time. Sort by deadline ascending with undated tasks last, then taskId. claimedBy and claimedUntil describe the active claim and are both null when the task is unclaimed or the claim has expired.",
         "tags": [
           "tenant"
         ],
@@ -1028,6 +1028,9 @@
           "404": {
             "$ref": "#/components/responses/NotFound"
           },
+          "405": {
+            "$ref": "#/components/responses/MethodNotAllowed"
+          },
           "429": {
             "$ref": "#/components/responses/PlannedRateLimited"
           },
@@ -1118,6 +1121,9 @@
           "404": {
             "$ref": "#/components/responses/NotFound"
           },
+          "405": {
+            "$ref": "#/components/responses/MethodNotAllowed"
+          },
           "409": {
             "$ref": "#/components/responses/WorkflowTaskConflict"
           },
@@ -1184,6 +1190,9 @@
           "404": {
             "$ref": "#/components/responses/NotFound"
           },
+          "405": {
+            "$ref": "#/components/responses/MethodNotAllowed"
+          },
           "409": {
             "$ref": "#/components/responses/WorkflowTaskConflict"
           },
@@ -1214,7 +1223,7 @@
       "get": {
         "operationId": "listWorkflowTaskHistory",
         "summary": "List completed workflow tasks",
-        "description": "Read completed steps newest first by completedAt and taskId. Access requires a verified group eligible on the execution or an enrolled audit.read principal. Core stamps the actor and the matching group used for authorization. If several groups match, use the first in the definition's candidateGroups order. Pending transitions are absent.",
+        "description": "Read completed steps newest first by completedAt and taskId. Access requires a verified group eligible on the execution or an enrolled audit.read principal. Core stamps the actor and the matching group used for authorization. If several groups match, use the first in the definition's candidateGroups order. Pending transitions are absent. Verified checkpoints and executions without task policy or user tasks return an empty page.",
         "tags": [
           "tenant"
         ],
@@ -1292,6 +1301,9 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          },
+          "405": {
+            "$ref": "#/components/responses/MethodNotAllowed"
           },
           "429": {
             "$ref": "#/components/responses/PlannedRateLimited"
@@ -6256,7 +6268,7 @@
       "post": {
         "operationId": "startWorkflowWithDeadlines",
         "summary": "Start a workflow with deadlines",
-        "description": "unit is the business execution's default task unit and defaults to the deployment binding. taskUnits overrides it for selected BPMN userTask element IDs. The caller must be authorized by the deployed workflow policy for all named units. A business execution needs a resolved unit for every task. dueAt is the optional execution deadline and default for its steps. taskDueAt overrides it for the listed BPMN userTask element IDs each time they activate. Unknown element IDs are invalid. Deadlines mark work overdue without preventing completion. The start key binds definition, input, unit assignments and deadlines. An identical retry replays the original 201 result. Core keeps the start reservation beyond the 24-hour replay window. Checkpoint starts with only definitionId and input retain a 200 on replay and 409 on changed input.",
+        "description": "unit is the business execution's default task unit and defaults to the deployment binding. taskUnits overrides it for selected BPMN userTask element IDs. The caller must be authorized by the deployed workflow policy for all named units. A business execution needs a resolved unit for every task. dueAt is the optional execution deadline and default for its steps. taskDueAt overrides it for the listed BPMN userTask element IDs each time they activate. Unknown element IDs are invalid. Deadlines mark work overdue without preventing completion. The start key binds definition, input, unit assignments and deadlines. An identical retry replays the original 201 result. Core keeps the start reservation beyond the 24-hour replay window. Checkpoint starts with only definitionId and input retain a 200 on replay. Changing input or options with a checkpoint start key returns 409 idempotency_conflict, including across start paths.",
         "tags": [
           "tenant"
         ],
@@ -6402,7 +6414,7 @@
       "get": {
         "operationId": "getWorkflowWithDeadline",
         "summary": "Get a workflow execution and deadline",
-        "description": "Read the execution in the verified tenant. dueAt is null when no execution deadline was supplied. Use the task inbox for individually authorized pending steps.",
+        "description": "Read the execution in the verified tenant. dueAt is null when no execution deadline was supplied or deadline storage is unavailable. Use the task inbox for individually authorized pending steps.",
         "tags": [
           "tenant"
         ],
@@ -6459,6 +6471,9 @@
           "404": {
             "$ref": "#/components/responses/NotFound"
           },
+          "405": {
+            "$ref": "#/components/responses/MethodNotAllowed"
+          },
           "429": {
             "$ref": "#/components/responses/PlannedRateLimited"
           },
@@ -6478,7 +6493,7 @@
       "delete": {
         "operationId": "cancelWorkflowWithPendingCheck",
         "summary": "Cancel a workflow execution",
-        "description": "Cancel a running execution in the caller tenant. Repeated cancellation returns 204. A completed execution or an accepted task completion still pending reconciliation returns 409. Cancellation and completion are serialized for the execution.",
+        "description": "Cancel a running execution in the caller tenant. Repeated cancellation returns 204. A completed execution, an in-progress cancellation or an accepted task completion still pending reconciliation returns 409. Cancellation and completion are serialized for the execution.",
         "tags": [
           "tenant"
         ],
@@ -6513,6 +6528,9 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          },
+          "405": {
+            "$ref": "#/components/responses/MethodNotAllowed"
           },
           "409": {
             "$ref": "#/components/responses/Conflict"
@@ -6703,6 +6721,9 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          },
+          "405": {
+            "$ref": "#/components/responses/MethodNotAllowed"
           },
           "409": {
             "$ref": "#/components/responses/WorkflowTaskConflict"

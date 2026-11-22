@@ -104,6 +104,7 @@ services:
       - ./infra/postgres/038-verified-subject-consents.sql:/migrations/038-verified-subject-consents.sql:ro
       - ./infra/postgres/039-workflow-deadlines.sql:/migrations/039-workflow-deadlines.sql:ro
       - ./infra/postgres/040-workflow-completion-outbox.sql:/migrations/040-workflow-completion-outbox.sql:ro
+      - ./infra/postgres/041-workflow-task-recovery.sql:/migrations/041-workflow-task-recovery.sql:ro
     depends_on:
       database:
         condition: service_healthy
