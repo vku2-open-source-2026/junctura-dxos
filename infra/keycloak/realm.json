@@ -65,7 +65,7 @@
           "config": {
             "access.token.claim": "true",
             "claim.name": "tenant_memberships",
-            "full.path": "false",
+            "full.path": "true",
             "introspection.token.claim": "true"
           },
           "protocol": "openid-connect"
@@ -130,7 +130,7 @@
           "config": {
             "access.token.claim": "true",
             "claim.name": "tenant_memberships",
-            "full.path": "false",
+            "full.path": "true",
             "introspection.token.claim": "true"
           },
           "protocol": "openid-connect"
@@ -195,7 +195,7 @@
           "config": {
             "access.token.claim": "true",
             "claim.name": "tenant_memberships",
-            "full.path": "false",
+            "full.path": "true",
             "introspection.token.claim": "true"
           },
           "protocol": "openid-connect"
@@ -266,7 +266,7 @@
           "config": {
             "access.token.claim": "true",
             "claim.name": "tenant_memberships",
-            "full.path": "false",
+            "full.path": "true",
             "introspection.token.claim": "true"
           },
           "protocol": "openid-connect"
@@ -343,7 +343,7 @@
           "config": {
             "access.token.claim": "true",
             "claim.name": "tenant_memberships",
-            "full.path": "false",
+            "full.path": "true",
             "introspection.token.claim": "true"
           },
           "protocol": "openid-connect"
@@ -384,7 +384,6 @@
     },
     {
       "clientId": "junctura-directory-sync",
-      "secret": "${DIRECTORY_SYNC_CLIENT_SECRET}",
       "protocol": "openid-connect",
       "publicClient": false,
       "serviceAccountsEnabled": true,
@@ -464,8 +463,7 @@
           "view-realm",
           "query-users",
           "query-groups",
-          "manage-users",
-          "manage-realm"
+          "manage-users"
         ]
       }
     }

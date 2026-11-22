@@ -732,15 +732,16 @@ test("C4A real two-application OIDC invocation redeems a ticket and completes th
     expiresAt: new Date(Date.now() + 86_400_000).toISOString() };
   const consentKey = crypto.randomUUID();
   const consentResponse = await api("/v1/me/consents", owner, consentBody, { "Idempotency-Key": consentKey });
-  assert.equal(consentResponse.status, 201, await consentResponse.text());
+  assert.equal(consentResponse.status, 201, await consentResponse.clone().text());
   const consent = await consentResponse.json();
   trustCases.push({ schema: "SubjectConsentCreate", value: consentBody });
   trustCases.push({ schema: "SubjectConsent", value: consent });
   const consentReplay = await api("/v1/me/consents", owner, consentBody, { "Idempotency-Key": consentKey });
   assert.equal(consentReplay.status, 201);
   assert.equal((await consentReplay.json()).consentId, consent.consentId, "the first committed grant replays");
-  assert.equal((await api("/v1/me/consents", owner, consentBody, { "Idempotency-Key": crypto.randomUUID() })).status, 201,
-    "a fresh key grants again");
+  const secondGrant = await api("/v1/me/consents", owner, consentBody, { "Idempotency-Key": crypto.randomUUID() });
+  assert.equal(secondGrant.status, 201, "a fresh key grants again");
+  const secondGrantId = (await secondGrant.json()).consentId;
   assert.equal((await api("/v1/me/consents", stranger, consentBody, { "Idempotency-Key": crypto.randomUUID() })).status, 403,
     "a caller without a verified subject is refused");
   assert.equal((await api("/v1/me/consents", owner, { ...consentBody, purposes: ["Bad purpose"] }, { "Idempotency-Key": crypto.randomUUID() })).status, 400);
@@ -772,6 +773,8 @@ test("C4A real two-application OIDC invocation redeems a ticket and completes th
   assert.equal((await api(`/v1/me/consents/${consent.consentId}/revoke`, stranger, {})).status, 403, "no verified subject, no revocation");
   const revokedConsent = await api(`/v1/me/consents/${consent.consentId}/revoke`, owner, {});
   assert.equal(revokedConsent.status, 200); assert.equal((await revokedConsent.json()).state, "revoked");
+  const revokedSecond = await api(`/v1/me/consents/${secondGrantId}/revoke`, owner, {});
+  assert.equal(revokedSecond.status, 200, "every active grant of this person is revoked before the next check");
   assert.equal((await c4aStart({ ...executionBody("purpose"), context })).body.error, "subject_consent_required", "revocation is immediate");
 
   // Break-glass: no consent, but a justification; sealed, visible to the person, reviewed.
@@ -810,14 +813,17 @@ test("verified subject identity: binding gate, legacy consent mapping and quaran
   // authority through the binding; a row for an unbound identifier stays hidden.
   const grant = { consumerAppId: c4aConsumer.app.appId, capabilityId: c4aReference.capabilityId, purposes: ["service_review"], expiresAt: new Date(Date.now() + 3_600_000).toISOString() };
   const created = await api("/v1/me/consents", owner, grant, { "Idempotency-Key": crypto.randomUUID() });
-  assert.equal(created.status, 201, await created.text());
+  assert.equal(created.status, 201, await created.clone().text());
   const canonical = await created.json();
   assert.equal((await sql(`SELECT data_subject FROM execution_private.subject_consents WHERE consent_id=${q(canonical.consentId)};`)).stdout.trim(), "subject-42",
     "grants are stored under the verified subjectId");
   await sql(`INSERT INTO execution_private.subject_consents(tenant_id,issuer,data_subject,consumer_app_id,capability_id,purposes,expires_at)
-    VALUES('tenant-a',${q(issuer)},${q(owner.id)},'${c4aConsumer.app.appId}','${c4aReference.capabilityId}',ARRAY['legacy_review']::text[],now()+interval '2 hours');`);
-  await sql(`INSERT INTO execution_private.subject_consents(tenant_id,issuer,data_subject,consumer_app_id,capability_id,purposes,expires_at)
-    VALUES('tenant-a',${q(issuer)},'unmapped-foreign-subject','${c4aConsumer.app.appId}','${c4aReference.capabilityId}',ARRAY['service_review']::text[],now()+interval '2 hours');`);
+    VALUES('tenant-a',${q(issuer)},${q(owner.id)},'${c4aConsumer.app.appId}','${c4aReference.capabilityId}',ARRAY['legacy_review']::text[],now()+interval '2 hours');
+    INSERT INTO execution_private.subject_consents(tenant_id,issuer,data_subject,consumer_app_id,capability_id,purposes,expires_at)
+    VALUES('tenant-a',${q(issuer)},'unmapped-foreign-subject','${c4aConsumer.app.appId}','${c4aReference.capabilityId}',ARRAY['service_review']::text[],now()+interval '2 hours');
+    -- The migration's one-time backfill resolved legacy rows the same way.
+    UPDATE execution_private.subject_consents SET canonical_subject = execution_private.canonical_subject(tenant_id,issuer,data_subject)
+      WHERE canonical_subject IS NULL;`);
   const listed = await (await api("/v1/me/consents", owner)).json();
   assert.ok(listed.consents.some(item => item.consentId === canonical.consentId), "the canonical row is listed");
   assert.equal(listed.consents.some(item => item.purposes.includes("legacy_review")), true, "the legacy row is mapped through the binding");

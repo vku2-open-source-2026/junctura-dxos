@@ -30,6 +30,12 @@ const externalSpecs = new Map([
       fs.readFileSync(path.join(contractDir, "composition-v1.schema.json"), "utf8"),
     ),
   ],
+  [
+    "./foundation-api.openapi.json",
+    JSON.parse(
+      fs.readFileSync(path.join(contractDir, "foundation-api.openapi.json"), "utf8"),
+    ),
+  ],
 ]);
 
 const UUID = "c3d4e5f6-7a8b-4c9d-0e1f-2a3b4c5d6e7f";
@@ -237,6 +243,29 @@ for (const [endpointPath, pathItem] of Object.entries(capabilitySpec.paths)) {
 }
 
 const payload = { foundation, capability };
+
+// A capability operation that requires a header must expose it in the
+// generated reference; an unresolved cross-file $ref would otherwise drop a
+// required Idempotency-Key from the request guidance.
+for (const [endpointPath, pathItem] of Object.entries(capabilitySpec.paths)) {
+  for (const [method, operation] of Object.entries(pathItem)) {
+    if (!methods.has(method) || !operation.operationId) continue;
+    if (operation["x-junctura-status"] === "planned") continue;
+    const declared = [...(pathItem.parameters ?? []), ...(operation.parameters ?? [])]
+      .map((parameter) => deref(parameter, capabilitySpec).value)
+      .filter((parameter) => parameter?.in === "header" && parameter.required === true)
+      .map((parameter) => parameter.name);
+    const generated = capability
+      .filter((endpoint) => endpoint.path === endpointPath && endpoint.method === method.toUpperCase())
+      .flatMap((endpoint) => endpoint.headerParameters.map((header) => header.name));
+    for (const name of declared) {
+      if (!generated.includes(name)) {
+        throw new Error(`Required header ${name} is missing from the generated reference of ${method.toUpperCase()} ${endpointPath}`);
+      }
+    }
+  }
+}
+
 const generated = `${JSON.stringify(payload)}\n`;
 
 if (process.argv.includes("--check")) {

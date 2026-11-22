@@ -160,10 +160,12 @@ test("SDK directory and consent calls hit the documented routes and bodies", asy
   await client.putDirectoryMember("unit-a", "subject-42", ["reviewers"]);
   await client.listDirectoryMembers("unit-a", {});
   await client.deleteDirectoryMember("unit-a", "subject-42");
-  await client.createConsent({ consumerAppId: "22222222-2222-4222-8222-222222222222",
+  const consents = client.consent("user-oidc-token");
+  await consents.create({ consumerAppId: "22222222-2222-4222-8222-222222222222",
     capabilityId: "urn:junctura:capability:33333333-3333-4333-8333-333333333333:lookup",
     purposes: ["service_review"], expiresAt: "2030-01-12T12:00:00Z" }, "consent-key");
-  await client.revokeConsent("11111111-1111-4111-8111-111111111111");
+  await consents.list();
+  await consents.revoke("11111111-1111-4111-8111-111111111111");
   assert.deepEqual(calls, [
     { path: "/v1/directory/unit-types", query: [["limit", "10"], ["cursor", "next"]], method: "GET", key: null, body: undefined },
     { path: "/v1/directory/unit-types/office", query: [], method: "PUT", key: null, body: { name: "Office" } },
@@ -177,6 +179,25 @@ test("SDK directory and consent calls hit the documented routes and bodies", asy
       body: { consumerAppId: "22222222-2222-4222-8222-222222222222",
         capabilityId: "urn:junctura:capability:33333333-3333-4333-8333-333333333333:lookup",
         purposes: ["service_review"], expiresAt: "2030-01-12T12:00:00Z" } },
+    { path: "/v1/me/consents", query: [], method: "GET", key: null, body: undefined },
     { path: "/v1/me/consents/11111111-1111-4111-8111-111111111111/revoke", query: [], method: "POST", key: null, body: {} },
   ]);
+});
+
+test("consent calls carry the caller-provided user token, never the service token", async () => {
+  const authorizations = [];
+  const client = createJuncturaClient({ ...options, fetcher: async (url, init) => {
+    if (url.pathname.includes("/token")) return auth();
+    authorizations.push(init.headers.get("Authorization"));
+    return json({ consents: [] });
+  } });
+  assert.throws(() => client.consent(undefined), TypeError);
+  assert.throws(() => client.consent(""), TypeError);
+  const consents = client.consent("user-oidc-token");
+  await consents.list();
+  await consents.create({ consumerAppId: "22222222-2222-4222-8222-222222222222",
+    capabilityId: "urn:junctura:capability:33333333-3333-4333-8333-333333333333:lookup",
+    purposes: ["service_review"], expiresAt: "2030-01-12T12:00:00Z" });
+  assert.deepEqual(authorizations, ["Bearer user-oidc-token", "Bearer user-oidc-token"],
+    "no client-credentials token ever reaches a consent route");
 });

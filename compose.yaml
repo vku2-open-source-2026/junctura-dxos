@@ -43,7 +43,6 @@ services:
       TENANT_B_SECRET: ${TENANT_B_SECRET:?Run npm run setup first}
       READER_SECRET: ${READER_SECRET:?Run npm run setup first}
       SSO_USER_PASSWORD: ${SSO_USER_PASSWORD:?Run npm run setup first}
-      DIRECTORY_SYNC_CLIENT_SECRET: ${DIRECTORY_SYNC_CLIENT_SECRET:-unset-directory-sync}
     volumes:
       - ./infra/keycloak/realm.json:/opt/keycloak/data/import/realm.json:ro
       - ./infra/keycloak/themes/junctura:/opt/keycloak/themes/junctura:ro

@@ -62,6 +62,7 @@ END $$;
 ALTER FUNCTION core.subject_binding(jsonb) OWNER TO junctura_app_owner;
 REVOKE ALL ON FUNCTION core.subject_binding(jsonb) FROM PUBLIC,junctura_api,junctura_app_api,junctura_resource_api,junctura_audit_api,junctura_capability_api,junctura_trust_api,junctura_execution_api,junctura_directory_api;
 GRANT EXECUTE ON FUNCTION core.subject_binding(jsonb) TO junctura_subject_api;
+RESET ROLE;
 REVOKE CREATE ON SCHEMA core FROM junctura_app_owner;
 INSERT INTO core.schema_migrations(version) VALUES (36);
 NOTIFY pgrst, 'reload schema';

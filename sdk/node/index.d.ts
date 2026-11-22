@@ -108,9 +108,11 @@ export function createJuncturaClient(options: { baseUrl: string; clientId: strin
   listDirectoryMembers(unit: string, page?: { limit?: number; cursor?: string }): Promise<DirectoryPage>;
   putDirectoryMember(unit: string, subject: string, groups: string[]): Promise<DirectoryMember>;
   deleteDirectoryMember(unit: string, subject: string): Promise<void>;
-  listConsents(): Promise<{ consents: SubjectConsent[] }>;
-  createConsent(consent: ConsentCreate, idempotencyKey?: string): Promise<SubjectConsent>;
-  revokeConsent(consentId: string): Promise<SubjectConsent>;
+  consent(userToken: string): Readonly<{
+    list(): Promise<{ consents: SubjectConsent[] }>;
+    create(consent: ConsentCreate, idempotencyKey?: string): Promise<SubjectConsent>;
+    revoke(consentId: string): Promise<SubjectConsent>;
+  }>;
   createRecord(collection: string, data: Json): Promise<{ id: string; data: Json; [key: string]: unknown }>;
   getRecord(collection: string, id: string): Promise<{ id: string; data: Json; [key: string]: unknown }>;
   listRecords(collection: string, query?: { limit?: number; order?: 'asc' | 'desc'; cursor?: string }): Promise<{ items: { id: string; collection: string; data: Json; created_at: string }[]; nextCursor: string | null }>;

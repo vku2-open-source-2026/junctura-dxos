@@ -59,7 +59,7 @@ PostgreSQL/PostgREST, SeaweedFS, Flowable, ClamAV and OpenBao remain private.
 | `src/modules/capability/composition/execution.mjs`, `src/modules/capability/composition/runtime.mjs` | Private SQL steps, leases and opt-in ordered dispatch/observation. |
 | `src/modules/consent/consent.mjs` | Subject consents and emergency-access reviews. |
 | `src/modules/data/data.mjs` | Structured records through `/v1/data/*` and `/v2/data/*`. |
-| `src/modules/directory/directory.mjs` | Read-only tenant principals and organization tree. |
+| `src/modules/directory/directory.mjs` | Tenant principals and organization tree plus operator-managed directory desired state. |
 | `src/modules/metrics/metrics.mjs` | Per-process request counters and bounded recent traffic. |
 | `src/modules/objects/objects.mjs`, `src/modules/objects/malware-scan.mjs` | Object routes, storage adapter and fail-closed ClamAV scanning. |
 | `src/modules/resources/resources.mjs` | Verified application context, resource authority and read shares. |

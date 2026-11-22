@@ -74,12 +74,12 @@ export function createJuncturaClient({ baseUrl, clientId, clientSecret, timeoutM
     })();
     try { return await pending; } finally { pending = undefined; }
   }
-  async function request(path, { method = "GET", json, body, contentType, ifMatch, idempotencyKey, lockId, signal } = {}) {
+  async function request(path, { method = "GET", json, body, contentType, ifMatch, idempotencyKey, lockId, signal, bearer } = {}) {
     if (typeof path !== "string" || !/^\/v[12]\//.test(path) || /[\\#\r\n]/.test(path)) throw new TypeError("Use a versioned public Gateway path");
     const url = new URL(path, base);
     if (url.origin !== base.origin || !/^\/v[12]\//.test(url.pathname)) throw new TypeError("Gateway path escapes the public API");
     if (json !== undefined && body !== undefined) throw new TypeError("Supply JSON or binary body, not both");
-    const headers = new Headers({ Authorization: `Bearer ${await token()}` });
+    const headers = new Headers({ Authorization: `Bearer ${bearer ?? await token()}` });
     if (json !== undefined) headers.set("Content-Type", "application/json");
     else if (contentType) headers.set("Content-Type", contentType);
     if (ifMatch) headers.set("If-Match", ifMatch);
@@ -244,12 +244,20 @@ export function createJuncturaClient({ baseUrl, clientId, clientSecret, timeoutM
       return (await request(`/v1/directory/units/${segment(unit)}/members/${segment(subject)}`, { method: "PUT", json: { groups } })).json();
     },
     async deleteDirectoryMember(unit, subject) { await finish(await request(`/v1/directory/units/${segment(unit)}/members/${segment(subject)}`, { method: "DELETE" })); },
-    async listConsents() { return (await request("/v1/me/consents")).json(); },
-    async createConsent(consent, idempotencyKey = randomUUID()) {
-      return (await request("/v1/me/consents", { method: "POST", json: consent, idempotencyKey })).json();
-    },
-    async revokeConsent(consentId) {
-      return (await request(`/v1/me/consents/${segment(consentId)}/revoke`, { method: "POST", json: {} })).json();
+    // Consent belongs to a verified person, not to the app's client
+    // credentials: pass the caller's OIDC access token (with its
+    // operator-bound subjectId) and every call carries it instead of the
+    // service token. Client credentials alone are refused by Core with
+    // 403 verified_subject_required.
+    consent(userToken) {
+      if (typeof userToken !== "string" || !userToken) throw new TypeError("A verified user access token is required");
+      return Object.freeze({
+        list: () => request("/v1/me/consents", { bearer: userToken }).then(response => response.json()),
+        create: (consentBody, idempotencyKey = randomUUID()) =>
+          request("/v1/me/consents", { method: "POST", json: consentBody, idempotencyKey, bearer: userToken }).then(response => response.json()),
+        revoke: consentId =>
+          request(`/v1/me/consents/${segment(consentId)}/revoke`, { method: "POST", json: {}, bearer: userToken }).then(response => response.json()),
+      });
     },
     async workflowDefinitions() { return (await request("/v1/workflows/definitions")).json(); },
     async startWorkflow(definitionId, input, idempotencyKey = randomUUID()) {

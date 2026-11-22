@@ -96,7 +96,7 @@ test("the Core router sends writes, queries and imports to their RPCs with verif
   const outbound = t.mock.method(globalThis, "fetch", async (url, options) => {
     if (url.startsWith(issuer)) return Response.json({
       active: true, iss: issuer, aud: "junctura-core", exp: Date.now() / 1000 + 60,
-      sub: "verified-subject", client_id: "verified-client", tenant_id: "tenant-a", tenant_memberships: ["tenant-a"],
+      sub: "verified-subject", client_id: "verified-client", tenant_id: "tenant-a", tenant_memberships: ["/tenant-a"],
       realm_access: { roles: ["core-reader", "core-writer"] },
     });
     const claims = JSON.parse(Buffer.from(options.headers.Authorization.split(".")[1], "base64url"));

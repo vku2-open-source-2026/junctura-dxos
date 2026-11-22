@@ -32,6 +32,18 @@ let manager, member;
 before(async () => {
   // Repeatable realm provisioning: mappers, the sync service account, its roles.
   await provisionDirectory([], { log: () => {}, env: process.env });
+  // A dedicated operator-managed PKCE client keeps fixture changes local, the
+  // way the capability suite prepares its own management client.
+  const template = (await (await admin("clients?clientId=tenant-a")).json())[0];
+  const source = await (await admin(`clients/${template.id}`)).json();
+  const protocolMappers = structuredClone(source.protocolMappers);
+  for (const mapper of protocolMappers) delete mapper.id;
+  const createdClient = await admin("clients", { clientId: `${prefix}-management-tenant-a`, enabled: true,
+    protocol: "openid-connect", publicClient: true, standardFlowEnabled: true, directAccessGrantsEnabled: false,
+    redirectUris: ["http://127.0.0.1:9876/callback"], attributes: { "pkce.code.challenge.method": "S256" },
+    protocolMappers }, "POST");
+  assert.equal(createdClient.status, 201);
+  clientIds.push(createdClient.headers.get("location").split("/").at(-1));
   manager = await human("manager", "tenant-a", ["directory.write"]);
   member = await human("member", "tenant-a", []);
 });
@@ -60,7 +72,7 @@ const group = `${prefix}-reviewers`;
 
 test("directory changes store desired state, sync Keycloak and confirm only the read-back generation", async () => {
   const created = await api(`/v1/directory/unit-types/${unitType}`, manager, { name: "Technical office" }, {}, "PUT");
-  assert.equal(created.status, 201, await created.text());
+  assert.equal(created.status, 201, await created.clone().text());
   assert.deepEqual(await created.json(), { unitType, name: "Technical office" });
   const same = await api(`/v1/directory/unit-types/${unitType}`, manager, { name: "Technical office" }, {}, "PUT");
   assert.equal(same.status, 200, "an identical confirmed desired state is a no-op");
@@ -79,7 +91,7 @@ test("directory changes store desired state, sync Keycloak and confirm only the 
   assert.deepEqual(await groupPut.json(), { unit, group, name: "Reviewers" });
 
   const memberPut = await api(`/v1/directory/units/${unit}/members/${member.id}`, manager, { groups: [group] }, {}, "PUT");
-  assert.equal(memberPut.status, 201, await memberPut.text());
+  assert.equal(memberPut.status, 201, await memberPut.clone().text());
   assert.deepEqual(await memberPut.json(), { unit, subject: member.id, groups: [group] });
 
   // The provider state is verified through the operator admin API: the member
@@ -97,23 +109,32 @@ test("directory changes store desired state, sync Keycloak and confirm only the 
 });
 
 test("lists paginate in ascending order with cursors and require the permission", async () => {
-  const types = await (await api(`/v1/directory/unit-types?limit=1`, manager)).json();
-  assert.equal(types.items.length, 1);
-  assert.notEqual(types.nextCursor, null);
-  const rest = await (await api(`/v1/directory/unit-types?limit=100&cursor=${types.nextCursor}`, manager)).json();
-  assert.ok(rest.items.every(item => item.unitType > types.items[0].unitType));
-  assert.equal(rest.nextCursor, null);
-  const units = await (await api("/v1/directory/units", manager)).json();
-  assert.ok(units.items.some(item => item.unit === unit && item.unitType === unitType));
-  const groups = await (await api(`/v1/directory/units/${unit}/groups`, manager)).json();
-  assert.ok(groups.items.some(item => item.group === group));
-  const members = await (await api(`/v1/directory/units/${unit}/members`, manager)).json();
-  assert.ok(members.items.some(item => item.subject === member.id && item.groups[0] === group));
+  // A second unit type of this run makes the fixture hold two pages.
+  const deskType = `${prefix}-desk`;
+  const desk = await api(`/v1/directory/unit-types/${deskType}`, manager, { name: "Desk" }, {}, "PUT");
+  assert.equal(desk.status, 201, await desk.clone().text());
+  try {
+    const types = await (await api(`/v1/directory/unit-types?limit=1`, manager)).json();
+    assert.equal(types.items.length, 1);
+    assert.ok(types.items[0].unitType.startsWith(prefix), "this run owns the first page");
+    assert.notEqual(types.nextCursor, null);
+    const rest = await (await api(`/v1/directory/unit-types?limit=100&cursor=${types.nextCursor}`, manager)).json();
+    assert.deepEqual(rest.items.map(item => item.unitType), [unitType]);
+    assert.equal(rest.nextCursor, null);
+    const units = await (await api("/v1/directory/units", manager)).json();
+    assert.ok(units.items.some(item => item.unit === unit && item.unitType === unitType));
+    const groups = await (await api(`/v1/directory/units/${unit}/groups`, manager)).json();
+    assert.ok(groups.items.some(item => item.group === group));
+    const members = await (await api(`/v1/directory/units/${unit}/members`, manager)).json();
+    assert.ok(members.items.some(item => item.subject === member.id && item.groups[0] === group));
 
-  for (const who of [member]) assert.equal((await api("/v1/directory/units", who)).status, 403,
-    "without directory.write the lists refuse");
-  assert.equal((await api("/v1/directory/units?cursor=%00", manager)).status, 400);
-  assert.equal((await api(`/v1/directory/units/${unit}/groups`, manager, undefined, {}, "POST")).status, 405);
+    for (const who of [member]) assert.equal((await api("/v1/directory/units", who)).status, 403,
+      "without directory.write the lists refuse");
+    assert.equal((await api("/v1/directory/units?cursor=%00", manager)).status, 400);
+    assert.equal((await api(`/v1/directory/units/${unit}/groups`, manager, undefined, {}, "POST")).status, 405);
+  } finally {
+    assert.equal((await api(`/v1/directory/unit-types/${deskType}`, manager, undefined, {}, "DELETE")).status, 204);
+  }
 });
 
 test("references, conflicts, racing writes and deletes follow the documented contract", async () => {
@@ -144,6 +165,26 @@ test("references, conflicts, racing writes and deletes follow the documented con
   const members = await (await api(`/v1/directory/units/${unit}/members`, manager)).json();
   assert.equal(members.items[0].groups[0], group, "the membership survives racing group renames");
 
+  // A member write racing the deletion of its group ends in exactly one
+  // documented outcome and the desired state stays consistent.
+  const shared = await Promise.all([
+    api(`/v1/directory/units/${unit}/members/${member.id}`, manager, { groups: [group] }, {}, "PUT"),
+    api(`/v1/directory/units/${unit}/groups/${group}`, manager, undefined, {}, "DELETE"),
+  ]);
+  assert.ok(
+    (shared[0].status === 201 && shared[1].status === 409) ||
+      (shared[0].status === 404 && shared[1].status === 204),
+    `the race ends in one documented outcome, got ${shared[0].status}/${shared[1].status}`);
+  const providerGroups = await (await admin(`users/${member.id}/groups`)).json();
+  if (shared[0].status === 201) {
+    assert.ok(providerGroups.some(item => item.path === `/tenant-a/${unit}/${group}`),
+      "a surviving member holds its group at the provider");
+    assert.equal((await api(`/v1/directory/units/${unit}/members/${member.id}`, manager, undefined, {}, "DELETE")).status, 204);
+  } else {
+    assert.ok(!providerGroups.some(item => item.path?.startsWith(`/tenant-a/${unit}`)),
+      "a refused member leaves no provider membership");
+  }
+
   // Deletes converge and repeat as 204; the provider loses the membership.
   assert.equal((await api(`/v1/directory/units/${unit}/members/${member.id}`, manager, undefined, {}, "DELETE")).status, 204);
   assert.equal((await api(`/v1/directory/units/${unit}/members/${member.id}`, manager, undefined, {}, "DELETE")).status, 204);
@@ -164,7 +205,7 @@ test("a wiped provider subtree heals on the next write of the same desired state
   const unitGroup = children.find(item => item.name === unit);
   await admin(`groups/${unitGroup.id}`, undefined, "DELETE");
   const healed = await api(`/v1/directory/units/${unit}/groups/${group}`, manager, { name: "Reviewers" }, {}, "PUT");
-  assert.equal(healed.status, 200, await healed.text());
+  assert.equal(healed.status, 200, await healed.clone().text());
   const rebuilt = await (await admin(`users/${member.id}/groups`)).json();
   const memberPut = await api(`/v1/directory/units/${unit}/members/${member.id}`, manager, { groups: [group] }, {}, "PUT");
   assert.equal(memberPut.status, 201);

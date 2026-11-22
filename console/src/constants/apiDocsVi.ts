@@ -119,9 +119,9 @@ export const API_DOCS_COPY_VI: Record<string, ApiDocsCopy> = {
   listDirectoryMember: { summary: "Liệt kê thành viên của một đơn vị cùng nhóm của họ.", when: "Dùng để xem người nào thuộc đơn vị và nhóm nào." },
   putDirectoryMember: { summary: "Tạo hoặc thay tư cách thành viên đơn vị và mảng nhóm của một người.", when: "Dùng khi gán người vào đơn vị; mảng nhóm thay toàn bộ nhóm trong đơn vị đó." },
   deleteDirectoryMember: { summary: "Xóa tư cách thành viên đơn vị và mọi nhóm trong đơn vị đó.", when: "Dùng khi một người rời đơn vị; gọi lặp lại vẫn an toàn." },
-  listSubjectConsents: { summary: "Liệt kê các đồng ý của chủ thể đã xác minh.", when: "Dùng để xem ứng dụng nào đang được phép dùng dữ liệu của mình; thiếu chủ thể đã xác minh sẽ bị từ chối." },
-  createSubjectConsent: { summary: "Cho phép một ứng dụng dùng dữ liệu của chính mình theo subjectId đã xác minh.", when: "Dùng khi người dùng đồng ý cho một mục đích và thời hạn cụ thể; cần Idempotency-Key." },
-  revokeSubjectConsent: { summary: "Rút lại một đồng ý đã cấp của chủ thể đã xác minh.", when: "Dùng khi người dùng không muốn ứng dụng tiếp tục dùng dữ liệu; rút lặp lại vẫn trả trạng thái hiện tại." },
+  listConsentsBySubjectId: { summary: "Liệt kê các đồng ý của chủ thể đã xác minh.", when: "Dùng để xem ứng dụng nào đang được phép dùng dữ liệu của mình; thiếu chủ thể đã xác minh sẽ bị từ chối." },
+  createConsentBySubjectId: { summary: "Cho phép một ứng dụng dùng dữ liệu của chính mình theo subjectId đã xác minh.", when: "Dùng khi người dùng đồng ý cho một mục đích và thời hạn cụ thể; cần Idempotency-Key." },
+  revokeConsentBySubjectId: { summary: "Rút lại một đồng ý đã cấp của chủ thể đã xác minh.", when: "Dùng khi người dùng không muốn ứng dụng tiếp tục dùng dữ liệu; rút lặp lại vẫn trả trạng thái hiện tại." },
   listEmergencyAccesses: { summary: "Liệt kê các lượt truy cập khẩn cấp cần hậu kiểm.", when: "Dùng khi quản trị viên cần rà soát truy cập không có đồng ý trước." },
   reviewEmergencyAccess: { summary: "Ghi kết quả hậu kiểm một lượt truy cập khẩn cấp.", when: "Dùng sau khi kiểm tra lý do và phạm vi của lượt truy cập khẩn cấp." },
 };

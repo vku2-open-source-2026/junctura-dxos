@@ -33,7 +33,7 @@ export function loadConfig(env = process.env) {
   if (env.SECRETS_URL && !env.SECRETS_TOKEN && !env.SECRETS_TOKEN_FILE) {
     throw new Error("Secrets manager configuration is incomplete");
   }
-  if (!!env.DIRECTORY_SYNC_CLIENT_ID !== !!env.DIRECTORY_SYNC_CLIENT_SECRET) {
+  if (env.DIRECTORY_SYNC_CLIENT_SECRET && !env.DIRECTORY_SYNC_CLIENT_ID) {
     throw new Error("Directory synchronization configuration is incomplete");
   }
   const config = Object.freeze({
@@ -55,7 +55,9 @@ export function loadConfig(env = process.env) {
     secretsMount: env.SECRETS_MOUNT || "secret",
     workflowUrl: env.WORKFLOW_URL,
     workflowPassword: env.WORKFLOW_ADMIN_PASSWORD,
-    directorySyncClientId: env.DIRECTORY_SYNC_CLIENT_ID || undefined,
+    // Without a client secret the directory sync stays disabled and Core still
+    // serves read-only traffic; configuring the secret enables the provider.
+    directorySyncClientId: env.DIRECTORY_SYNC_CLIENT_SECRET ? (env.DIRECTORY_SYNC_CLIENT_ID || undefined) : undefined,
     directorySyncSecret: env.DIRECTORY_SYNC_CLIENT_SECRET || undefined,
   });
   const origins = name => {

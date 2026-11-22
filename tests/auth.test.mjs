@@ -5,10 +5,16 @@ import { test } from "node:test";
 import { createAuthorizer, organizationContext, validateIdentity } from "../src/platform/auth/auth.mjs";
 
 const issuer = "http://identity.test/realms/junctura";
-const claims = { active: true, iss: issuer, aud: "junctura-core", exp: 2000, sub: "subject", tenant_id: "tenant-a", tenant_memberships: ["tenant-a"], realm_access: { roles: ["core-reader", "core-writer"] } };
+const claims = { active: true, iss: issuer, aud: "junctura-core", exp: 2000, sub: "subject", tenant_id: "tenant-a", tenant_memberships: ["/tenant-a"], realm_access: { roles: ["core-reader", "core-writer"] } };
 const bare = { subject: "subject", tenantId: "tenant-a", roles: ["core-reader", "core-writer"], units: [], groups: [] };
 test("verified identity uses tenant and roles from issuer claims", () => {
   assert.deepEqual(validateIdentity(claims, issuer, 1000), bare);
+});
+test("a verified regulator role stays in the internal context", () => {
+  assert.deepEqual(validateIdentity({ ...claims, realm_access: { roles: ["core-reader", "regulator"] } }, issuer, 1000),
+    { ...bare, roles: ["core-reader", "regulator"] });
+  assert.deepEqual(validateIdentity({ ...claims, realm_access: { roles: ["core-reader", "core-writer", "regulator"] } }, issuer, 1000),
+    { ...bare, roles: ["core-reader", "core-writer", "regulator"] });
 });
 test("verified identity exposes only the caller's own preferred username", () => {
   assert.deepEqual(validateIdentity({ ...claims, preferred_username: "admin1" }, issuer, 1000), {
@@ -23,10 +29,15 @@ test("inactive, expired, wrong issuer/audience and missing subject tokens fail c
     assert.throws(() => validateIdentity({ ...claims, ...patch }, issuer, 1000), (error) => error.status === 401);
   }
 });
-test("tenant and read-role claims are mandatory", () => {
-  for (const patch of [{ tenant_id: "../tenant-b" }, { tenant_id: "tenant-b" }, { tenant_memberships: [] }, { tenant_id: null }, { realm_access: { roles: [] } }]) {
+test("tenant membership needs the exact tenant root group path", () => {
+  for (const patch of [{ tenant_id: "../tenant-b" }, { tenant_id: "tenant-b" }, { tenant_memberships: [] },
+    { tenant_memberships: ["tenant-a"] }, { tenant_memberships: ["tenant-a", "tenant-b"] },
+    { tenant_id: null }, { realm_access: { roles: [] } }]) {
     assert.throws(() => validateIdentity({ ...claims, ...patch }, issuer, 1000), (error) => error.status === 403);
   }
+  // A leaf group of another tenant never proves membership in it.
+  assert.throws(() => validateIdentity({ ...claims, tenant_id: "tenant-b",
+    tenant_memberships: ["/tenant-a/tenant-b", "tenant-b"] }, issuer, 1000), (error) => error.status === 403);
 });
 test("missing bearer credentials never reach the identity provider", async () => {
   const authorize = createAuthorizer({ issuer }, () => { throw new Error("Should not be called"); });

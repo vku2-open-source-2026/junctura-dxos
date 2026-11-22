@@ -254,12 +254,24 @@ the durable desired state for unit types, flat units, per-unit groups and unit
 memberships. Every row carries a generation and a synchronization status; a
 change is confirmed only after the identity provider state has been read back,
 and confirmations are keyed by generation so an older job never overwrites a
-newer one.
+newer one. Every command takes a per-tenant advisory lock, deletions remain as
+durable tombstones until confirmed (so a generation is never reused across a
+delete and recreate), a confirm that no longer matches the row generation is a
+lost race reported as a conflict, and mutations additionally require the
+`core-writer` role relayed by Core.
 
 ## Verified subject consents (038)
 
 Consent list, grant and revoke now require a verified subject identity and use
-the bound `subjectId` as the canonical data subject. Consent checks during
-capability execution resolve the named person through the same bindings, so
-consents granted before verified subjects keep their authority, while rows no
-allowed binding can reach stay quarantined.
+the bound `subjectId` as the canonical data subject, resolved one way only: a
+login subject maps to its bound subjectId, never the reverse. Each consent row
+carries that canonical key; the one-time backfill moved legacy rows written
+under a login subject to the bound subjectId, while rows no binding reaches
+stay quarantined with no canonical key until an operator re-maps them during
+reconciliation. Binding rows refuse identifiers shared between a subjectId and
+a login subject in the same tenant and issuer, and the per-subject
+active-consent limit counts and creates under its own advisory lock. Consent
+checks during capability execution resolve the named person through the same
+one-way join, so consents granted before verified subjects keep their
+authority, and the data subject's access log shows calls recorded under either
+of their identifiers.

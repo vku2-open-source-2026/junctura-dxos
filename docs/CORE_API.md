@@ -448,15 +448,20 @@ other principals use subjects, while callers can obtain their own `preferredUser
 An enrolled management principal with `directory.write` additionally manages the organization itself:
 list `/v1/directory/unit-types` and `/v1/directory/units` with `limit`/`cursor` keyset pages, then PUT or DELETE
 `/v1/directory/unit-types/{unitType}`, `/v1/directory/units/{unit}`, `/v1/directory/units/{unit}/groups/{group}`
-and `/v1/directory/units/{unit}/members/{subject}`. Units stay flat; every referenced unit type, unit or group
+and `/v1/directory/units/{unit}/members/{subject}`. Mutations additionally require the `core-writer` role.
+Units stay flat; every referenced unit type, unit or group
 must already exist, and a member's `groups` array replaces that unit's group assignments for one existing tenant
 subject. Every change is stored as desired state with a per-row generation and applied to the identity provider
 through a dedicated service account; the API reports success only after reading the provider back and finding
-exactly that generation, and a retry of the same desired state converges. PUT returns `201` for a new row and
+exactly that generation, and a retry of the same desired state converges. Deletions stay as durable tombstones
+until confirmed, so a generation is never reused across a delete and recreate, and every command serializes on a
+per-tenant advisory lock in PostgreSQL, so concurrent replicas never overwrite one another. PUT returns `201` for
+a new row and
 `200` for an updated or identical one; repeating a DELETE returns `204`; deleting a resource that is still
 referenced conflicts with `409 resource_conflict`. Previously issued tokens can retain old membership claims
 until they are renewed. The provider realm keeps organization groups under a per-tenant namespace, so verified
-group paths are `/{tenant}/{unit}/{group}` upstream and `/unit/group` in Core responses.
+group paths are `/{tenant}/{unit}/{group}` upstream and `/unit/group` in Core responses; tenant membership
+itself is proven only by the exact root group path `/{tenant}`.
 
 ## Application statistics
 
@@ -660,8 +665,14 @@ Data-subject accounts carry a verified `subjectId` claim bound by an operator pe
 cannot self-assign it. Core uses it, with tenant and issuer, for `/v1/me/consents` list, grant and revoke,
 and the same identity gates the capability consent check: `/v1/me/*` returns `403 verified_subject_required`
 while the claim or its binding is missing. Consents granted before verified subjects keep their authority
-through the same binding; rows no allowed binding can reach stay quarantined. The login identifier remains
-`subject`. Grant requests require a UUID `Idempotency-Key`; the first committed result replays for 24 hours.
+through the same binding: each stored consent carries a canonical subject resolved one way only, from a
+login subject to its bound subjectId. The one-time backfill moved legacy rows through that join; rows no
+binding reaches stay quarantined and never authorize a call until an operator re-maps them during
+reconciliation, and a subjectId is never allowed to name a login subject (or vice versa); the mapping is
+one-to-one per (tenant, issuer) and renewing a binding is an operator task, not a routine update. The login
+identifier remains `subject`. `GET /v1/me/data-access` shows history recorded under either
+identifier of the person. Grant requests require a UUID `Idempotency-Key`; the first committed result replays
+for 24 hours.
 
 ### Files, events, search and privacy
 

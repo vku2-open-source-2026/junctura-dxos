@@ -8,6 +8,24 @@ All notable changes to Junctura are recorded here. Versions follow
 
 ## Unreleased
 
+- **Identity review hardening (issue #65, round 1):** migrations 036–038 write their ledger under the
+  migration role; tenant membership now names the tenant root group by full path (`/{tenant}`), so a
+  leaf group name can no longer prove membership in another tenant; the directory sync client imports
+  without a fixed guessable secret (Keycloak generates a random one, `directory:provision` rotates it
+  to the configured value) and Core starts with synchronization disabled when no secret is configured
+  instead of refusing to boot. Directory coordination moved from an in-process lock map to PostgreSQL:
+  every command takes a per-tenant advisory lock, deletions stay as tombstones so a generation is never
+  reused across a delete and recreate, and a confirm that updates zero rows reports `409` instead of
+  success. Member writes verify the subject in the tenant before committing desired state, the Keycloak
+  adapter pages every listing, distinguishes `404` from a broken response and reads the whole membership
+  set back. Directory mutations additionally require the `core-writer` role. Legacy consent rows are
+  backfilled one way, from a login subject to its bound subjectId, rows no binding reaches stay
+  quarantined, and the active-consent limit counts under its own per-subject lock; bindings refuse
+  identifiers shared between a subjectId and a login subject. `@junctura/server-client` consent methods
+  now carry the caller's own OIDC token (`client.consent(userToken)`), the Console API reference
+  resolves cross-file Foundation references (required `Idempotency-Key` headers included) and the
+  Console explains `403 verified_subject_required` on the consents screen. Recovery verification now
+  checks the new roles, forced RLS and the binding gate after a restore.
 - **Verified identity, directory management and subject consents (issue #65):** migrations 036–038 add
   operator-bound subject identifiers per (tenant, issuer), durable directory desired state with per-row
   generations synced into Keycloak through a dedicated service account, and consent under the verified

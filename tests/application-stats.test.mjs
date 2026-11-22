@@ -240,7 +240,7 @@ test("Core routes stats before application IDs and returns correlated errors", a
     if (url.endsWith("/token/introspect")) return Response.json({
       active: true, iss: identity.issuer, aud: "junctura-core", sub: identity.subject,
       exp: Date.now() / 1000 + 30, client_id: identity.clientId, tenant_id: identity.tenantId,
-      tenant_memberships: [identity.tenantId], realm_access: { roles: identity.roles },
+      tenant_memberships: [`/${identity.tenantId}`], realm_access: { roles: identity.roles },
     });
     return request(url, options);
   });

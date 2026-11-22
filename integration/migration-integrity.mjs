@@ -147,6 +147,57 @@ test("concurrent runners serialize and converge", async () => {
   assert.equal(await sql("SELECT count(*) FROM core.schema_migrations"), migrationCount);
 });
 
+test("upgrading from 035 maps legacy consents one way and quarantines unmapped rows", async () => {
+  const database = "consent_upgrade";
+  const upgradeDir = join(directory, "consent-upgrade");
+  mkdirSync(upgradeDir);
+  const appId = randomUUID();
+  await sql(`CREATE DATABASE ${database} OWNER junctura_data`);
+  try {
+    for (const migration of migrations.filter(file => Number(file.slice(0, 3)) <= 35)) {
+      cpSync(join(directory, migration), join(upgradeDir, migration));
+    }
+    await migrate({ MIGRATION_DIR: "/migrations/consent-upgrade" }, database);
+    // A legacy consent row keyed by the login subject and one nobody can reach.
+    await sql(`INSERT INTO app_private.applications
+      (tenant_id,app_id,issuer,oauth_client_id,owner_subject,provider_origin,display_name,digest,state)
+      VALUES('tenant-a','${appId}','https://fixture.invalid','fixture','subject','https://fixture.invalid',
+        'Consent fixture','sha256:${"0".repeat(64)}','active');
+      INSERT INTO execution_private.subject_consents(tenant_id,issuer,data_subject,consumer_app_id,capability_id,purposes,expires_at)
+        VALUES('tenant-a','https://fixture.invalid','legacy-person','${appId}',
+          'urn:junctura:capability:${appId}:lookup',ARRAY['service_review']::text[],now()+interval '2 hours'),
+          ('tenant-a','https://fixture.invalid','unmapped-foreign-subject','${appId}',
+          'urn:junctura:capability:${appId}:lookup',ARRAY['service_review']::text[],now()+interval '2 hours');`, database);
+    for (const migration of migrations.filter(file => Number(file.slice(0, 3)) > 35)) {
+      cpSync(join(directory, migration), join(upgradeDir, migration));
+    }
+    await migrate({ MIGRATION_DIR: "/migrations/consent-upgrade" }, database);
+    // The operator binds legacy-person to a verified subjectId after 036.
+    await sql(`INSERT INTO app_private.subject_bindings(tenant_id,issuer,subject_id,login_subject)
+      VALUES('tenant-a','https://fixture.invalid','verified-1','legacy-person');`, database);
+    // The one-way backfill moved the mapped row to the canonical key and left
+    // the unmapped one quarantined; only the mapped row grants authority.
+    const state = await sql(`SELECT to_jsonb(u) FROM (
+      SELECT (SELECT count(*) FROM execution_private.subject_consents WHERE canonical_subject='verified-1') AS mapped,
+             (SELECT count(*) FROM execution_private.subject_consents WHERE canonical_subject IS NULL
+               AND data_subject='unmapped-foreign-subject') AS quarantined,
+             (SELECT execution_private.canonical_subject('tenant-a','https://fixture.invalid','legacy-person')) AS canonical,
+             (SELECT execution_private.canonical_subject('tenant-a','https://fixture.invalid','unmapped-foreign-subject')) AS foreign_canonical) u;`, database);
+    assert.deepEqual(JSON.parse(state), { mapped: 1, quarantined: 1,
+      canonical: "verified-1", foreign_canonical: null });
+    // Binding rows cannot collide: a subjectId that names an existing login is refused.
+    let collision = "";
+    try {
+      await sql(`INSERT INTO app_private.subject_bindings(tenant_id,issuer,subject_id,login_subject)
+        VALUES('tenant-a','https://fixture.invalid','legacy-person','another-login');`, database);
+    } catch { collision = "refused"; }
+    assert.equal(collision, "refused", "subject ids and login subjects never share an identifier");
+  } finally {
+    await sql(`DROP DATABASE ${database}`);
+    rmSync(upgradeDir, { recursive: true, force: true });
+  }
+});
+
 test("version-only history requires explicit operator adoption", async () => {
   await sql("TRUNCATE core.schema_migration_checksums");
   assert.match(await refused(), /version-only history/);

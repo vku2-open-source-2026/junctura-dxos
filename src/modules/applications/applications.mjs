@@ -53,6 +53,7 @@ export function applicationToken(identity, secret, role = "junctura_app_api") {
   return signInternalToken(secret, { role, tenant_id: identity.tenantId, sub: identity.subject,
     ...(role === "junctura_resource_api" ? { resource_writer: identity.roles.includes("core-writer") } : {}),
     ...(role === "junctura_trust_api" ? { trust_writer: identity.roles.includes("core-writer") } : {}),
+    ...(role === "junctura_directory_api" ? { directory_writer: identity.roles.includes("core-writer") } : {}),
     // The candidate subjectId travels to RPCs that verify the operator binding.
     ...(identity.subjectId ? { subject_id: identity.subjectId } : {}),
     iss: identity.issuer, client_id: identity.clientId, aud: "junctura-data", exp: Math.floor(Date.now() / 1000) + 30 });

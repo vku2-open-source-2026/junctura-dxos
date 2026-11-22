@@ -30,8 +30,12 @@ export function validateIdentity(claims, issuer, now = Date.now() / 1000) {
       !Number.isFinite(claims.exp) || claims.exp <= now || typeof claims.sub !== "string" || !claims.sub) {
     throw new HttpError(401, "invalid_token");
   }
+  // Membership names the tenant's root group by full path, /{tenant}: leaf
+  // group names can repeat across tenants, so only the exact root path proves
+  // enrollment in this tenant.
   if (typeof claims.tenant_id !== "string" || !/^[a-z][a-z0-9-]{0,62}$/.test(claims.tenant_id) ||
-      !Array.isArray(claims.tenant_memberships) || !claims.tenant_memberships.includes(claims.tenant_id)) {
+      !Array.isArray(claims.tenant_memberships) ||
+      !claims.tenant_memberships.includes(`/${claims.tenant_id}`)) {
     throw new HttpError(403, "tenant_required");
   }
   const roles = claims.realm_access?.roles ?? [];
@@ -43,7 +47,7 @@ export function validateIdentity(claims, issuer, now = Date.now() / 1000) {
   const subjectId = typeof claims.subject_id === "string" && subjectIdPattern.test(claims.subject_id)
     ? claims.subject_id : undefined;
   return { subject: claims.sub, tenantId: claims.tenant_id,
-    roles: roles.filter((role) => ["core-reader", "core-writer"].includes(role)),
+    roles: roles.filter((role) => ["core-reader", "core-writer", "regulator"].includes(role)),
     ...organizationContext(claims.groups, claims.tenant_id),
     ...(subjectId ? { subjectId } : {}),
     ...(preferredUsername ? { preferredUsername } : {}) };

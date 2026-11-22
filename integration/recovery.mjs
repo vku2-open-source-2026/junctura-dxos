@@ -104,6 +104,21 @@ test("pg_dump/pg_restore preserves real data and tenant RLS in an isolated tempo
     const recordAcl = await docker(["exec", target, "psql", "-U", "junctura_admin", "-d", "recovered", "-Atc",
       "SELECT has_function_privilege('junctura_record_api','core.record_command(text,jsonb)','EXECUTE'),has_table_privilege('junctura_record_api','core.app_records','SELECT'),has_table_privilege('junctura_record_api','app_private.record_collections','SELECT'),has_column_privilege('junctura_resource_api','core.app_records','data','UPDATE'),has_function_privilege('junctura_resource_api','core.record_command(text,jsonb)','EXECUTE');"]);
     assert.equal(recordAcl.stdout.trim(), "t|f|f|f|f");
+    // Verified subject and directory RPCs survive the restore with their
+    // dedicated roles, forced RLS and no direct table reach.
+    const subjectDirectoryAcl = await docker(["exec", target, "psql", "-U", "junctura_admin", "-d", "recovered", "-Atc",
+      `SELECT has_function_privilege('junctura_subject_api','core.subject_binding(jsonb)','EXECUTE'),
+        has_function_privilege('junctura_subject_api','core.subject_consent(text,jsonb)','EXECUTE'),
+        has_function_privilege('junctura_subject_api','core.subject_access(jsonb)','EXECUTE'),
+        has_function_privilege('junctura_directory_api','core.directory_command(text,jsonb)','EXECUTE'),
+        has_table_privilege('junctura_subject_api','app_private.subject_bindings','SELECT'),
+        has_table_privilege('junctura_subject_api','execution_private.subject_consents','SELECT'),
+        has_table_privilege('junctura_directory_api','app_private.directory_units','SELECT'),
+        bool_and(c.relrowsecurity AND c.relforcerowsecurity)
+        FROM pg_class c WHERE (c.oid='app_private.subject_bindings'::regclass OR c.oid='app_private.directory_members'::regclass
+          OR c.oid='execution_private.subject_consents'::regclass);`]);
+    assert.equal(subjectDirectoryAcl.stdout.trim(), "t|t|t|t|f|f|f|t",
+      "Restore preserves subject/directory RPC grants, private ACLs and forced tenant RLS");
     for (const [tenant, expected] of [["tenant-a", "1"], ["tenant-b", "0"]]) {
       const guarded = await docker(["exec", target, "psql", "-U", "junctura_admin", "-d", "recovered", "-Atc",
         `SET ROLE junctura_app_owner; SELECT set_config('request.jwt.claims','{"tenant_id":"${tenant}"}',false);
@@ -194,12 +209,28 @@ test("pg_dump/pg_restore preserves real data and tenant RLS in an isolated tempo
         `SET ROLE junctura_app_owner; SELECT set_config('request.jwt.claims','${claims}',false); SELECT count(*) FROM app_private.audit WHERE resource_id='${id}';`]);
       assert.equal(result.stdout.trim().split(/\r?\n/).at(-1),expected,`Restored audit RLS for ${tenant}`);
     }
+    // The verified-subject gate still refuses unbound claims and a mapped
+    // person reads only their own rows after the restore.
+    const bindingClaims=JSON.stringify({tenant_id:'tenant-a',iss:'https://recovery.example.invalid',sub:`recovery-${id}`,subject_id:`subject-${id}`});
+    const gated=await docker(['exec',target,'psql','-U','junctura_admin','-d','recovered','-v','ON_ERROR_STOP=1','-Atc',
+      `SET ROLE junctura_subject_api; SELECT set_config('request.jwt.claims','${bindingClaims}',false);
+        SELECT core.subject_binding('{}'::jsonb)->>'error';`]);
+    assert.equal(gated.stdout.trim().split(/\r?\n/).at(-1),'verified_subject_required',
+      'A restored binding gate still refuses an operator-less claim');
+    await sourceSql(`INSERT INTO app_private.subject_bindings(tenant_id,issuer,subject_id,login_subject)
+      VALUES('tenant-a','https://recovery.example.invalid','subject-${id}','recovery-${id}');`);
+    const mapped=await docker(['exec',target,'psql','-U','junctura_admin','-d','recovered','-v','ON_ERROR_STOP=1','-Atc',
+      `SET ROLE junctura_subject_api; SELECT set_config('request.jwt.claims','${bindingClaims}',false);
+        SELECT core.subject_binding('{}'::jsonb)->'value'->>'subjectId';`]);
+    assert.equal(mapped.stdout.trim().split(/\r?\n/).at(-1),`subject-${id}`,
+      'A restored binding maps the operator-assigned subjectId to its login');
     const auditClaims=JSON.stringify({tenant_id:'tenant-a',iss:'https://recovery.example.invalid',sub:`recovery-${id}`,client_id:`restore-${id}`});
     const auditQuery=await docker(['exec',target,'psql','-U','junctura_admin','-d','recovered','-v','ON_ERROR_STOP=1','-Atc',
       `SET ROLE junctura_audit_api; SELECT set_config('request.jwt.claims','${auditClaims}',false); SELECT EXISTS(SELECT 1 FROM jsonb_array_elements(core.audit_query('{"limit":100}'::jsonb)->'value'->'items') item WHERE item->>'resourceId'='${id}');`]);
     assert.equal(auditQuery.stdout.trim().split(/\r?\n/).at(-1),'t','Restored protected audit query returns the event');
   } finally {
     if (target && /^[0-9a-f]{64}$/.test(target)) await docker(["stop", target]);
+    await sourceSql(`DELETE FROM app_private.subject_bindings WHERE tenant_id='tenant-a' AND login_subject='recovery-${id}';`).catch(() => {});
     if (applicationSeeded) await sourceSql(`DELETE FROM core.app_records WHERE owner_app_id='${id}' AND collection='recovery_fixture';
       DELETE FROM app_private.audit WHERE tenant_id='tenant-a' AND resource_id='${id}';
       DELETE FROM app_private.principals WHERE tenant_id='tenant-a' AND subject='recovery-${id}' AND management_client='restore-${id}';

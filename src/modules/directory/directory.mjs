@@ -4,13 +4,18 @@
 // organization/application tree. The database enforces audit.read on the
 // verified caller; Core only asserts the private directory role.
 //
-// Directory management writes (directory.write principals): unit types, flat
-// units, per-unit groups and unit memberships with durable desired state.
-// Each change is applied to the identity provider through a dedicated service
-// account and only confirmed after a read-back matches the stored generation.
+// Directory management writes (directory.write principals holding the
+// core-writer role): unit types, flat units, per-unit groups and unit
+// memberships with durable desired state. Coordination lives in PostgreSQL:
+// every command takes a per-tenant advisory lock and carries a per-row
+// generation, so replicas never need an in-process lock. Each change is
+// applied to the identity provider through a dedicated service account and
+// only confirmed after a read-back matches the stored generation; a confirm
+// that lost a race reports the conflict and a retry of the same desired state
+// converges.
 import { applicationToken } from "../applications/applications.mjs";
 import { createDirectorySync } from "./keycloak.mjs";
-import { HttpError, json, readBody } from "../../platform/http/http.mjs";
+import { HttpError, json, readBody, requireWriter } from "../../platform/http/http.mjs";
 import { parseStrictJson } from "../capability/compatibility/compatibility.mjs";
 
 export const DIRECTORY_PRINCIPALS_PATH = "/v1/directory/principals";
@@ -24,6 +29,9 @@ const RPC = {
 
 const keyPattern = /^[a-z][a-z0-9-]{1,63}$/;
 const subjectPattern = /^[A-Za-z0-9:_-]{1,128}$/;
+
+// The cursor key is per collection: each list orders by a different column.
+const CURSOR_KEYS = { unit_type_list: "unitType", unit_list: "unit", group_list: "group", member_list: "subject" };
 
 const profileText = (value) => value === null ||
   (typeof value === "string" && value.length >= 1 && value.length <= 200 &&
@@ -92,16 +100,6 @@ async function readManagementBody(request) {
   catch { throw new HttpError(400, "invalid_request"); }
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new HttpError(400, "invalid_request");
   return value;
-}
-
-// Mutations of one directory row run one after another so a prepare, its
-// provider application and the read-back confirmation cannot interleave.
-const locks = new Map();
-async function serialized(key, operation) {
-  const tail = locks.get(key) ?? Promise.resolve();
-  const current = tail.catch(() => {}).then(operation);
-  locks.set(key, current);
-  try { return await current; } finally { if (locks.get(key) === current) locks.delete(key); }
 }
 
 async function command(config, identity, operation, payload) {
@@ -190,17 +188,21 @@ function matchManagement(request, response, url) {
   }
   const member = path.match(/^\/v1\/directory\/units\/([^/]+)\/members\/([^/]+)$/);
   if (member) {
-    if (!keyPattern.test(member[1]) || !subjectPattern.test(member[2])) throw new HttpError(400, "invalid_request");
+    // Decode each raw path segment once; encoded valid identifiers such as a
+    // colon inside a subject must not fail the shape check.
+    const unit = decodeURIComponent(member[1]);
+    const subject = decodeURIComponent(member[2]);
+    if (!keyPattern.test(unit) || !subjectPattern.test(subject)) throw new HttpError(400, "invalid_request");
     if (request.method !== "PUT" && request.method !== "DELETE") {
       response.setHeader("Allow", "PUT, DELETE");
       throw new HttpError(405, "method_not_allowed");
     }
-    return { member: { unit: member[1], subject: member[2] } };
+    return { member: { unit, subject } };
   }
   for (const [kind, spec] of Object.entries(KINDS)) {
     const match = path.match(spec.pattern);
     if (!match) continue;
-    const keys = Object.fromEntries(spec.keys.map((name, index) => [name, match[index + 1]]));
+    const keys = Object.fromEntries(spec.keys.map((name, index) => [name, decodeURIComponent(match[index + 1])]));
     if (Object.values(keys).some(value => !keyPattern.test(value))) throw new HttpError(400, "invalid_request");
     if (request.method !== "PUT" && request.method !== "DELETE") {
       response.setHeader("Allow", "PUT, DELETE");
@@ -222,20 +224,23 @@ async function listPage(request, response, identity, config, url, list, unit) {
     throw new HttpError(503, "directory_unavailable");
   }
   const last = value.items.at(-1);
+  const cursorKey = CURSOR_KEYS[list];
   return json(response, 200, { items: value.items,
-    nextCursor: value.items.length < value.total && last ? encodeCursor(String(last.unitType ?? last.unit ?? last.group ?? last.subject)) : null });
+    nextCursor: value.items.length < value.total && last && cursorKey && last[cursorKey] !== undefined
+      ? encodeCursor(String(last[cursorKey])) : null });
 }
 
+// The membership set of one member is a durable desired state like every other
+// row: prepare first, apply to the provider only after the subject is verified
+// in this tenant, read the provider back, and confirm that generation.
 async function writeMember(request, response, identity, config, url, unit, subject) {
   if (url.search) throw new HttpError(400, "invalid_query");
   if (request.method === "DELETE") {
-    return serialized(`${identity.tenantId}:member:${unit}:${subject}`, async () => {
-      const prepared = await command(config, identity, "member_delete", { unit, subject });
-      if (prepared.generation === undefined) return noContent(response);
-      await withProvider(config, provider => provider.removeMember(identity.tenantId, unit, subject));
-      await command(config, identity, "member_delete_confirm", { unit, subject, generation: prepared.generation });
-      return noContent(response);
-    });
+    const prepared = await command(config, identity, "member_delete", { unit, subject });
+    if (prepared.generation === undefined) return noContent(response);
+    await withProvider(config, provider => provider.removeMember(identity.tenantId, unit, subject));
+    await command(config, identity, "member_delete_confirm", { unit, subject, generation: prepared.generation });
+    return noContent(response);
   }
   const body = await readManagementBody(request);
   if (Object.keys(body).sort().join(",") !== "groups" || !Array.isArray(body.groups) ||
@@ -244,43 +249,43 @@ async function writeMember(request, response, identity, config, url, unit, subje
     throw new HttpError(400, "invalid_request");
   }
   const groups = [...new Set(body.groups)].sort();
-  return serialized(`${identity.tenantId}:member:${unit}:${subject}`, async () => {
-    const prepared = await command(config, identity, "member_put", { unit, subject, groups });
-    if (!prepared.confirmed) {
-      await withProvider(config, provider => provider.putMember(identity.tenantId, unit, subject, groups));
-      await command(config, identity, "member_confirm", { unit, subject, generation: prepared.generation });
-    }
-    return json(response, prepared.status, { unit, subject, groups });
-  });
+  // Verify the subject belongs to this tenant before any desired state is
+  // committed, so a provider 404 can never strand a member row and block the
+  // deletion of its unit.
+  await withProvider(config, provider => provider.verifySubject(identity.tenantId, subject));
+  const prepared = await command(config, identity, "member_put", { unit, subject, groups });
+  // Always read the provider back: an identical confirmed desired state
+  // verifies the stored state, and a diverging provider heals here.
+  await withProvider(config, provider => provider.putMember(identity.tenantId, unit, subject, groups));
+  await command(config, identity, "member_confirm", { unit, subject, generation: prepared.generation });
+  return json(response, prepared.status, { unit, subject, groups });
 }
 
 async function writeRow(request, response, identity, config, url, kind, keys, spec) {
   if (url.search) throw new HttpError(400, "invalid_query");
-  return serialized(`${identity.tenantId}:${kind}:${Object.values(keys).join(":")}`, async () => {
-    if (request.method === "DELETE") {
-      const prepared = await command(config, identity, spec.remove, keys);
-      if (prepared.generation === undefined) return noContent(response);
-      if (spec.identityProvider) {
-        await withProvider(config, provider => kind === "unit"
-          ? provider.removeUnit(identity.tenantId, keys.unit)
-          : provider.removeGroup(identity.tenantId, keys.unit, keys.group));
-      }
-      await command(config, identity, spec.removeConfirm, { ...keys, generation: prepared.generation });
-      return noContent(response);
+  if (request.method === "DELETE") {
+    const prepared = await command(config, identity, spec.remove, keys);
+    if (prepared.generation === undefined) return noContent(response);
+    if (spec.identityProvider) {
+      await withProvider(config, provider => kind === "unit"
+        ? provider.removeUnit(identity.tenantId, keys.unit)
+        : provider.removeGroup(identity.tenantId, keys.unit, keys.group));
     }
-    const body = await readManagementBody(request);
-    const desired = spec.parse(body);
-    const prepared = await command(config, identity, spec.put, { ...keys, ...desired });
-    if (!prepared.confirmed) {
-      if (spec.identityProvider) {
-        await withProvider(config, provider => kind === "unit"
-          ? provider.putUnit(identity.tenantId, keys.unit)
-          : provider.putGroup(identity.tenantId, keys.unit, keys.group));
-      }
-      await command(config, identity, spec.confirm, { ...keys, generation: prepared.generation });
-    }
-    return json(response, prepared.status, spec.row(keys, body));
-  });
+    await command(config, identity, spec.removeConfirm, { ...keys, generation: prepared.generation });
+    return noContent(response);
+  }
+  const body = await readManagementBody(request);
+  const desired = spec.parse(body);
+  const prepared = await command(config, identity, spec.put, { ...keys, ...desired });
+  // Always read the provider back, including after a prepare that reports the
+  // row as already confirmed, so provider drift is repaired on every write.
+  if (spec.identityProvider) {
+    await withProvider(config, provider => kind === "unit"
+      ? provider.putUnit(identity.tenantId, keys.unit)
+      : provider.putGroup(identity.tenantId, keys.unit, keys.group));
+  }
+  await command(config, identity, spec.confirm, { ...keys, generation: prepared.generation });
+  return json(response, prepared.status, spec.row(keys, body));
 }
 
 async function readView(request, response, identity, config, url, rpc) {
@@ -321,6 +326,9 @@ export async function handleDirectory(request, response, identity, config, url) 
   if (!url.pathname.startsWith(DIRECTORY_MANAGEMENT_PATH)) throw new HttpError(404, "not_found");
   if (!identity.clientId) throw new HttpError(403, "verified_client_required");
   const match = matchManagement(request, response, url);
+  // Mutations need the core-writer role in addition to directory.write; the
+  // database re-checks both through the internal token.
+  if (!match.list) requireWriter(identity);
   response.setHeader("Cache-Control", "no-store");
   if (match.list) return listPage(request, response, identity, config, url, match.list, match.unit);
   if (match.member) return writeMember(request, response, identity, config, url, match.member.unit, match.member.subject);
