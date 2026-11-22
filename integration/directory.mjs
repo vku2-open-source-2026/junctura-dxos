@@ -30,6 +30,7 @@ const { operatorToken, admin, login, human } = fixture;
 let manager, member;
 
 before(async () => {
+  await operatorToken();
   // Repeatable realm provisioning: mappers, the sync service account, its roles.
   await provisionDirectory([], { log: () => {}, env: process.env });
   // A dedicated operator-managed PKCE client keeps fixture changes local, the
