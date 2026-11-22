@@ -1,7 +1,20 @@
 // SPDX-FileCopyrightText: 2026 Junctura Contributors
 // SPDX-License-Identifier: Apache-2.0
 import { applicationToken } from "../applications/applications.mjs";
+import { createHash, randomUUID } from "node:crypto";
 import { HttpError, json, readFlatJsonObject, requireWriter, uuidPattern } from "../../platform/http/http.mjs";
+
+function canonicalJson(value) {
+  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`;
+  if (value !== null && typeof value === "object") {
+    return `{${Object.keys(value).sort().map(key => `${JSON.stringify(key)}:${canonicalJson(value[key])}`).join(",")}}`;
+  }
+  return JSON.stringify(value);
+}
+
+function requestDigest(body) {
+  return createHash("sha256").update(canonicalJson({ body: body ?? null, ifMatch: null })).digest("hex");
+}
 
 export function requireLegacyClient(identity, config) {
   if (!identity.clientId || !(config.legacyResourceClients ?? []).includes(identity.clientId)) {
@@ -38,10 +51,14 @@ export async function resourceIdentity(config, identity) {
 }
 
 export function validateShare(body) {
-  const keys = ["resourceType", "resourceId", "granteeAppId", "action", "expiresAt"];
-  if (Object.keys(body).length !== keys.length || keys.some(key => !Object.hasOwn(body, key)) ||
+  const group = Object.hasOwn(body, "granteeAppGroup");
+  const app = Object.hasOwn(body, "granteeAppId");
+  const keys = ["resourceType", "resourceId", "action", "expiresAt"];
+  if (Object.keys(body).length !== 5 || group === app || keys.some(key => !Object.hasOwn(body, key)) ||
       !["record", "object"].includes(body.resourceType) || body.action !== "read" ||
-      !uuidPattern.test(body.resourceId) || !uuidPattern.test(body.granteeAppId) ||
+      !uuidPattern.test(body.resourceId) || (group && body.resourceType !== "record") ||
+      (app && !uuidPattern.test(body.granteeAppId)) ||
+      (group && (typeof body.granteeAppGroup !== "string" || !/^[a-z][a-z0-9-]{1,63}$/.test(body.granteeAppGroup))) ||
       typeof body.expiresAt !== "string" || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/.test(body.expiresAt) ||
       !Number.isFinite(Date.parse(body.expiresAt)) ||
       ![new Date(body.expiresAt).toISOString(), new Date(body.expiresAt).toISOString().replace(".000Z", "Z")].includes(body.expiresAt)) {
@@ -50,11 +67,43 @@ export function validateShare(body) {
   return body;
 }
 
+async function shareCommand(config, identity, operation, payload) {
+  const result = await resourceRequest(config, identity, "rpc/record_share_command", new URLSearchParams(),
+    { method: "POST", body: JSON.stringify({ operation, payload }) });
+  if (result.error) throw new HttpError(result.status, result.error, result.details);
+  return result;
+}
+
 export async function handleShares(request, response, identity, config, url) {
+  const requestId = randomUUID();
+  response.setHeader("X-Request-Id", requestId);
+  try {
+    return await shareRequest(request, response, identity, config, url);
+  } catch (error) {
+    if (response.headersSent) return response.destroy();
+    const status = error instanceof HttpError ? error.status : 503;
+    if (status === 413) response.setHeader("Connection", "close");
+    return json(response, status, {
+      error: error instanceof HttpError ? error.message : "resources_unavailable",
+      requestId,
+    }, request.method);
+  }
+}
+
+async function shareRequest(request, response, identity, config, url) {
   requireWriter(identity);
   if (url.search) throw new HttpError(400, "invalid_query");
   if (url.pathname === "/v2/resource-shares" && request.method === "POST") {
-    const result = await resourceCommand(config, identity, "share_create", validateShare(await readFlatJsonObject(request)));
+    const body = validateShare(await readFlatJsonObject(request));
+    const requestKey = request.headers["idempotency-key"];
+    if (requestKey !== undefined && (typeof requestKey !== "string" || !uuidPattern.test(requestKey))) {
+      throw new HttpError(400, "invalid_request");
+    }
+    const payload = { share: body };
+    if (requestKey !== undefined) Object.assign(payload, {
+      requestKey, digest: requestDigest(body), path: url.pathname, method: request.method,
+    });
+    const result = await shareCommand(config, identity, "create", payload);
     return json(response, result.status, result.value);
   }
   const match = url.pathname.match(/^\/v2\/resource-shares\/([0-9a-f-]+)$/);

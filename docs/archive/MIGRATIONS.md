@@ -196,3 +196,46 @@ in 006. Its original working-tree bytes match that database's checksum and were
 left unchanged. A future replacement with Git-normalized bytes must fail the
 checksum check; investigate/restore the recorded bytes rather than treating it as
 permission to reapply authority SQL. Fresh installs hash their actual checkout.
+
+## Versioned app records (030)
+
+Drain old Core instances and application record writers before applying 030.
+The migration revokes direct PostgREST mutation of `core.app_records`. Bring up
+Core with `record_command` support before resuming traffic. Existing v2 records
+retain their data, IDs, owners and creation times. Each receives version 1 and a
+new incarnation, and existing collection counts are backfilled. V1 is unchanged.
+
+The migration creates the NOLOGIN, NOBYPASSRLS role `junctura_record_api`. Ensure
+it exists before restoring a backup that contains the new RPC grants and set
+its `statement_timeout` to four seconds. Configure
+collection limits through `app_private.record_collections.max_records`. A null
+limit leaves the collection unmetered. Grant management reads by adding an
+`app_private.record_read_grants` row for the exact enrolled principal and app.
+
+## Record queries (031)
+
+Adds the private record query RPC and cursor state for long sort keys.
+
+## Record locks and increments (032)
+
+Adds the tenant-scoped `app_private.record_locks` table and extends the record
+RPC to check expiry and ownership under the record lock. Existing records
+start with no lease. Increment operations apply in request order and commit
+one record version.
+
+## Record batches and unique-key upserts (033)
+
+The record RPC uses the existing collection locks for upserts and locks all
+collections in name order for a batch. A failed batch rolls back its records,
+leases, projections and counters together. The idempotency receipt retains
+the resulting business error for replays.
+
+## Record archives (034)
+
+Adds the archive RPC for owner-only export snapshots and transactional imports
+that retain source record IDs.
+
+## App group shares (035)
+
+Adds tenant-scoped app groups and membership, plus the optional group recipient
+on record read shares. Existing exact app grants are preserved.

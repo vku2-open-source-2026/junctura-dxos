@@ -62,6 +62,19 @@ const { purpose, dataSubject, emergency } = redeemed.context;
 | `identity()` | The application's verified identity |
 | `createRecord(collection, data)`, `getRecord(collection, id)` | Application records |
 | `listRecords(collection, { limit, order, cursor })` | Application records as `{ items, nextCursor }`; limit 1–100 (default 100), order `asc` (default) or `desc`; pass `nextCursor` with the same order until null |
+| `registerCollectionSchema(collection, schema)` | Register or replace an app collection schema and index configuration |
+| `createVersionedRecord(collection, data, { idempotencyKey })`, `getVersionedRecord(collection, id)` | Versioned records as `{ record, etag }`; keep `etag` exactly for the next write |
+| `replaceVersionedRecord(collection, id, data, { ifMatch, idempotencyKey })` | Replace complete record data with a required `If-Match` |
+| `incrementRecord(collection, id, operations, { ifMatch, idempotencyKey })` | Atomic numeric increments; `ifMatch` is optional |
+| `deleteVersionedRecord(collection, id, ifMatch)` | Conditional delete with a required `If-Match` |
+| `upsertRecordByKey(collection, key, data, { ifMatch, idempotencyKey })` | Create or replace by the registered unique key; returns `{ record, etag, created }` |
+| `writeRecordBatch(operations, { idempotencyKey })` | Atomic batch of create, replace, delete and increment operations |
+| `listFilteredRecords(collection, { limit, order, cursor, sort, where, ownerAppId })` | Filter by indexed fields and sort by one indexed field |
+| `aggregateRecords(collection, { groupBy, where, ownerAppId })` | Count readable records, optionally grouped by up to two fields or UTC days |
+| `lockRecord(collection, id, { ttlSeconds, lockId, idempotencyKey })`, `releaseRecordLock(collection, id, lockId)` | Acquire, renew or release an expiring record lock |
+| `exportAppRecords({ collection })` | Stream the owner's records as NDJSON |
+| `importAppRecords(ndjson, { idempotencyKey })` | Import NDJSON records in one transaction |
+| `shareResourceWithAppOrGroup(target, idempotencyKey?)` | Share one record with an app group or exact app |
 | `putObject(id, bytes)`, `getObject(id)` | Malware-scanned object storage |
 | `workflowDefinitions()`, `startWorkflow(id, input, key?)` | BPMN workflows |
 | `discover({ limit, cursor })` | Capabilities this application may call |
@@ -69,6 +82,15 @@ const { purpose, dataSubject, emergency } = redeemed.context;
 | `redeemTicket({ authorization, invocationId, input })` | Provider ticket redemption |
 | `inputDigest(input)` | Canonical SHA-256 of a JSON input |
 | `request(path, options)` | Any other versioned public API path |
+
+Versioned writes return the response `ETag` exactly as the server sent it. Pass that value back
+unchanged on replace or delete; do not construct or reformat it:
+
+```js
+const { record, etag } = await junctura.getVersionedRecord("entries", id);
+const updated = await junctura.replaceVersionedRecord("entries", id, { ...record.data, status: "closed" }, { ifMatch: etag });
+await junctura.deleteVersionedRecord("entries", id, updated.etag);
+```
 
 Full contract: [OpenAPI](https://github.com/vku2-open-source-2026/junctura-dxos/tree/main/docs/contracts).
 

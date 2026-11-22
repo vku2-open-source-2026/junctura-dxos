@@ -35,6 +35,7 @@ export function loadConfig(env = process.env) {
     identityUrl: env.IDENTITY_URL,
     clientSecret: env.CORE_CLIENT_SECRET,
     legacyResourceClients: (env.LEGACY_RESOURCE_CLIENTS ?? "").split(",").filter(Boolean),
+    strictRecords: env.STRICT_RECORD_WRITES === "true",
     dataUrl: env.DATA_URL,
     dataSecret: env.DATA_JWT_SECRET,
     objectsUrl: env.OBJECTS_URL,

@@ -182,7 +182,7 @@ See [CI](../.github/workflows/ci.yml).
 
 Run [infra/postgres/migrate.sh](../infra/postgres/migrate.sh) with `docker compose run --rm data-migrate`;
 Compose gates `data` and then Core on success. Number after the highest `infra/postgres/NNN-*.sql`:
-currently `029`, so next is `030`. Mount new files in `compose.yaml`'s `data-migrate` service.
+currently `035`. Mount new files in `compose.yaml`'s `data-migrate` service.
 **All applied files are immutable**: preserve their exact bytes and add forward migrations.
 
 SHA-256 enters `core.schema_migration_checksums` in the applying transaction
@@ -251,6 +251,15 @@ The runner strips CRLF delimiters for execution but hashes original bytes;
 | 027 | Read-only application statistics through a `SECURITY DEFINER` function and private role. |
 | 028 | Trust graph also readable by `audit.read` (tenant scope); `readOnly` reports no mutating trust permission. |
 | 029 | `audit.read` reads every capability, any application and the emergency review queue of its tenant, read-only. |
+| 030 | Record versions, collection schemas, index projections, management read grants and the record RPC. |
+| 031 | Indexed record queries, aggregates and resumable cursors. |
+| 032 | Exclusive record locks and atomic numeric increments. |
+| 033 | Unique-key upserts and atomic record batches. |
+| 034 | Record export snapshots and transactional NDJSON imports. |
+| 035 | Operator-managed app groups and read shares for group members. |
+
+Set `STRICT_RECORD_WRITES=true` on every Core replica after updating callers to
+send idempotency keys and record preconditions. The default is `false`.
 
 ## Demo data and developer journey
 

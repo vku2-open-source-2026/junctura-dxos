@@ -14,13 +14,16 @@ import { randomUUID } from "node:crypto";
 const image = readFileSync(new URL("../compose.yaml", import.meta.url), "utf8").match(/image: (postgres:[^\s]+)/)[1];
 const name = `junctura-migration-test-${randomUUID()}`;
 const directory = mkdtempSync(join(tmpdir(), "junctura-migrations-"));
+const migrations = readdirSync(resolve("infra/postgres")).filter(file => /^\d{3}-.+\.sql$/.test(file));
+const latestVersion = String(Math.max(...migrations.map(file => Number(file.slice(0, 3)))));
+const migrationCount = String(migrations.length);
 const run = promisify(execFile);
 const docker = (...args) => run("docker", args, { timeout: 120000, maxBuffer: 2097152 });
-const sql = async (text) => (await docker("exec", name, "psql", "-X", "-U", "junctura_admin", "-d", "junctura_data", "-Atq", "-v", "ON_ERROR_STOP=1", "-c", text)).stdout.trim();
-async function migrate(env = {}) {
+const sql = async (text, database = "junctura_data") => (await docker("exec", name, "psql", "-X", "-U", "junctura_admin", "-d", database, "-Atq", "-v", "ON_ERROR_STOP=1", "-c", text)).stdout.trim();
+async function migrate(env = {}, database = "junctura_data") {
   const args = ["exec"];
   for (const [key, value] of Object.entries(env)) args.push("-e", `${key}=${value}`);
-  args.push(name, "sh", "/migrations/migrate.sh", "-U", "junctura_admin", "-d", "junctura_data", "-v", "ON_ERROR_STOP=1");
+  args.push(name, "sh", "/migrations/migrate.sh", "-U", "junctura_admin", "-d", database, "-v", "ON_ERROR_STOP=1");
   return run("docker", args, { timeout: 120000, maxBuffer: 2097152 });
 }
 async function refused(env = {}) {
@@ -49,10 +52,46 @@ after(async () => {
 
 test("fresh install records every checksum atomically", async () => {
   await migrate();
-  assert.equal(await sql("SELECT max(version) FROM core.schema_migrations"), "29");
-  assert.equal(await sql("SELECT count(*) FROM core.schema_migration_checksums WHERE length(sha256) = 64 AND NOT adopted"), "29");
-  assert.equal(await sql("SELECT count(*) FROM core.schema_migration_checksums c JOIN core.schema_migrations m USING (version)"), "29");
-  assert.equal(await sql("SELECT last_version FROM core.schema_migration_state WHERE id = 1"), "29");
+  assert.equal(await sql("SELECT max(version) FROM core.schema_migrations"), latestVersion);
+  assert.equal(await sql("SELECT count(*) FROM core.schema_migration_checksums WHERE length(sha256) = 64 AND NOT adopted"), migrationCount);
+  assert.equal(await sql("SELECT count(*) FROM core.schema_migration_checksums c JOIN core.schema_migrations m USING (version)"), migrationCount);
+  assert.equal(await sql("SELECT last_version FROM core.schema_migration_state WHERE id = 1"), latestVersion);
+});
+
+test("upgrading 029 preserves v1 and app records and backfills the collection counter", async () => {
+  const database = "record_upgrade";
+  const upgradeDir = join(directory, "record-upgrade");
+  mkdirSync(upgradeDir);
+  const recordId = randomUUID();
+  const appId = randomUUID();
+  await sql(`CREATE DATABASE ${database} OWNER TO junctura_data`);
+  try {
+    for (const migration of migrations.filter(file => Number(file.slice(0, 3)) <= 29)) {
+      cpSync(join(directory, migration), join(upgradeDir, migration));
+    }
+    const upgrade = () => migrate({ MIGRATION_DIR: "/migrations/record-upgrade" }, database);
+    await upgrade();
+    await sql(`INSERT INTO app_private.applications
+      (tenant_id,app_id,issuer,oauth_client_id,owner_subject,provider_origin,display_name,digest)
+      VALUES('tenant-a','${appId}','https://fixture.invalid','fixture','subject','https://fixture.invalid',
+        'Migration fixture','sha256:${"0".repeat(64)}');
+      INSERT INTO core.records(tenant_id,id,collection,data)
+        VALUES('tenant-a','${recordId}','fixture','{"legacy":true}');
+      INSERT INTO core.app_records(tenant_id,id,owner_app_id,collection,data,created_at)
+        VALUES('tenant-a','${recordId}','${appId}','fixture','{"legacy":false}','2026-01-01T00:00:00Z');`, database);
+    for (const migration of migrations.filter(file => file.startsWith("030-"))) {
+      cpSync(join(directory, migration), join(upgradeDir, migration));
+    }
+    await upgrade();
+    assert.equal(await sql(`SELECT version, incarnation IS NOT NULL, owner_app_id, collection,
+      created_at ='2026-01-01T00:00:00Z'::timestamptz, data->>'legacy' FROM core.app_records WHERE id = '${recordId}'`, database),
+    `1|t|${appId}|fixture|t|false`);
+    assert.equal(await sql(`SELECT data->>'legacy' FROM core.records WHERE id = '${recordId}'`, database), "true");
+    assert.equal(await sql(`SELECT record_count FROM app_private.record_collections WHERE owner_app_id = '${appId}'`, database), "1");
+  } finally {
+    await sql(`DROP DATABASE ${database}`);
+    rmSync(upgradeDir, { recursive: true, force: true });
+  }
 });
 
 test("repeat execution verifies without replaying", async () => {
@@ -98,15 +137,15 @@ test("interrupted migration leaves neither its objects nor its checksum", async 
 test("concurrent runners serialize and converge", async () => {
   const results = await Promise.all([migrate(), migrate()]);
   assert.equal(results.length, 2);
-  assert.equal(await sql("SELECT count(*) FROM core.schema_migration_checksums"), "29");
-  assert.equal(await sql("SELECT count(*) FROM core.schema_migrations"), "29");
+  assert.equal(await sql("SELECT count(*) FROM core.schema_migration_checksums"), migrationCount);
+  assert.equal(await sql("SELECT count(*) FROM core.schema_migrations"), migrationCount);
 });
 
 test("version-only history requires explicit operator adoption", async () => {
   await sql("TRUNCATE core.schema_migration_checksums");
   assert.match(await refused(), /version-only history/);
   await migrate({ MIGRATION_ADOPT_EXISTING: 1 });
-  assert.equal(await sql("SELECT count(*) FROM core.schema_migration_checksums WHERE adopted"), "29");
+  assert.equal(await sql("SELECT count(*) FROM core.schema_migration_checksums WHERE adopted"), migrationCount);
 });
 
 test("composition RLS drift is covered after the versioned fingerprint upgrade", async () => {
@@ -121,7 +160,7 @@ test("installed schema drift is detected and only adopted after review", async (
   assert.match(await refused(), /installed schema drift detected/);
   await migrate({ MIGRATION_ADOPT_SCHEMA_DRIFT: 1 });
   await migrate();
-  assert.equal(await sql("SELECT last_version FROM core.schema_migration_state WHERE id = 1"), "29");
+  assert.equal(await sql("SELECT last_version FROM core.schema_migration_state WHERE id = 1"), latestVersion);
 });
 
 test("a database newer than the runner is refused", async () => {

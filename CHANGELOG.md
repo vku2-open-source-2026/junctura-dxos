@@ -8,6 +8,15 @@ All notable changes to Junctura are recorded here. Versions follow
 
 ## Unreleased
 
+- **Indexed record queries, archives and app-group shares:** migrations 031, 034 and 035 add
+  filtered list and aggregate RPCs, short-lived export snapshots with transactional NDJSON import,
+  and operator-managed app groups whose live membership authorizes one-record read shares.
+  `src/modules/data/query` validates `where[field]` operators, the `sort`/`order` exclusion,
+  aggregate `groupBy` (including UTC `day(...)`, at most two dimensions and 1,000 groups), and
+  signed opaque cursors bound to owner, filters, sort and schema revision. `@junctura/server-client`
+  adds calls for every new record operation, including ETag round-tripping, atomic increments,
+  locks, batches, filtered lists, aggregates, NDJSON export/import and app-group shares.
+
 - **Planned Foundation and Capability API contracts** for record storage, workflow tasks, identity, files, events, search, privacy and application audit, including conditional record writes, atomic increments, expiring locks, task claims and idempotent retries.
 
 - **Read-only viewers see every Console page:** migration 029 lets a

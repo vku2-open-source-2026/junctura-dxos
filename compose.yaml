@@ -93,6 +93,12 @@ services:
       - ./infra/postgres/027-application-stats.sql:/migrations/027-application-stats.sql:ro
       - ./infra/postgres/028-trust-graph-read.sql:/migrations/028-trust-graph-read.sql:ro
       - ./infra/postgres/029-read-only-viewers.sql:/migrations/029-read-only-viewers.sql:ro
+      - ./infra/postgres/030-versioned-records.sql:/migrations/030-versioned-records.sql:ro
+      - ./infra/postgres/031-record-queries.sql:/migrations/031-record-queries.sql:ro
+      - ./infra/postgres/032-record-locks-and-increments.sql:/migrations/032-record-locks-and-increments.sql:ro
+      - ./infra/postgres/033-record-batch.sql:/migrations/033-record-batch.sql:ro
+      - ./infra/postgres/034-record-archives.sql:/migrations/034-record-archives.sql:ro
+      - ./infra/postgres/035-app-group-shares.sql:/migrations/035-app-group-shares.sql:ro
     depends_on:
       database:
         condition: service_healthy
@@ -228,6 +234,7 @@ services:
       OIDC_ISSUER: ${PUBLIC_URL:-http://127.0.0.1:8080}/identity/realms/junctura
       IDENTITY_URL: http://identity:8080/identity/realms/junctura
       CORE_CLIENT_SECRET: ${CORE_CLIENT_SECRET:?Run npm run setup first}
+      STRICT_RECORD_WRITES: ${STRICT_RECORD_WRITES:-false}
       DATA_URL: http://data:3000
       DATA_JWT_SECRET: ${DATA_JWT_SECRET:?Run npm run setup first}
       LEGACY_RESOURCE_CLIENTS: ${LEGACY_RESOURCE_CLIENTS-tenant-a,tenant-b,reader}
