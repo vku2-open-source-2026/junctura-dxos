@@ -1,6 +1,6 @@
 # SPDX-FileCopyrightText: 2026 Junctura Contributors
 # SPDX-License-Identifier: Apache-2.0
-"""Validate the implemented OpenAPI and in-memory HTTP observations; never log payloads."""
+"""Validate OpenAPI and in-memory HTTP observations; never log payloads."""
 import copy
 import hashlib
 import json
@@ -13,10 +13,12 @@ from pathlib import Path
 
 from jsonschema import Draft202012Validator, FormatChecker
 from referencing import Registry, Resource
+from referencing.exceptions import Unresolvable
 from referencing.jsonschema import DRAFT202012
 
 ROOT = Path(__file__).resolve().parent.parent
 CONTRACT = ROOT / 'docs/contracts/foundation-api.openapi.json'
+CAPABILITY_CONTRACT = ROOT / 'docs/contracts/capability-api-v1.openapi.json'
 URI = CONTRACT.as_uri()
 META = 'https://spec.openapis.org/oas/3.1/schema/2022-10-07'
 META_SHA = 'da01ba28852cac0de53893797cb8d1942bc3b05084f526dcc216717dec314ed0'
@@ -146,25 +148,26 @@ def check_value(spec, schema, value, label):
     require(error is None, label + ': schema mismatch' + (f' ({error.validator})' if error else ''))
 
 
-def validate_official_structure(spec):
+def validate_official_structure(*specs):
     with urllib.request.urlopen(META, timeout=20) as response:
         raw = response.read()
     require(hashlib.sha256(raw).hexdigest() == META_SHA, 'Official metaschema digest changed; review before updating pin')
-    error = next(Draft202012Validator(json.loads(raw)).iter_errors(spec), None)
-    require(error is None, 'Official OpenAPI structural validation failed')
+    validator = Draft202012Validator(json.loads(raw))
+    for spec in specs:
+        error = next(validator.iter_errors(spec), None)
+        require(error is None, 'Official OpenAPI structural validation failed')
 
 
-def validate_document(spec, official=True):
-    require(spec.get('openapi') == '3.1.1', 'Expected OpenAPI 3.1.1')
-    require(spec.get('x-junctura-status') == 'implemented', 'Foundation must describe implemented routes')
-    actual = {p: set(v) & METHODS for p, v in spec['paths'].items()}
-    require(actual == EXPECTED, 'Route/method inventory differs from reviewed handlers')
-    ids = set()
+def is_planned(operation):
+    return operation.get('x-junctura-status') == 'planned'
 
+
+def validate_references_and_inline_schemas(spec, dereference):
     def walk(value):
         if isinstance(value, dict):
             if '$ref' in value:
-                resolve(spec, value)
+                require(isinstance(value['$ref'], str), 'Reference must be a string')
+                dereference(value)
             for key, child in value.items():
                 if key == 'schema' and isinstance(child, (dict, bool)):
                     Draft202012Validator.check_schema(child)
@@ -173,31 +176,75 @@ def validate_document(spec, official=True):
             for child in value:
                 walk(child)
     walk(spec)
-    for schema in spec['components']['schemas'].values():
-        Draft202012Validator.check_schema(schema)
-    for path, methods in spec['paths'].items():
-        for method, operation in methods.items():
-            oid = operation['operationId']
-            require(oid not in ids, 'Duplicate operationId')
-            ids.add(oid)
+
+
+def validate_paths(spec, dereference, *, foundation=False):
+    ids = set()
+    bearer = 'coreBearer' if foundation else 'oidcBearer'
+
+    def validate_operation(path, method, operation):
+        oid = operation['operationId']
+        require(oid not in ids, 'Duplicate operationId')
+        ids.add(oid)
+        planned = is_planned(operation)
+        if not planned and not foundation:
+            return
+        if not planned:
             require((ROOT / operation['x-junctura-source']).is_file(), oid + ': source missing')
             require(operation['x-junctura-test-suite'] in ('core', 'applications'), oid + ': coverage suite missing')
-            parameters = [resolve(spec, p) for p in operation.get('parameters', [])]
-            require(len({(p['in'], p['name']) for p in parameters}) == len(parameters), oid + ': duplicate parameter')
-            require({p['name'] for p in parameters if p['in'] == 'path'} == set(re.findall(r'{([^}]+)}', path)), oid + ': path parameters differ')
-            require(all(p.get('required') for p in parameters if p['in'] == 'path'), oid + ': path parameter optional')
-            if path.startswith(('/v1/', '/v2/')):
-                require(operation['security'] == [{'coreBearer': []}], oid + ': bearer protection missing')
-                admin = path.startswith(('/v1/applications', '/v1/approvals'))
-                roles = ['core-reader'] + (['core-writer'] if method != 'get' and not admin else [])
-                require(operation['x-junctura-core-roles'] == roles, oid + ': role contract differs')
-            if path.startswith(('/v1/data/', '/v1/objects')):
-                require(operation.get('deprecated') is True and operation['x-junctura-authority'] == 'legacy-tenant', oid + ': legacy boundary missing')
-            if path.startswith('/v2/'):
-                require(operation['x-junctura-authority'] == 'app-resource', oid + ': app boundary missing')
+        parameters = [dereference(p) for p in operation.get('parameters', [])]
+        require(len({(p['in'], p['name']) for p in parameters}) == len(parameters), oid + ': duplicate parameter')
+        require({p['name'] for p in parameters if p['in'] == 'path'} == set(re.findall(r'{([^}]+)}', path)), oid + ': path parameters differ')
+        require(all(p.get('required') for p in parameters if p['in'] == 'path'), oid + ': path parameter optional')
+        if path.startswith(('/v1/', '/v2/')):
+            require(operation.get('security') == [{bearer: []}], oid + ': bearer protection missing')
+            reader_only_write = path.startswith(('/v1/applications', '/v1/approvals')) or (
+                planned and path.startswith(('/v1/me/', '/v1/directory/')))
+            roles = ['core-reader'] + (['core-writer'] if method != 'get' and not reader_only_write else [])
+            require(operation.get('x-junctura-core-roles') == roles, oid + ': role contract differs')
+        if path.startswith(('/v1/data/', '/v1/objects')):
+            require(operation.get('deprecated') is True and operation['x-junctura-authority'] == 'legacy-tenant', oid + ': legacy boundary missing')
+        if path.startswith('/v2/'):
+            require(operation['x-junctura-authority'] == 'app-resource', oid + ': app boundary missing')
+
+    planned_paths = {}
+    for path, methods in spec['paths'].items():
+        planned_paths[path] = {}
+        for method, operation in methods.items():
+            future = operation.get('x-junctura-planned-operation')
+            if 'x-junctura-planned-operation' in operation:
+                status = operation.get('x-junctura-status', spec.get('x-junctura-status'))
+                require(isinstance(future, dict) and is_planned(future) and
+                        isinstance(status, str) and (status == 'implemented' or status.startswith('implemented-')),
+                        'Future operation must be planned and attached to an implemented operation')
+            planned_paths[path][method] = operation if future is None else future
+            validate_operation(path, method, operation)
+            if future is not None:
+                validate_operation(path, method, future)
+    return {**spec, 'paths': planned_paths}, len(ids)
+
+
+def validate_document(spec, official=True):
+    require(spec.get('openapi') == '3.1.1', 'Expected OpenAPI 3.1.1')
+    require(spec.get('x-junctura-status') == 'implemented', 'Foundation must describe implemented routes')
+    actual = {}
+    for path, item in spec['paths'].items():
+        methods = set(item) & METHODS
+        implemented = {method for method in methods if not is_planned(item[method])}
+        if implemented or not methods:
+            actual[path] = implemented
+    require(actual == EXPECTED, 'Route/method inventory differs from reviewed handlers')
+
+    def dereference(value):
+        return resolve(spec, value)
+
+    validate_references_and_inline_schemas(spec, dereference)
+    for schema in spec['components']['schemas'].values():
+        Draft202012Validator.check_schema(schema)
+    planned, count = validate_paths(spec, dereference, foundation=True)
     if official:
-        validate_official_structure(spec)
-    return len(ids)
+        validate_official_structure(spec, planned)
+    return count
 
 
 def validate_observations(spec, observations, suite=None):
@@ -206,6 +253,8 @@ def validate_observations(spec, observations, suite=None):
         path, method = item['path'], item['method'].lower()
         require(path in spec['paths'], 'Observed route missing from Foundation')
         operation = spec['paths'][path].get(method)
+        if operation and is_planned(operation):
+            operation = None
         code = str(item['status'])
         label = operation['operationId'] if operation else 'unsupported method'
         if operation:
@@ -266,7 +315,8 @@ def validate_observations(spec, observations, suite=None):
                 require(not item.get('requestInvalidJson'), label + ': accepted invalid request JSON')
                 check_value(spec, operation['requestBody']['content'][media]['schema'], item.get('requestBody'), label + ' request')
     if suite:
-        required = {o['operationId'] for m in spec['paths'].values() for o in m.values() if o['x-junctura-test-suite'] == suite}
+        required = {o['operationId'] for m in spec['paths'].values() for o in m.values()
+                    if not is_planned(o) and o['x-junctura-test-suite'] == suite}
         require(required <= covered, 'Missing positive operation coverage: ' + ', '.join(sorted(required - covered)))
     return len(observations), len(covered)
 
@@ -276,6 +326,30 @@ def self_test(spec):
             'responseHeaders':{'content-type':'application/json','cache-control':'no-store','x-content-type-options':'nosniff, nosniff'},
             'responseBody':{'service':'junctura-core','status':'ok'},'responseBytes':44}
     validate_observations(spec, [good])
+    validate_document(spec, official=False)
+    batch = spec['paths']['/v2/data:batch']['post']['requestBody']['content']['application/json']
+    increments = batch['examples']['decrementInventory']['value']
+    check_value(spec, batch['schema'], increments, 'Atomic batch example')
+    record = {key: increments['operations'][0][key] for key in ('collection', 'id')}
+    for operation in ({**record, 'op': 'delete'}, {**record, 'op': 'replace', 'data': {}}):
+        check_value(spec, batch['schema'], {'operations': [{**operation, 'ifMatch': '"record-2"'}]},
+                    'Conditional batch example')
+        try:
+            check_value(spec, batch['schema'], {'operations': [operation]}, 'Missing batch ifMatch')
+        except ContractError:
+            continue
+        raise ContractError('Batch replacement or deletion did not require ifMatch')
+    planned = spec['paths']['/v2/objects']['get']
+    fixture = copy.deepcopy(spec)
+    fixture['paths']['/v2/objects']['get']['x-junctura-test-suite'] = 'planned-fixture'
+    missing = {**good, 'path':'/v2/objects', 'status':405, 'responseBody':{'error':'method_not_allowed'}}
+    validate_observations(fixture, [missing], 'planned-fixture')
+    try:
+        validate_observations(spec, [{**missing, 'status':200}])
+    except ContractError as error:
+        require(str(error) == 'Undocumented method succeeded', 'Planned route was checked as live')
+    else:
+        raise ContractError('Planned route was accepted as live')
     mutations = [lambda d:d.update(status=201), lambda d:d['responseBody'].pop('status'),
                  lambda d:d['responseBody'].update(status=123), lambda d:d['responseBody'].update(extra=True),
                  lambda d:d['responseHeaders'].update({'content-type':'text/plain'}),
@@ -288,7 +362,8 @@ def self_test(spec):
         except ContractError:
             continue
         raise ContractError('Conformance validator accepted a deliberate regression')
-    for change in ('duplicate', 'reference', 'route', 'security', 'legacy'):
+    for change in ('duplicate', 'reference', 'route', 'security', 'legacy', 'planned-status',
+                   'planned-live-route', 'planned-security', 'planned-overlay'):
         bad = copy.deepcopy(spec)
         if change == 'duplicate':
             bad['paths']['/health']['get']['operationId'] = bad['paths']['/ready']['get']['operationId']
@@ -298,8 +373,16 @@ def self_test(spec):
             del bad['paths']['/health']['head']
         elif change == 'security':
             bad['paths']['/v2/objects']['post']['security'] = []
-        else:
+        elif change == 'legacy':
             bad['paths']['/v1/objects']['post']['deprecated'] = False
+        elif change == 'planned-status':
+            bad['paths']['/v2/objects']['get']['x-junctura-status'] = planned['x-junctura-status'].upper()
+        elif change == 'planned-live-route':
+            bad['paths']['/v2/objects']['post']['x-junctura-status'] = 'planned'
+        elif change == 'planned-security':
+            bad['paths']['/v2/objects']['get']['security'] = []
+        else:
+            del bad['paths']['/v2/objects']['post']['x-junctura-planned-operation']['x-junctura-status']
         try:
             validate_document(bad, official=False)
         except ContractError:
@@ -315,7 +398,33 @@ def self_test(spec):
         raise ContractError('Unauthenticated success was accepted')
     protected['authorized'] = True
     validate_observations(spec, [protected])
-    capability = json.loads((ROOT / 'docs/contracts/capability-api-v1.openapi.json').read_text(encoding='utf-8'))
+    capability = json.loads(CAPABILITY_CONTRACT.read_text(encoding='utf-8'))
+    registry = capability_registry()
+    path = '/v1/me/consents/{consentId}/revoke'
+    extension = 'x-junctura-planned-operation'
+    parent = capability['paths'][path]['post']
+    projected = validate_capability_plans(capability, registry)
+    require(not is_planned(parent) and projected['paths'][path]['post'] == parent[extension],
+            'Capability plan did not replace only the implemented operation in the planned view')
+    for on_parent, key, value, expected in (
+        (True, 'x-junctura-status', 'design-only', 'Future operation must be planned'),
+        (False, 'x-junctura-status', 'implemented', 'Future operation must be planned'),
+        (False, 'security', [], 'bearer protection missing'),
+        (False, 'x-junctura-core-roles', [], 'role contract differs'),
+        (False, 'parameters', [], 'path parameters differ'),
+        (False, 'requestBody', {'$ref': './foundation-api.openapi.json#/components/schemas/Absent'},
+         'Unresolved Capability reference'),
+    ):
+        bad = copy.deepcopy(capability)
+        operation = bad['paths'][path]['post']
+        target = operation if on_parent else operation[extension]
+        target[key] = value
+        try:
+            validate_capability_plans(bad, registry)
+        except ContractError as error:
+            require(expected in str(error), 'Capability overlay was rejected for the wrong reason')
+            continue
+        raise ContractError('Capability checker accepted deliberate overlay regression: ' + key)
     composition_inventory(capability)
     for change in ('missing-route', 'wrong-source', 'wrong-operation', 'missing-handler'):
         bad = copy.deepcopy(capability)
@@ -334,19 +443,40 @@ def self_test(spec):
         except ContractError:
             continue
         raise ContractError('Composition checker accepted deliberate ' + change)
-    print('Validator controls passed: wire/schema errors, auth bypass, missing routes/refs, duplicate IDs, legacy and Composition route/source regressions rejected')
+    print('Validator controls passed: wire/schema errors, auth bypass, missing routes/refs, duplicate IDs, planned batch preconditions, Foundation and Capability plans, legacy and Composition route/source regressions checked')
+
+
+def capability_registry():
+    return Registry().with_resources(
+        (p.as_uri(), Resource.from_contents(json.loads(p.read_text(encoding='utf-8')), default_specification=DRAFT202012))
+        for p in CAPABILITY_CONTRACT.parent.glob('*.json'))
+
+
+def validate_capability_plans(spec, registry):
+    uri = CAPABILITY_CONTRACT.as_uri()
+    resolver = registry.with_resource(uri, Resource.from_contents(spec, default_specification=DRAFT202012)).resolver(uri)
+
+    def dereference(value):
+        if isinstance(value, dict) and '$ref' in value:
+            try:
+                return resolver.lookup(value['$ref']).contents
+            except Unresolvable:
+                raise ContractError('Unresolved Capability reference') from None
+        return value
+
+    validate_references_and_inline_schemas(spec, dereference)
+    planned, _ = validate_paths(spec, dereference)
+    return planned
 
 
 def capability_contract(cases=None):
     """Validate local extension schemas and observed bodies without logging them."""
-    contract = ROOT / 'docs/contracts/capability-api-v1.openapi.json'
+    contract = CAPABILITY_CONTRACT
     spec = json.loads(contract.read_text(encoding='utf-8'))
+    registry = capability_registry()
     if cases is None:
-        validate_official_structure(spec)
+        validate_official_structure(spec, validate_capability_plans(spec, registry))
         composition_inventory(spec)
-    registry = Registry().with_resources(
-        (p.as_uri(), Resource.from_contents(json.loads(p.read_text(encoding='utf-8')), default_specification=DRAFT202012))
-        for p in contract.parent.glob('*.json'))
     for schema in spec['components']['schemas'].values():
         Draft202012Validator.check_schema(schema)
     supplied = cases if cases is not None else list(json.loads((contract.parent / 'examples/api-examples.json').read_text(encoding='utf-8')).values())
@@ -373,7 +503,7 @@ def main():
     else:
         count = validate_document(spec)
         capability_contract()
-        print(f'Foundation {count} operations and Capability OpenAPI structure/schemas/examples passed; Foundation authorization/ref and Composition 11-operation route/source/status inventory verified')
+        print(f'Foundation {count} operations and Capability OpenAPI structure/schemas/examples passed; planned authorization/references and Composition 11-operation route/source/status inventory verified')
 
 
 if __name__ == '__main__':

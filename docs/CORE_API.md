@@ -9,9 +9,10 @@ Configure TLS, trusted proxies and secrets before exposure beyond the local envi
 
 ## Contract and checks
 
-Foundation OpenAPI 3.1.1 describes **30 paths and 44 operations**: health/readiness, identity/OIDC integration,
-application registration/approvals, legacy and private resources, read shares and workflow lifecycle.
-It covers a subset of the route index below. Capability OpenAPI separately marks implemented registry, trust and
+Foundation OpenAPI 3.1.1 describes **31 implemented paths and 45 implemented operations**, covering health/readiness,
+identity/OIDC integration, application registration/approvals, legacy and private resources, read shares and workflow lifecycle.
+Both files carry [planned API contracts](#planned-apis-not-yet-implemented). The route index below describes live routes.
+Capability OpenAPI separately marks implemented registry, trust and
 opt-in execution/composition subsets and design-only operations. Do not assume every operation exists.
 The `/identity/` prefix delegates to Keycloak; vendor administration and dynamic login actions remain upstream-owned.
 Operator database, filer and engine interfaces and `/internal/auth` are not public Foundation endpoints.
@@ -51,7 +52,8 @@ npm test
 ```
 
 `scripts/check-contracts.py` checks local references, schemas, unique operation IDs, parameters, roles and resource boundaries.
-Its independently reviewed route/method inventory must match Foundation; it does not discover JavaScript routes automatically.
+Its independently reviewed route/method inventory and live coverage apply to implemented Foundation operations.
+Planned operations and planned replacements in both contracts receive structural, reference and authorization checks.
 It also checks composition route/source/status mappings. The official OpenAPI metaschema is downloaded into memory
 and verified against a pinned SHA-256; network failure or a changed digest fails the check without fallback.
 Validator self-tests deliberately corrupt schemas, routes, references, authentication, statuses, media and headers.
@@ -392,7 +394,8 @@ Migration 005 derives actor/tenant metadata, validates events/outcomes and redac
 read/write the table directly. `core.audit_query(jsonb)` accepts only `since`, `until`, `limit` (1–100, default 50) and `cursor`,
 requires management `audit.read`, and grants execution only to private `junctura_audit_api`.
 Core exposes `GET /v1/audit-events` and `POST /v1/audit-events/verify` (empty JSON object) with that permission;
-verification checks the per-tenant SHA-256 chain. These routes are outside Foundation OpenAPI. See [SECURITY.md](SECURITY.md).
+verification checks the per-tenant SHA-256 chain. The deployed operations are documented in
+[Capability OpenAPI](contracts/capability-api-v1.openapi.json). See [SECURITY.md](SECURITY.md).
 
 ## Application registration and capabilities
 
@@ -422,6 +425,194 @@ Optional `JUNCTURA_GRANTEE_CLIENT_ID` and `JUNCTURA_GRANTEE_CLIENT_SECRET` must 
 The tenant-a/tenant-b fixtures alone do not grant v2 access. The CLI leaves its records, object and expiring share owned
 by the backend and prints IDs without credentials/tokens. Reconcile failed POST outcomes before rerunning;
 keep backend secrets out of frontends, repositories and shell transcripts.
+
+## Planned APIs (not yet implemented)
+
+Each future Operation Object carries `x-junctura-status: planned`.
+[Foundation OpenAPI](contracts/foundation-api.openapi.json) covers record storage, workflows, identity,
+directory, files, events and search. [Capability OpenAPI](contracts/capability-api-v1.openapi.json)
+covers consent, subject access history, feedback, flagging and application audit.
+Some proposals extend an existing HTTP method at the same URL. In those cases
+`x-junctura-planned-operation` contains the complete future Operation Object on the existing operation.
+To build a mock API document, replace each operation carrying that extension with its value and retain the
+top-level planned operations. Keep both contract files together so relative references resolve.
+Use the current route index for calls to a deployed Core.
+
+### Record store
+
+- `PUT /v2/data-schemas/{collection}` registers the calling app's record schema. Declare top-level
+  `indexed`, `searchable` and `sensitive` fields and an optional string `uniqueKey`. Core checks all
+  later writes and checks existing rows before accepting a replacement. Unregistered collections remain schemaless.
+  The supported JSON Schema keywords are `type`, `required`, `properties`, `enum`, `minLength`,
+  `maxLength`, `pattern`, `minimum`, `maximum`, `items` and `format` for `date` and `date-time`.
+- `GET /v2/data/{collection}` filters indexed fields with `where[field]` and sorts them with
+  `sort=field.asc` or `sort=field.desc`. Use a JSON scalar after `eq:`, a JSON array after `in:`,
+  a JSON string or number after `gte:` or `lte:`, and a JSON string after `prefix:`. URL-encode the
+  operands. Send `nextCursor` back as `cursor` with the same filters, owner and sort. The existing
+  `order` parameter controls creation-time order when `sort` is absent.
+  `GET /v2/data/{collection}/aggregate?count` counts readable matches. Repeat `groupBy` for up to two
+  indexed fields or UTC day buckets such as `day(createdOn)`. Queries can return up to 1,000 groups.
+- `PUT /v2/data/{collection}/by-key/{key}` creates or replaces the record matched by the registered
+  unique field. Send `If-Match` when replacing an existing record. Every record carries a numeric
+  `version`, and individual record responses carry an `ETag`.
+  `POST /v2/data:batch` performs up to 50 creates, replacements, deletes or atomic increments across
+  collections of the calling app in one transaction. A failed operation rolls back the batch.
+- `POST /v2/resource-shares` accepts `granteeAppGroup` for a read share of one catalog record.
+  Group membership and share expiry are checked when a recipient reads. Set `ownerAppId`
+  when listing another app's collection to see its records explicitly shared with the caller.
+- `GET /v2/data:export` streams UTF-8 NDJSON containing the owner's record IDs, collections and data.
+  `POST /v2/data:import` uses that format, retains IDs and applies schema and uniqueness checks in a
+  single transaction. Register schemas before importing data that needs validation.
+  An existing record ID conflicts. The record data limit is 64 KiB in compact UTF-8 JSON.
+  Per-collection record counts and per-app file bytes are subject to configured quotas.
+
+### Workflows
+
+- `GET /v1/workflows/tasks` lists waiting tasks from verified group memberships. Filter by `definitionKey`,
+  `unit`, `overdue` or `candidateGroup`. The group filter proposed in issue #49 narrows the
+  caller's authorized inbox. Each parallel step has its own `taskId`. The inbox includes the
+  holder's display name in `claimedBy` and the expiry in `claimedUntil`. Both fields are null
+  when the task is unclaimed.
+- `POST /v1/workflows/executions` accepts an execution `dueAt` and optional `taskDueAt`
+  overrides keyed by BPMN user-task ID. The inbox reports the effective deadline and whether it has passed.
+  Business steps use the execution's `unit` or a per-step `taskUnits` override, subject to the deployed
+  workflow's unit policy.
+  `GET /v1/workflows/executions/{executionId}/history` returns finished steps with the verified actor,
+  unit and group, the decision and reason if supplied, and the completion time.
+- `POST /v1/workflows/executions/{executionId}/complete` accepts `{taskId, variables?, records?}`
+  for business workflows. Use `variables` for the primitive BPMN values proposed as `output` in
+  issue #49. The UTF-8 JSON limit for variables is 4 KiB. Completion requires membership in a
+  candidate group in the task's unit. `records` can create up to ten records owned by the calling
+  app. Core saves them with a durable outbox entry, and `202` means the workflow transition is
+  pending. A retry with the same key replays the original response, including a `202`. Read the
+  execution and its history to check progress. Cancellation returns `409` while an accepted
+  completion remains pending. The technical checkpoint retains its empty-object request.
+- `POST /v1/workflows/tasks/{taskId}/claim` reserves a waiting task for an eligible group member
+  for 30 minutes by default and up to 8 hours with `ttlSeconds`. A repeat by the holder keeps the
+  original expiry. The holder can release it with `POST /v1/workflows/tasks/{taskId}/release`.
+  An eligible caller may complete an unclaimed task or a task they hold. A new completion attempt
+  on a finished task returns `409 task_already_completed`.
+
+### Concurrent writes and retries
+
+**Breaking change for existing v2 clients when these operations take effect.** Before a record
+replacement or deletion, GET the individual record and copy its `ETag` verbatim into `If-Match`.
+This applies to PATCH with `data`, PUT by unique key when it replaces a record, and DELETE, even
+for collections without a schema. Supply `ifMatch` on every batch replacement or deletion. A
+missing precondition returns `428`. On `412`, reread the record, reconcile your edits and submit
+the new precondition.
+
+For relative changes to indexed numeric fields, send PATCH with `operations` and use
+`increment` with a positive or negative `by`. Core applies the arithmetic in one database
+statement. Optional `min` and `max` bound the result inclusively. This is the only edit that can
+omit `If-Match` because it operates on the current value without a client read.
+
+Use `POST /v2/data/{collection}/{id}:lock` to reserve a record during an edit. The lock expires
+after 5 minutes by default and can last up to 30 minutes per request. Renew it with the returned
+`lockId` and a fresh idempotency key. To release it, send DELETE to the same URL with the
+`Lock-Id` header. Other callers receive `423` on edits and deletes. The holder follows the same
+`If-Match` rules as any writer. Only the holder may release an active lock. Use a task claim to
+reserve a workflow step while someone works on it.
+
+Send a UUID `Idempotency-Key` when creating a record, writing a batch, importing records, upserting
+by unique key, incrementing with PATCH, acquiring or renewing a record lock, starting a workflow or
+completing a step, appending an audit event, uploading a file, creating a share or granting consent.
+Core keeps the first recorded result for 24 hours in the verified tenant, caller, method and URL
+path scope. A retry with the same key and logical request, including any write precondition, replays
+the original status, body and resource headers. A changed request with the same key returns
+`422 idempotency_key_reused`. Use a fresh key for each new operation.
+
+With `quantity` registered as an indexed numeric field, send this body with an `Idempotency-Key`
+to `POST /v2/data:batch` to decrease stock for two items together. If either quantity would go
+below zero, Core returns `409 limit_exceeded` and both quantities stay the same.
+
+```json
+{
+  "operations": [
+    {
+      "op": "increment",
+      "collection": "inventory",
+      "id": "44444444-4444-4444-8444-444444444444",
+      "operations": [{"op": "increment", "field": "quantity", "by": -10, "min": 0}]
+    },
+    {
+      "op": "increment",
+      "collection": "inventory",
+      "id": "55555555-5555-4555-8555-555555555555",
+      "operations": [{"op": "increment", "field": "quantity", "by": -3, "min": 0}]
+    }
+  ]
+}
+```
+
+### Identity and directory
+
+An enrolled `directory.write` principal manages `/v1/directory/unit-types`, `/v1/directory/units`,
+and each unit's `groups` and `members`. List each collection and use PUT or DELETE at an item URL.
+The provider synchronizes these changes into Keycloak. Renew a token to refresh membership claims.
+`GET /v1/identity` exposes verified `units` and group paths of the form `/unit/group`.
+Data-subject accounts carry a verified `subjectId` claim. Core uses it, with tenant and issuer, for
+`/v1/me/*` consent, access history, feedback and flagging. The login identifier remains `subject`.
+
+### Files, events, search and privacy
+
+- Upload to `/v2/objects` with `multipart/form-data` to attach an owned `recordRef` and `tags`.
+  Keep the file and metadata the same when retrying with the original key.
+  Octet-stream uploads remain available. Files pass malware scanning before publication. Use
+  `GET /v2/objects` with `recordRef[collection]` and `recordRef[id]`, a `tag`, or both to
+  list authorized file metadata. Only current published object bytes count toward the app quota.
+- `GET /v1/events` streams new group tasks, record status changes and consent revocations as
+  Server-Sent Events. Messages carry references. Use the bearer header and refresh the source
+  lists after reconnecting to recover changes missed while offline.
+- `GET /v1/search?q=…` searches declared fields and clean text files, subject to live read permissions.
+  Meilisearch holds the index. The API returns references. Authorized administrators and viewers see record data with sensitive
+  fields omitted. Filters, sorting, grouping and search also exclude those fields for these readers.
+- `POST /v1/me/emergency-accesses/{id}/feedback` records the data subject's feedback on their own
+  emergency access. `POST /v1/me/data-access/{id}/flag` flags a visible access event using its
+  `accessId`. Both store a separate report and preserve the original event.
+
+### Application audit log
+
+- Register the app-wide `auditActions` catalog with the collection schema operation. Each action
+  declares its sensitivity and whether the subject may see it. Supplying a catalog replaces it.
+  `POST /v1/audit-events` accepts a registered action, resource reference, outcome, purpose,
+  an optional subject and up to 2 KiB of non-sensitive metadata. Supply a UUID `Idempotency-Key`.
+  Core stamps the verified actor, app and time and appends to the tenant's audit hash chain.
+- Use `GET /v1/audit-events?app=self` for the app's own events. Filter by `action`, `subjectId`,
+  `from` and `to` within the permitted scope. Principals with the `regulator` role read within their assigned units.
+  Enrolled administrators retain platform audit access and see only structural fields for app events.
+  `GET /v1/me/data-access` includes both capability calls and declared subject-visible app events.
+- `GET /v1/audit-events:export` streams authorized NDJSON for reconciliation and long-term storage.
+  Its first line captures the tenant chain head. Event lines carry their chain positions and digests.
+  Scoped exports can have gaps. The existing privileged verify operation checks the full chain.
+
+### Error responses
+
+Planned Core errors put the code in `error` and correlate requests with `requestId` and
+`X-Request-Id`. Gateway responses can be HTML. Schema violations add an `issues` array with JSON
+Pointer paths into the request and, for NDJSON, one-based line numbers.
+
+| Code | HTTP | When it occurs | What the client should do |
+| --- | --- | --- | --- |
+| `invalid_request`, `invalid_query`, `invalid_schema` | 400 | An envelope, parameter or schema declaration is invalid, or a required idempotency key is missing or malformed | Correct the request and resubmit. |
+| `invalid_cursor` | 400 | A cursor is malformed or belongs to different filters or scope | Restart from the first page with the intended filters. |
+| `forbidden`, `verified_subject_required` | 403 | The caller lacks the required authority or subject claim | Use an authorized identity or obtain a token with the required verified claim. |
+| `task_group_required` | 403 | The caller belongs to no candidate group for the task's unit | Refresh the inbox and route the task to an eligible group member. |
+| `unique_key_conflict`, `resource_conflict` | 409 | A key, record ID or directory resource conflicts with existing state | Inspect the existing resource and reconcile the change before retrying. |
+| `limit_exceeded` | 409 | An atomic increment would exceed its inclusive bounds | Use the returned `field` to identify the quantity and reconcile the requested change. |
+| `task_conflict` | 409 | The workflow transition is unavailable, for example while completion is pending | Refresh the execution and its history before acting. |
+| `task_claimed` | 409 | Another caller holds the task | Display `claimedBy` and `claimedUntil`, then refresh the inbox after release or expiry. |
+| `task_already_completed` | 409 | A new attempt targeted a finished task | Refresh the inbox or execution history. |
+| `precondition_failed` | 412 | The record ETag has changed | Fetch the latest record and reconcile edits before resending with its ETag. |
+| `body_too_large` | 413 | A body, record, file, variables object or audit metadata exceeds its byte limit | Reduce the payload or split an import or batch as appropriate. |
+| `schema_violation` | 422 | Record data violates its registered schema | Correct the fields identified in `issues`, then resubmit the write. |
+| `unknown_action` | 422 | The audit action is absent from the app's catalog | Use a declared action or register it before submitting the event. |
+| `malware_detected` | 422 | The file failed scanning | Select a clean file. |
+| `idempotency_key_reused` | 422 | An unexpired key is bound to a different logical request | Retry the original request with the same key or use a fresh key for a new operation. |
+| `locked` | 423 | Another caller holds a live record lock | Display `lockedBy` and `lockedUntil`. Refresh the record after release or expiry before retrying the edit. |
+| `precondition_required` | 428 | A replacement or deletion lacks `If-Match` or a required batch `ifMatch` | Fetch the record's ETag and include it in the write. |
+| `rate_limited` | 429 | The gateway or app has reached a temporary request-rate limit | Respect `Retry-After` when present and back off. |
+| `quota_exceeded` | 429 | The collection record or app file quota would be exceeded | Use the returned `quota` details to free space or request a higher quota. |
 
 ## Limitations
 
