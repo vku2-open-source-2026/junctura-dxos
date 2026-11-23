@@ -4547,13 +4547,13 @@
             }
           },
           "400": {
-            "$ref": "#/components/responses/PlannedBadRequest"
+            "$ref": "#/components/responses/ObjectUploadBadRequest"
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
           },
           "403": {
-            "$ref": "#/components/responses/PlannedForbidden"
+            "$ref": "#/components/responses/Forbidden"
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
@@ -4585,7 +4585,7 @@
         },
         "parameters": [
           {
-            "$ref": "#/components/parameters/PlannedIdempotencyKey"
+            "$ref": "#/components/parameters/RecordOptionalIdempotencyKey"
           }
         ],
         "x-junctura-source": "src/modules/objects/objects.mjs",
@@ -4673,13 +4673,13 @@
             }
           },
           "400": {
-            "$ref": "#/components/responses/PlannedBadRequest"
+            "$ref": "#/components/responses/ObjectUploadBadRequest"
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
           },
           "403": {
-            "$ref": "#/components/responses/PlannedForbidden"
+            "$ref": "#/components/responses/Forbidden"
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
@@ -4725,7 +4725,7 @@
             "$ref": "#/components/parameters/Id"
           },
           {
-            "$ref": "#/components/parameters/PlannedIdempotencyKey"
+            "$ref": "#/components/parameters/RecordOptionalIdempotencyKey"
           }
         ],
         "requestBody": {
@@ -4854,13 +4854,13 @@
             }
           },
           "400": {
-            "$ref": "#/components/responses/PlannedBadRequest"
+            "$ref": "#/components/responses/ObjectUploadBadRequest"
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
           },
           "403": {
-            "$ref": "#/components/responses/PlannedForbidden"
+            "$ref": "#/components/responses/Forbidden"
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
@@ -9690,6 +9690,86 @@
                   "requestId": "11111111-1111-4111-8111-111111111111"
                 }
               }
+            }
+          }
+        }
+      },
+      "ObjectUploadBadRequest": {
+        "description": "Invalid path, query, object body, multipart envelope, metadata or cursor.",
+        "headers": {
+          "X-Request-Id": {
+            "$ref": "#/components/headers/PlannedRequestId"
+          }
+        },
+        "content": {
+          "application/json": {
+            "schema": {
+              "type": "object",
+              "properties": {
+                "error": {
+                  "type": "string",
+                  "enum": [
+                    "invalid_request",
+                    "invalid_query",
+                    "invalid_cursor",
+                    "invalid_multipart",
+                    "empty_object",
+                    "invalid_object_path"
+                  ]
+                },
+                "requestId": {
+                  "$ref": "#/components/schemas/Uuid"
+                }
+              },
+              "required": [
+                "error",
+                "requestId"
+              ],
+              "additionalProperties": false
+            },
+            "examples": {
+              "invalid_request": {
+                "value": {
+                  "error": "invalid_request",
+                  "requestId": "11111111-1111-4111-8111-111111111111"
+                }
+              },
+              "invalid_query": {
+                "value": {
+                  "error": "invalid_query",
+                  "requestId": "11111111-1111-4111-8111-111111111111"
+                }
+              },
+              "invalid_cursor": {
+                "value": {
+                  "error": "invalid_cursor",
+                  "requestId": "11111111-1111-4111-8111-111111111111"
+                }
+              },
+              "invalid_multipart": {
+                "value": {
+                  "error": "invalid_multipart",
+                  "requestId": "11111111-1111-4111-8111-111111111111"
+                }
+              },
+              "empty_object": {
+                "value": {
+                  "error": "empty_object",
+                  "requestId": "11111111-1111-4111-8111-111111111111"
+                }
+              },
+              "invalid_object_path": {
+                "value": {
+                  "error": "invalid_object_path",
+                  "requestId": "11111111-1111-4111-8111-111111111111"
+                }
+              }
+            }
+          },
+          "text/html": {
+            "schema": {
+              "type": "string",
+              "description": "Existing Nginx HTML error representation; no JSON error code or requestId guaranteed."
             }
           }
         }

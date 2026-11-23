@@ -2574,12 +2574,12 @@
     "headerParameters": [
       {
         "name": "Idempotency-Key",
-        "required": true,
+        "required": false,
         "schema": {
           "type": "string",
           "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
         },
-        "description": "Required UUID for this write. A missing or malformed key returns 400 invalid_request. Core retains the first recorded result for 24 hours, scoped to the verified tenant and caller, HTTP method and concrete request path. Within that window, the same key and logical request replay the first status, body and resource headers without another write. A changed body or write precondition for the same key returns 422 idempotency_key_reused. Concurrent identical requests share one result; every replay requires current authorization."
+        "description": "With a key, an identical request replays its original response within 24 hours."
       }
     ],
     "successStatus": "201",
@@ -2725,12 +2725,12 @@
     "headerParameters": [
       {
         "name": "Idempotency-Key",
-        "required": true,
+        "required": false,
         "schema": {
           "type": "string",
           "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
         },
-        "description": "Required UUID for this write. A missing or malformed key returns 400 invalid_request. Core retains the first recorded result for 24 hours, scoped to the verified tenant and caller, HTTP method and concrete request path. Within that window, the same key and logical request replay the first status, body and resource headers without another write. A changed body or write precondition for the same key returns 422 idempotency_key_reused. Concurrent identical requests share one result; every replay requires current authorization."
+        "description": "With a key, an identical request replays its original response within 24 hours."
       }
     ],
     "successStatus": "200",

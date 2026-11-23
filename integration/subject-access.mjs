@@ -64,7 +64,7 @@ const seedExecution = async ({ executionId, dataSubject, emergency, review, reco
 // and stay unsealed until the regular append route seals the chain.
 const seedSharedAppEvents = async () => {
   const claims = JSON.stringify({ tenant_id: "tenant-a", iss: issuer,
-    sub: consumer.subject, client_id: consumer.clientId });
+    sub: consumer.subject, client_id: consumer.clientId, role: "junctura_audit_api" });
   const event = index => `DO $seed$ DECLARE new_id uuid; BEGIN
     INSERT INTO app_private.audit(tenant_id,event,resource_id,revision,outcome)
       VALUES ('tenant-a','audit.application_event','${consumer.appId}',1,'success')
@@ -116,10 +116,15 @@ before(async () => {
   // consumer and provider are distinct applications.
   versionId = randomUUID();
   grantId = randomUUID();
+  // A published version carries the validation evidence the registry
+  // requires (capability_published_validation): it was validated at the
+  // previous revision under policy revision 1 with the same digest.
   await sql(`INSERT INTO app_private.capability_versions (tenant_id, version_id, capability_id, provider_app_id,
-      version, manifest, digest, state, created_by, updated_by)
+      version, manifest, digest, state, created_by, updated_by, revision, validation_status, validation_digest,
+      validation_revision, validation_policy_revision, validated_at, validation_report, published_at)
     VALUES ('tenant-a', '${versionId}', '${capabilityId}', '${provider.appId}', '1.0.0', '{"title":"Lookup"}',
-      '${digest}', 'published', 'fixture', 'fixture');`);
+      '${digest}', 'published', 'fixture', 'fixture', 2, 'valid', '${digest}', 1, 1, now(),
+      jsonb_build_object('status','valid','digest','${digest}','revision','1','policyRevision','1'), now());`);
   await sql(`INSERT INTO trust_private.grants (tenant_id, grant_id, issuer, provider_app_id, consumer_app_id,
       version_id, capability_id, version, manifest_digest, proposal, digest, state, expires_at, created_by, management_client)
     VALUES ('tenant-a', '${grantId}', ${q(issuer)}, '${provider.appId}', '${consumer.appId}', '${versionId}',
@@ -270,7 +275,9 @@ test("emergency feedback belongs to the subject's own emergency access", async (
   const changed = await post(owner, feedbackPath, { decision: "unrecognized" });
   assert.equal(changed.status, 409);
   assert.equal((await changed.json()).error, "resource_conflict");
-  const plain = page.entries.find(entry => !entry.emergency);
+  // Only capability entries carry the emergency flag; an application entry
+  // would have no executionId to answer feedback for.
+  const plain = page.entries.find(entry => entry.source === "capability" && !entry.emergency);
   const refused = await post(owner, `/v1/me/emergency-accesses/${plain.executionId}/feedback`, { decision: "other" });
   assert.equal(refused.status, 404);
   const strangerFeedback = await post(stranger, feedbackPath, { decision: "other" });
@@ -283,9 +290,11 @@ test("writing a report never disturbs the sealed audit chain", async () => {
     assert.equal(response.status, 200);
     return response.json();
   };
+  // Other suites on this shared stack delete their own fixture audit rows,
+  // so the tenant chain may already report a gap; the report must leave the
+  // chain exactly as it found it, intact or not.
   const before = await verify();
-  assert.equal(before.verified, true);
-  assert.ok(before.entries >= 1);
+  if (before.verified) assert.ok(before.entries >= 1);
   const page = await (await api("/v1/me/data-access", owner)).json();
   const target = page.entries.find(entry => entry.source === "capability" && !entry.flaggedAt);
   assert.equal((await post(owner, `/v1/me/data-access/${target.accessId}/flag`, { reason: "other" })).status, 201);
@@ -293,7 +302,8 @@ test("writing a report never disturbs the sealed audit chain", async () => {
   // A report is a separate row keyed by the visible access event: the audit
   // chain and the management review stay untouched — the entry count, the
   // seal and the head hash are exactly where they were.
-  assert.equal(after.verified, true);
+  assert.equal(after.verified, before.verified);
+  assert.deepEqual(after.brokenAt ?? null, before.brokenAt ?? null);
   assert.equal(after.entries, before.entries);
   assert.equal(after.newlySealed, 0);
   assert.equal(after.headHash, before.headHash);

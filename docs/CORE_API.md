@@ -302,7 +302,9 @@ caller, including live app-group shares with current membership.
 | `/v2/objects` | POST, GET | Multipart or octet-stream upload with owned `recordRef` and `tags`; authorized metadata list |
 | `/v2/objects/{uuid}` | PUT, GET, DELETE | Replace with metadata merge semantics; download; tombstoning delete |
 
-Uploads require writer, 1 byte–5 MiB file bytes and a UUID `Idempotency-Key`. V2 accepts
+Uploads require writer and 1 byte–5 MiB file bytes. The UUID `Idempotency-Key` stays optional for
+backward compatibility: a keyless upload records no receipt, so a retry publishes a new version,
+while a request that carries a key replays its first committed result for 24 hours. V2 accepts
 `multipart/form-data` (exactly one `file` part plus optional `recordRef` and `tags` JSON parts) or
 `application/octet-stream`. A missing metadata part preserves the previous value on replace while an
 explicit `null`/`[]` clears it; the idempotency digest covers file bytes and metadata presence, so a
@@ -748,8 +750,10 @@ reserve a workflow step while someone works on it.
 
 Send a UUID `Idempotency-Key` when creating a record, writing a batch, importing records, upserting
 by unique key, incrementing with PATCH, acquiring or renewing a record lock, starting a workflow or
-completing a step, appending an audit event, uploading a file, creating a share or granting consent.
-Core keeps the first recorded result for 24 hours in the verified tenant, caller, method and URL
+completing a step, appending an audit event, uploading a file with replayable retries, creating a
+share or granting consent. Plain `application/octet-stream` uploads and record creates without a key
+stay compatible and record no receipt. Core keeps the first recorded result for 24 hours in the
+verified tenant, caller, method and URL
 path scope. A retry with the same key and logical request, including any write precondition, replays
 the original status, body and resource headers. A changed request with the same key returns
 `422 idempotency_key_reused`. Use a fresh key for each new operation.

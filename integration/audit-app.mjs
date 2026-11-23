@@ -51,7 +51,8 @@ test("application audit shares the platform chain and enforces archive, regulato
   assert.equal(empty.value.head.hash, `sha256:${"0".repeat(64)}`);
   await archive("end", { snapshotId: empty.value.snapshotId });
 
-  await audit(`app_private.audit_append('audit.platform_fixture','audit',${q(randomUUID())},1)`, management, "junctura_app_owner");
+  await sql(`SET ROLE junctura_app_owner; SELECT set_config('request.jwt.claims',${q(JSON.stringify(management))},false);
+    SELECT app_private.audit_append('audit.platform_fixture','audit',${q(randomUUID())},1);`);
   const old = await verify();
   assert.deepEqual([old.value.verified, old.value.entries], [true, 1]);
 
@@ -101,18 +102,20 @@ test("application audit shares the platform chain and enforces archive, regulato
   assert.equal((await query({ unit: "unit-b" }, regulator)).status, 403);
   assert.deepEqual((await query({}, { ...regulator, units: ["unit-b"] })).value.items, []);
   // Every cursor failure class answers invalid_cursor, not invalid_audit_query.
-  assert.equal((await query({ cursor: "zz" }, claims)).error, "invalid_cursor");
-  assert.equal((await query({ cursor: "ff".repeat(70) }, claims)).error, "invalid_cursor");
-  assert.equal((await query({ cursor: "aa".repeat(70) }, claims)).error, "invalid_cursor");
+  assert.equal((await query({ app: "self", cursor: "zz" }, claims)).error, "invalid_cursor");
+  assert.equal((await query({ app: "self", cursor: "ff".repeat(70) }, claims)).error, "invalid_cursor");
+  assert.equal((await query({ app: "self", cursor: "aa".repeat(70) }, claims)).error, "invalid_cursor");
   const forged = Buffer.from("2030-01-01T00:00:00Z|11111111-1111-4111-8111-111111111111|forged").toString("hex");
-  assert.equal((await query({ cursor: forged }, claims)).error, "invalid_cursor");
+  assert.equal((await query({ app: "self", cursor: forged }, claims)).error, "invalid_cursor");
 
   await sql(`UPDATE app_private.app_audit_actions SET visible_to_subject=false WHERE tenant_id=${q(tenant)};`);
-  const visible = await audit(`(SELECT jsonb_agg(event_id) FROM app_private.audit_subject_entries(${q(body.subjectId)}))`,
+  const visible = await audit(`(SELECT coalesce(jsonb_agg(event_id),'[]'::jsonb) FROM app_private.audit_subject_entries(${q(body.subjectId)}))`,
     subject, "junctura_app_owner");
   assert.deepEqual(visible, [accepted.value.eventId]);
-  assert.equal(await audit(`(SELECT jsonb_agg(event_id) FROM app_private.audit_subject_entries(${q(body.subjectId)}))`,
-    { ...subject, sub: "other-login" }, "junctura_app_owner"), null);
+  // An unbound login sees no entries: jsonb_agg over zero rows would be NULL,
+  // so the probe coalesces to an empty array instead of parsing empty output.
+  assert.deepEqual(await audit(`(SELECT coalesce(jsonb_agg(event_id),'[]'::jsonb) FROM app_private.audit_subject_entries(${q(body.subjectId)}))`,
+    { ...subject, sub: "other-login" }, "junctura_app_owner"), []);
 
   const snapshot = await archive("start", { app: "self" }, claims);
   assert.equal(snapshot.value.head.sequence, 3);

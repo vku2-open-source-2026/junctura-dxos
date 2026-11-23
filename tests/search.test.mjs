@@ -258,7 +258,7 @@ test("the worker rebuilds from PostgreSQL, fences every write and retires the ol
         ] });
       },
       purgeIds: body => {
-        assert.deepEqual(body, { documents: [`record-${recordId}-${incarnation}-v0-r1-full`] },
+        assert.deepEqual(body, [`record-${recordId}-${incarnation}-v0-r1-full`],
           "only the immutable id of the superseded version is removed");
         return accepted(++documents + 100);
       },
@@ -344,7 +344,7 @@ test("a temporary filer outage keeps the object job and a clean miss purges it",
         assert.equal(body.filter, `kind = "object" AND resourceId = "${objectId}"`);
         return Response.json({ hits: [{ id: `object-${objectId}-v${staleVersion}` }] });
       },
-      purgeIds: body => { purged.push(...body.documents); return accepted(50); },
+      purgeIds: body => { purged.push(...body); return accepted(50); },
     }),
   ];
   await drainTenant(config, createMeilisearch(config), "tenant-a");
@@ -380,7 +380,7 @@ test("a newer render or a lost lease stops the superseded cleanup", async t => {
     ...meiliRoutes({
       documents: () => accepted(60),
       listing: () => Response.json({ hits: [{ id: `record-${recordId}-44444444-4444-4444-8444-444444444444-v0-r1-full` }] }),
-      purgeIds: body => { purged.push(...body.documents); return accepted(61); },
+      purgeIds: body => { purged.push(...body); return accepted(61); },
     }),
   ];
   await drainTenant(config, createMeilisearch(config), "tenant-a");

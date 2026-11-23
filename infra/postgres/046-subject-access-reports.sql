@@ -86,7 +86,7 @@ BEGIN
     IF coalesce(payload->>'limit', '200') !~ '^[0-9]+$' OR (payload->>'limit')::integer NOT BETWEEN 1 AND 200
       OR (payload - 'limit' - 'after') <> '{}'::jsonb
       OR (payload ? 'after' AND (jsonb_typeof(payload->'after') IS DISTINCT FROM 'object'
-        OR (payload->'after' - 'accessedAt' - 'accessId') <> '{}'::jsonb
+        OR ((payload->'after') - 'accessedAt' - 'accessId') <> '{}'::jsonb
         OR jsonb_typeof(payload->'after'->'accessedAt') IS DISTINCT FROM 'string'
         OR payload->'after'->>'accessedAt' !~ '^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,6})?Z$'
         OR jsonb_typeof(payload->'after'->'accessId') IS DISTINCT FROM 'string'

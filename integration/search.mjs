@@ -54,7 +54,7 @@ test("declared record fields become searchable with live ACL checks", async () =
   }), 201);
   recordId = found.id;
   const visible = await jsonResult(await api(`/v2/data/${collection}`, owner, {
-    method: "POST", body: { data: { code: "plain-code", note: "also hidden" } },
+    method: "POST", body: { data: { code: "plain-code", note: "unrelated remark" } },
     headers: { "Idempotency-Key": randomUUID() },
   }), 201);
   secretId = visible.id;
@@ -64,9 +64,14 @@ test("declared record fields become searchable with live ACL checks", async () =
   // The owner matches the sensitive value; the management grant does not.
   assert.deepEqual(await hits(owner, "hidden-personal"),
     [{ type: "record", recordRef: { collection, id: recordId } }]);
+  // The management projection is a separate document indexed on its own;
+  // wait for it before asserting what management can and cannot match.
+  const managed = await waitUntil(async () => {
+    const items = await hits(manager, `needle-${prefix}`);
+    return items.length ? items : null;
+  });
+  assert.deepEqual(managed, [{ type: "record", recordRef: { collection, id: recordId } }]);
   assert.deepEqual(await hits(manager, "hidden-personal"), []);
-  assert.deepEqual(await hits(manager, `needle-${prefix}`),
-    [{ type: "record", recordRef: { collection, id: recordId } }]);
   // A candidate whose row disappeared between index and query never surfaces:
   // delete, then search for the still-indexed term.
   await sql(`DELETE FROM core.app_records WHERE tenant_id='tenant-a' AND id='${visible.id}';`);
@@ -94,7 +99,10 @@ test("object text becomes searchable after a clean publish", async () => {
     const found = await hits(owner, "replacement");
     return found.some(hit => hit.type === "object" && hit.objectId === objectId);
   });
-  assert.deepEqual((await hits(owner, "quarterly findings")).filter(hit => hit.type === "object"), []);
+  // The superseded document's purge follows its replacement's visibility, so
+  // the old text settles out of the index like the delete case below.
+  await waitUntil(async () =>
+    (await hits(owner, "quarterly findings")).every(hit => hit.type !== "object"));
   // Deletion tombstones the object and drops it from the index.
   assert.equal((await api(`/v2/objects/${objectId}`, owner, { method: "DELETE" })).status, 204);
   await waitUntil(async () => {

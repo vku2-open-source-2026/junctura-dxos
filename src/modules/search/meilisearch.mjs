@@ -116,7 +116,7 @@ export function createMeilisearch(config, fetcher = fetch) {
     },
     async purgeIds(indexUid, ids) {
       await waitTask(taskUid((await write(indexUid, "/documents/delete-batch", {
-        method: "POST", body: JSON.stringify({ documents: ids }),
+        method: "POST", body: JSON.stringify(ids),
       })).value));
     },
     async dropIndex(indexUid) {
