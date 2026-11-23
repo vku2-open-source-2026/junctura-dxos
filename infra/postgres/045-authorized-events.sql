@@ -118,33 +118,34 @@ DECLARE
   notification event_notifications;
   target jsonb;
   result jsonb;
+  head_seq bigint;
+  expected bigint;
+  overflow boolean;
+  items jsonb;
 BEGIN
   IF operation='start' THEN
     SELECT jsonb_build_object('sequence',coalesce(h.sequence,0)::text,'startedAt',statement_timestamp())
       INTO result FROM (SELECT 1) seed LEFT JOIN event_heads h ON h.tenant_id=tenant;
   ELSIF operation='poll' THEN
-    WITH head AS (
-      SELECT coalesce((SELECT sequence FROM event_heads WHERE tenant_id=tenant),0) AS sequence
-    ), page AS (
-      SELECT n.sequence,n.event,n.target FROM event_notifications n CROSS JOIN head h
-      WHERE n.tenant_id=tenant AND n.sequence>after_seq
+    -- A burst in one commit only pages the stream forward; the stream reports
+    -- overflow exactly when a sequence between the cursor and the last served
+    -- row is missing from the journal (deleted or never served), or the page
+    -- is empty while the head already moved past the cursor.
+    overflow:=false;
+    expected:=after_seq+1;
+    SELECT coalesce((SELECT sequence FROM event_heads WHERE tenant_id=tenant),0) INTO head_seq;
+    FOR notification IN
+      SELECT * FROM event_notifications n WHERE n.tenant_id=tenant AND n.sequence>after_seq
         AND n.published_at>statement_timestamp()-interval '2 minutes' ORDER BY n.sequence LIMIT 64
-    ), served AS (
-      SELECT count(*) AS served_rows,max(p.sequence) AS served_last FROM page
-    )
-    SELECT jsonb_build_object('overflow',
-        -- A burst in one commit only pages the stream forward; the stream
-        -- reports overflow exactly when a sequence between the cursor and the
-        -- head is missing from the journal (deleted or never served).
-        (SELECT served_rows FROM served)=0 AND h.sequence>after_seq
-        OR (SELECT served_rows FROM served)<64 AND h.sequence-after_seq>(SELECT served_rows FROM served)
-        OR (SELECT served_rows FROM served)=64 AND EXISTS (
-          SELECT FROM generate_series(after_seq+1,(SELECT served_last FROM served)) g
-          WHERE NOT EXISTS (SELECT FROM page p WHERE p.sequence=g)),
-      'items',coalesce(jsonb_agg(jsonb_strip_nulls(jsonb_build_object('sequence',p.sequence::text,'event',p.event,
-        'task',CASE WHEN p.event='workflow.task.created' THEN p.target END)) ORDER BY p.sequence)
-        FILTER (WHERE p.sequence IS NOT NULL),'[]'::jsonb))
-    INTO result FROM head h LEFT JOIN page p ON true;
+    LOOP
+      IF notification.sequence>expected THEN overflow:=true; END IF;
+      expected:=notification.sequence+1;
+      items:=coalesce(items,'[]'::jsonb)||jsonb_strip_nulls(jsonb_build_object('sequence',notification.sequence::text,
+        'event',notification.event,'task',CASE WHEN notification.event='workflow.task.created'
+          THEN notification.target END));
+    END LOOP;
+    IF items IS NULL AND head_seq>after_seq THEN overflow:=true; END IF;
+    result:=jsonb_build_object('overflow',overflow,'items',coalesce(items,'[]'::jsonb));
   ELSIF operation='deliver' THEN
     SELECT * INTO notification FROM event_notifications n
     WHERE n.tenant_id=tenant AND n.sequence=(payload->>'sequence')::bigint
