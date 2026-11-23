@@ -2524,7 +2524,6 @@
         "tags": [
           "tenant"
         ],
-        "x-junctura-status": "planned",
         "x-junctura-query-policy": "closed",
         "security": [
           {
@@ -2613,7 +2612,9 @@
           "504": {
             "$ref": "#/components/responses/GatewayTimeout"
           }
-        }
+        },
+        "x-junctura-source": "src/modules/search/search.mjs",
+        "x-junctura-test-suite": "search"
       }
     },
     "/v1/events": {
@@ -2624,7 +2625,9 @@
         "tags": [
           "tenant"
         ],
-        "x-junctura-status": "planned",
+        "x-junctura-status": "implemented-authorized-events",
+        "x-junctura-source": "src/modules/events/events.mjs",
+        "x-junctura-test-suite": "events",
         "x-junctura-query-policy": "closed",
         "security": [
           {
@@ -2665,7 +2668,7 @@
             "$ref": "#/components/responses/Unauthorized"
           },
           "403": {
-            "$ref": "#/components/responses/PlannedForbidden"
+            "$ref": "#/components/responses/Forbidden"
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
@@ -4430,69 +4433,18 @@
     },
     "/v2/objects": {
       "post": {
-        "operationId": "v2UploadObject",
-        "summary": "V2 upload object",
-        "description": "Active registered backend resolved from verified tenant/issuer/client_id and exact operator-enrolled resource_subject. Owner-only mutations; individually shared reads. Suspension/revocation and disabled enrollment block access. Upload 1 byte to 5 MiB. Stable-UUID PUT with identical bytes is retryable; POST creates a new ID and is not blindly retried. V2 DELETE tombstones permanently; bytes/old versions retained. PUT publishes immutable versions after DB reauthorization; concurrent owner PUTs use last publication. UUIDs are tenant-scoped, so a foreign tenant may create independent bytes at the same UUID.",
+        "operationId": "uploadObjectWithMetadata",
+        "summary": "Upload an object with optional metadata",
+        "description": "The file part must be 1 byte–5 MiB and is published only after a clean scan. A recordRef may point to a live record owned by the caller. The link and tags confer no read access. Charge the bytes of current published objects to the per-app quota before publication. Replacement charges the size delta; deletion releases the current size. The octet-stream form creates an unlinked and untagged object. For multipart uploads the logical request includes file bytes, link and tags. Multipart boundaries are transport framing and do not change the logical request.",
         "tags": [
           "app-resource"
         ],
         "x-junctura-query-policy": "closed",
-        "x-junctura-source": "src/modules/objects/objects.mjs",
         "security": [
           {
             "coreBearer": []
           }
         ],
-        "responses": {
-          "201": {
-            "description": "Successful response",
-            "headers": {
-              "Cache-Control": {
-                "$ref": "#/components/headers/CacheControl"
-              },
-              "X-Content-Type-Options": {
-                "$ref": "#/components/headers/NoSniff"
-              }
-            },
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ObjectReceipt"
-                }
-              }
-            }
-          },
-          "400": {
-            "$ref": "#/components/responses/BadRequest"
-          },
-          "401": {
-            "$ref": "#/components/responses/Unauthorized"
-          },
-          "403": {
-            "$ref": "#/components/responses/Forbidden"
-          },
-          "405": {
-            "$ref": "#/components/responses/MethodNotAllowed"
-          },
-          "413": {
-            "$ref": "#/components/responses/TooLarge"
-          },
-          "415": {
-            "$ref": "#/components/responses/UnsupportedMedia"
-          },
-          "429": {
-            "$ref": "#/components/responses/RateLimited"
-          },
-          "502": {
-            "$ref": "#/components/responses/BadGateway"
-          },
-          "503": {
-            "$ref": "#/components/responses/Unavailable"
-          },
-          "504": {
-            "$ref": "#/components/responses/GatewayTimeout"
-          }
-        },
         "x-junctura-core-roles": [
           "core-reader",
           "core-writer"
@@ -4506,74 +4458,83 @@
                 "type": "string",
                 "format": "binary"
               }
+            },
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "format": "binary"
+                  },
+                  "recordRef": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/components/schemas/RecordRef"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "tags": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/components/schemas/ObjectTag"
+                    },
+                    "maxItems": 20,
+                    "uniqueItems": true
+                  }
+                },
+                "required": [
+                  "file"
+                ],
+                "additionalProperties": false
+              },
+              "example": {
+                "file": "example",
+                "recordRef": {
+                  "collection": "entries",
+                  "id": "44444444-4444-4444-8444-444444444444"
+                },
+                "tags": [
+                  "source"
+                ]
+              },
+              "encoding": {
+                "file": {
+                  "contentType": "application/octet-stream"
+                },
+                "recordRef": {
+                  "contentType": "application/json"
+                },
+                "tags": {
+                  "contentType": "application/json"
+                }
+              }
             }
           }
         },
-        "x-max-body-bytes": 5242880,
-        "x-min-body-bytes": 1,
-        "x-junctura-test-suite": "applications",
-        "x-junctura-planned-operation": {
-          "operationId": "uploadObjectWithMetadata",
-          "summary": "Upload an object with optional metadata",
-          "description": "The file part must be 1 byte–5 MiB and is published only after a clean scan. A recordRef may point to a live record owned by the caller. The link and tags confer no read access. Charge the bytes of current published objects to the per-app quota before publication. Replacement charges the size delta; deletion releases the current size. The octet-stream form creates an unlinked and untagged object. For multipart uploads the logical request includes file bytes, link and tags. Multipart boundaries are transport framing and do not change the logical request.",
-          "tags": [
-            "app-resource"
-          ],
-          "x-junctura-status": "planned",
-          "x-junctura-query-policy": "closed",
-          "security": [
-            {
-              "coreBearer": []
-            }
-          ],
-          "x-junctura-core-roles": [
-            "core-reader",
-            "core-writer"
-          ],
-          "x-junctura-authority": "app-resource",
-          "requestBody": {
-            "required": true,
-            "content": {
-              "application/octet-stream": {
-                "schema": {
-                  "type": "string",
-                  "format": "binary"
-                }
+        "x-max-body-bytes": 5308416,
+        "responses": {
+          "201": {
+            "description": "Successful response.",
+            "headers": {
+              "Cache-Control": {
+                "$ref": "#/components/headers/CacheControl"
               },
-              "multipart/form-data": {
+              "X-Content-Type-Options": {
+                "$ref": "#/components/headers/NoSniff"
+              }
+            },
+            "content": {
+              "application/json": {
                 "schema": {
-                  "type": "object",
-                  "properties": {
-                    "file": {
-                      "type": "string",
-                      "format": "binary"
-                    },
-                    "recordRef": {
-                      "anyOf": [
-                        {
-                          "$ref": "#/components/schemas/RecordRef"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    },
-                    "tags": {
-                      "type": "array",
-                      "items": {
-                        "$ref": "#/components/schemas/ObjectTag"
-                      },
-                      "maxItems": 20,
-                      "uniqueItems": true
-                    }
-                  },
-                  "required": [
-                    "file"
-                  ],
-                  "additionalProperties": false
+                  "$ref": "#/components/schemas/ObjectMetadata"
                 },
                 "example": {
-                  "file": "example",
+                  "id": "66666666-6666-4666-8666-666666666666",
+                  "size": 7,
                   "recordRef": {
                     "collection": "entries",
                     "id": "44444444-4444-4444-8444-444444444444"
@@ -4581,92 +4542,51 @@
                   "tags": [
                     "source"
                   ]
-                },
-                "encoding": {
-                  "file": {
-                    "contentType": "application/octet-stream"
-                  },
-                  "recordRef": {
-                    "contentType": "application/json"
-                  },
-                  "tags": {
-                    "contentType": "application/json"
-                  }
                 }
               }
             }
           },
-          "x-max-body-bytes": 5308416,
-          "responses": {
-            "201": {
-              "description": "Successful response.",
-              "headers": {
-                "Cache-Control": {
-                  "$ref": "#/components/headers/CacheControl"
-                },
-                "X-Content-Type-Options": {
-                  "$ref": "#/components/headers/NoSniff"
-                }
-              },
-              "content": {
-                "application/json": {
-                  "schema": {
-                    "$ref": "#/components/schemas/ObjectMetadata"
-                  },
-                  "example": {
-                    "id": "66666666-6666-4666-8666-666666666666",
-                    "size": 7,
-                    "recordRef": {
-                      "collection": "entries",
-                      "id": "44444444-4444-4444-8444-444444444444"
-                    },
-                    "tags": [
-                      "source"
-                    ]
-                  }
-                }
-              }
-            },
-            "400": {
-              "$ref": "#/components/responses/PlannedBadRequest"
-            },
-            "401": {
-              "$ref": "#/components/responses/Unauthorized"
-            },
-            "403": {
-              "$ref": "#/components/responses/PlannedForbidden"
-            },
-            "404": {
-              "$ref": "#/components/responses/NotFound"
-            },
-            "413": {
-              "$ref": "#/components/responses/PlannedTooLarge"
-            },
-            "415": {
-              "$ref": "#/components/responses/UnsupportedMedia"
-            },
-            "422": {
-              "$ref": "#/components/responses/ObjectUploadUnprocessable"
-            },
-            "429": {
-              "$ref": "#/components/responses/PlannedRateLimited"
-            },
-            "502": {
-              "$ref": "#/components/responses/BadGateway"
-            },
-            "503": {
-              "$ref": "#/components/responses/Unavailable"
-            },
-            "504": {
-              "$ref": "#/components/responses/GatewayTimeout"
-            }
+          "400": {
+            "$ref": "#/components/responses/PlannedBadRequest"
           },
-          "parameters": [
-            {
-              "$ref": "#/components/parameters/PlannedIdempotencyKey"
-            }
-          ]
-        }
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/PlannedForbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "413": {
+            "$ref": "#/components/responses/PlannedTooLarge"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMedia"
+          },
+          "422": {
+            "$ref": "#/components/responses/ObjectUploadUnprocessable"
+          },
+          "429": {
+            "$ref": "#/components/responses/PlannedRateLimited"
+          },
+          "502": {
+            "$ref": "#/components/responses/BadGateway"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          },
+          "504": {
+            "$ref": "#/components/responses/GatewayTimeout"
+          }
+        },
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/PlannedIdempotencyKey"
+          }
+        ],
+        "x-junctura-source": "src/modules/objects/objects.mjs",
+        "x-junctura-test-suite": "object-metadata"
       },
       "get": {
         "operationId": "listObjectsByMetadata",
@@ -4675,7 +4595,6 @@
         "tags": [
           "app-resource"
         ],
-        "x-junctura-status": "planned",
         "x-junctura-query-policy": "closed",
         "security": [
           {
@@ -4774,27 +4693,107 @@
           "504": {
             "$ref": "#/components/responses/GatewayTimeout"
           }
-        }
+        },
+        "x-junctura-source": "src/modules/objects/objects.mjs",
+        "x-junctura-test-suite": "object-metadata"
       }
     },
     "/v2/objects/{id}": {
       "put": {
-        "operationId": "v2PutObject",
-        "summary": "V2 put object",
-        "description": "Active registered backend resolved from verified tenant/issuer/client_id and exact operator-enrolled resource_subject. Owner-only mutations; individually shared reads. Suspension/revocation and disabled enrollment block access. Upload 1 byte to 5 MiB. Stable-UUID PUT with identical bytes is retryable; POST creates a new ID and is not blindly retried. V2 DELETE tombstones permanently; bytes/old versions retained. PUT publishes immutable versions after DB reauthorization; concurrent owner PUTs use last publication. UUIDs are tenant-scoped, so a foreign tenant may create independent bytes at the same UUID.",
+        "operationId": "replaceObjectWithMetadata",
+        "summary": "Create or replace an object with optional metadata",
+        "description": "The file part must be 1 byte–5 MiB and is published only after a clean scan. A recordRef may point to a live record owned by the caller. The link and tags confer no read access. Charge the bytes of current published objects to the per-app quota before publication. Replacement charges the size delta; deletion releases the current size. For an existing object, omitted metadata preserves the previous value. Use null to clear recordRef and [] to clear tags. A new object defaults to no link or tags. For multipart uploads the logical request includes file bytes, link and tags. Multipart boundaries are transport framing and do not change the logical request.",
         "tags": [
           "app-resource"
         ],
         "x-junctura-query-policy": "closed",
-        "x-junctura-source": "src/modules/objects/objects.mjs",
         "security": [
           {
             "coreBearer": []
           }
         ],
+        "x-junctura-core-roles": [
+          "core-reader",
+          "core-writer"
+        ],
+        "x-junctura-authority": "app-resource",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Id"
+          },
+          {
+            "$ref": "#/components/parameters/PlannedIdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/octet-stream": {
+              "schema": {
+                "type": "string",
+                "format": "binary"
+              }
+            },
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "format": "binary"
+                  },
+                  "recordRef": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/components/schemas/RecordRef"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "tags": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/components/schemas/ObjectTag"
+                    },
+                    "maxItems": 20,
+                    "uniqueItems": true
+                  }
+                },
+                "required": [
+                  "file"
+                ],
+                "additionalProperties": false
+              },
+              "example": {
+                "file": "example",
+                "recordRef": {
+                  "collection": "entries",
+                  "id": "44444444-4444-4444-8444-444444444444"
+                },
+                "tags": [
+                  "source"
+                ]
+              },
+              "encoding": {
+                "file": {
+                  "contentType": "application/octet-stream"
+                },
+                "recordRef": {
+                  "contentType": "application/json"
+                },
+                "tags": {
+                  "contentType": "application/json"
+                }
+              }
+            }
+          }
+        },
+        "x-max-body-bytes": 5308416,
         "responses": {
           "200": {
-            "description": "Existing live object replaced",
+            "description": "Successful response.",
             "headers": {
               "Cache-Control": {
                 "$ref": "#/components/headers/CacheControl"
@@ -4806,13 +4805,24 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ObjectReceipt"
+                  "$ref": "#/components/schemas/ObjectMetadata"
+                },
+                "example": {
+                  "id": "66666666-6666-4666-8666-666666666666",
+                  "size": 7,
+                  "recordRef": {
+                    "collection": "entries",
+                    "id": "44444444-4444-4444-8444-444444444444"
+                  },
+                  "tags": [
+                    "source"
+                  ]
                 }
               }
             }
           },
           "201": {
-            "description": "Successful response",
+            "description": "Successful response.",
             "headers": {
               "Cache-Control": {
                 "$ref": "#/components/headers/CacheControl"
@@ -4824,34 +4834,45 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ObjectReceipt"
+                  "$ref": "#/components/schemas/ObjectMetadata"
+                },
+                "example": {
+                  "id": "66666666-6666-4666-8666-666666666666",
+                  "size": 7,
+                  "recordRef": {
+                    "collection": "entries",
+                    "id": "44444444-4444-4444-8444-444444444444"
+                  },
+                  "tags": [
+                    "source"
+                  ]
                 }
               }
             }
           },
           "400": {
-            "$ref": "#/components/responses/BadRequest"
+            "$ref": "#/components/responses/PlannedBadRequest"
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
           },
           "403": {
-            "$ref": "#/components/responses/Forbidden"
+            "$ref": "#/components/responses/PlannedForbidden"
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
           },
-          "405": {
-            "$ref": "#/components/responses/MethodNotAllowed"
-          },
           "413": {
-            "$ref": "#/components/responses/TooLarge"
+            "$ref": "#/components/responses/PlannedTooLarge"
           },
           "415": {
             "$ref": "#/components/responses/UnsupportedMedia"
           },
+          "422": {
+            "$ref": "#/components/responses/ObjectUploadUnprocessable"
+          },
           "429": {
-            "$ref": "#/components/responses/RateLimited"
+            "$ref": "#/components/responses/PlannedRateLimited"
           },
           "502": {
             "$ref": "#/components/responses/BadGateway"
@@ -4863,217 +4884,8 @@
             "$ref": "#/components/responses/GatewayTimeout"
           }
         },
-        "x-junctura-core-roles": [
-          "core-reader",
-          "core-writer"
-        ],
-        "x-junctura-authority": "app-resource",
-        "parameters": [
-          {
-            "$ref": "#/components/parameters/Id"
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/octet-stream": {
-              "schema": {
-                "type": "string",
-                "format": "binary"
-              }
-            }
-          }
-        },
-        "x-max-body-bytes": 5242880,
-        "x-min-body-bytes": 1,
-        "x-junctura-test-suite": "applications",
-        "x-junctura-planned-operation": {
-          "operationId": "replaceObjectWithMetadata",
-          "summary": "Create or replace an object with optional metadata",
-          "description": "The file part must be 1 byte–5 MiB and is published only after a clean scan. A recordRef may point to a live record owned by the caller. The link and tags confer no read access. Charge the bytes of current published objects to the per-app quota before publication. Replacement charges the size delta; deletion releases the current size. For an existing object, omitted metadata preserves the previous value. Use null to clear recordRef and [] to clear tags. A new object defaults to no link or tags. For multipart uploads the logical request includes file bytes, link and tags. Multipart boundaries are transport framing and do not change the logical request.",
-          "tags": [
-            "app-resource"
-          ],
-          "x-junctura-status": "planned",
-          "x-junctura-query-policy": "closed",
-          "security": [
-            {
-              "coreBearer": []
-            }
-          ],
-          "x-junctura-core-roles": [
-            "core-reader",
-            "core-writer"
-          ],
-          "x-junctura-authority": "app-resource",
-          "parameters": [
-            {
-              "$ref": "#/components/parameters/Id"
-            },
-            {
-              "$ref": "#/components/parameters/PlannedIdempotencyKey"
-            }
-          ],
-          "requestBody": {
-            "required": true,
-            "content": {
-              "application/octet-stream": {
-                "schema": {
-                  "type": "string",
-                  "format": "binary"
-                }
-              },
-              "multipart/form-data": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "file": {
-                      "type": "string",
-                      "format": "binary"
-                    },
-                    "recordRef": {
-                      "anyOf": [
-                        {
-                          "$ref": "#/components/schemas/RecordRef"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    },
-                    "tags": {
-                      "type": "array",
-                      "items": {
-                        "$ref": "#/components/schemas/ObjectTag"
-                      },
-                      "maxItems": 20,
-                      "uniqueItems": true
-                    }
-                  },
-                  "required": [
-                    "file"
-                  ],
-                  "additionalProperties": false
-                },
-                "example": {
-                  "file": "example",
-                  "recordRef": {
-                    "collection": "entries",
-                    "id": "44444444-4444-4444-8444-444444444444"
-                  },
-                  "tags": [
-                    "source"
-                  ]
-                },
-                "encoding": {
-                  "file": {
-                    "contentType": "application/octet-stream"
-                  },
-                  "recordRef": {
-                    "contentType": "application/json"
-                  },
-                  "tags": {
-                    "contentType": "application/json"
-                  }
-                }
-              }
-            }
-          },
-          "x-max-body-bytes": 5308416,
-          "responses": {
-            "200": {
-              "description": "Successful response.",
-              "headers": {
-                "Cache-Control": {
-                  "$ref": "#/components/headers/CacheControl"
-                },
-                "X-Content-Type-Options": {
-                  "$ref": "#/components/headers/NoSniff"
-                }
-              },
-              "content": {
-                "application/json": {
-                  "schema": {
-                    "$ref": "#/components/schemas/ObjectMetadata"
-                  },
-                  "example": {
-                    "id": "66666666-6666-4666-8666-666666666666",
-                    "size": 7,
-                    "recordRef": {
-                      "collection": "entries",
-                      "id": "44444444-4444-4444-8444-444444444444"
-                    },
-                    "tags": [
-                      "source"
-                    ]
-                  }
-                }
-              }
-            },
-            "201": {
-              "description": "Successful response.",
-              "headers": {
-                "Cache-Control": {
-                  "$ref": "#/components/headers/CacheControl"
-                },
-                "X-Content-Type-Options": {
-                  "$ref": "#/components/headers/NoSniff"
-                }
-              },
-              "content": {
-                "application/json": {
-                  "schema": {
-                    "$ref": "#/components/schemas/ObjectMetadata"
-                  },
-                  "example": {
-                    "id": "66666666-6666-4666-8666-666666666666",
-                    "size": 7,
-                    "recordRef": {
-                      "collection": "entries",
-                      "id": "44444444-4444-4444-8444-444444444444"
-                    },
-                    "tags": [
-                      "source"
-                    ]
-                  }
-                }
-              }
-            },
-            "400": {
-              "$ref": "#/components/responses/PlannedBadRequest"
-            },
-            "401": {
-              "$ref": "#/components/responses/Unauthorized"
-            },
-            "403": {
-              "$ref": "#/components/responses/PlannedForbidden"
-            },
-            "404": {
-              "$ref": "#/components/responses/NotFound"
-            },
-            "413": {
-              "$ref": "#/components/responses/PlannedTooLarge"
-            },
-            "415": {
-              "$ref": "#/components/responses/UnsupportedMedia"
-            },
-            "422": {
-              "$ref": "#/components/responses/ObjectUploadUnprocessable"
-            },
-            "429": {
-              "$ref": "#/components/responses/PlannedRateLimited"
-            },
-            "502": {
-              "$ref": "#/components/responses/BadGateway"
-            },
-            "503": {
-              "$ref": "#/components/responses/Unavailable"
-            },
-            "504": {
-              "$ref": "#/components/responses/GatewayTimeout"
-            }
-          }
-        }
+        "x-junctura-source": "src/modules/objects/objects.mjs",
+        "x-junctura-test-suite": "object-metadata"
       },
       "get": {
         "operationId": "v2DownloadObject",

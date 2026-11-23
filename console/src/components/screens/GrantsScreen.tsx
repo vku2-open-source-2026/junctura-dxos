@@ -84,7 +84,7 @@ export const GrantsScreen: React.FC = () => {
             })
           : Promise.resolve({ items: [], truncated: false }),
       ]);
-      setAudit(auditPage.items);
+      setAudit(auditPage.items.filter((entry) => entry.source !== "application"));
       setPrincipals(principalPage.items);
     } catch (failure) {
       const code = failure instanceof Error ? failure.message : "";

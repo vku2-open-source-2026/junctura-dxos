@@ -74,7 +74,7 @@ export function createJuncturaClient({ baseUrl, clientId, clientSecret, timeoutM
     })();
     try { return await pending; } finally { pending = undefined; }
   }
-  async function request(path, { method = "GET", json, body, contentType, ifMatch, idempotencyKey, lockId, signal, bearer } = {}) {
+  async function request(path, { method = "GET", json, body, contentType, ifMatch, idempotencyKey, lockId, signal, bearer, stream = false } = {}) {
     if (typeof path !== "string" || !/^\/v[12]\//.test(path) || /[\\#\r\n]/.test(path)) throw new TypeError("Use a versioned public Gateway path");
     const url = new URL(path, base);
     if (url.origin !== base.origin || !/^\/v[12]\//.test(url.pathname)) throw new TypeError("Gateway path escapes the public API");
@@ -88,18 +88,26 @@ export function createJuncturaClient({ baseUrl, clientId, clientSecret, timeoutM
     let response;
     const payload = json === undefined ? body : JSON.stringify(json);
     const streaming = typeof ReadableStream !== "undefined" && payload instanceof ReadableStream;
-    const init = { method, headers, body: payload, redirect: "error", signal: signalFor(signal) };
+    const deadline = stream ? new AbortController() : undefined;
+    const timer = deadline && setTimeout(() => deadline.abort(), timeoutMs);
+    const requestSignal = deadline ? (signal ? AbortSignal.any([signal, deadline.signal]) : deadline.signal) : signalFor(signal);
+    const init = { method, headers, body: payload, redirect: "error", signal: requestSignal };
     if (streaming) init.duplex = "half";
     try { response = await fetcher(url, init); }
-    catch { throw new JuncturaError(0, "gateway_unavailable"); }
+    catch {
+      clearTimeout(timer);
+      throw new JuncturaError(0, "gateway_unavailable");
+    }
     if (!response.ok) {
       let detail;
       try { detail = await boundedJson(response); } catch { /* Never echo an untrusted error body. */ }
+      finally { clearTimeout(timer); }
       if (response.status === 401) cached = undefined;
       const code = typeof detail?.error === "string" && /^[a-z][a-z0-9_]{0,79}$/.test(detail.error) ? detail.error : "request_failed";
       const requestId = response.headers.get("x-request-id");
       throw new JuncturaError(response.status, code, /^[A-Za-z0-9-]{1,80}$/.test(requestId ?? "") ? requestId : undefined);
     }
+    clearTimeout(timer);
     return response;
   }
   const segment = value => encodeURIComponent(String(value));
@@ -129,10 +137,10 @@ export function createJuncturaClient({ baseUrl, clientId, clientSecret, timeoutM
   };
   const finish = response => response.body?.cancel();
   const workflowPath = id => `/v1/workflows/executions/${segment(id)}`;
-  const workflowRead = (path, filters, bearer) => {
+  const filteredRead = (path, filters, options) => {
     const query = new URLSearchParams(Object.entries(filters)
       .filter(([, value]) => value !== undefined).map(([key, value]) => [key, String(value)]));
-    return request(`${path}${query.size ? `?${query}` : ""}`, { bearer });
+    return request(`${path}${query.size ? `?${query}` : ""}`, options);
   };
   const client = {
     request,
@@ -228,7 +236,39 @@ export function createJuncturaClient({ baseUrl, clientId, clientSecret, timeoutM
       if (!target || typeof target !== "object" || Array.isArray(target)) throw new TypeError("share target must be an object");
       return (await request("/v2/resource-shares", { method: "POST", json: target, idempotencyKey })).json();
     },
-    async putObject(id, bytes) { return (await request(`/v2/objects/${segment(id)}`, { method: "PUT", body: bytes, contentType: "application/octet-stream" })).json(); },
+    async putObject(id, bytes, idempotencyKey = randomUUID()) {
+      if (!bytes) throw new TypeError("object bytes are required");
+      return (await request(`/v2/objects/${segment(id)}`, { method: "PUT", body: bytes, contentType: "application/octet-stream", idempotencyKey })).json();
+    },
+    async uploadObject({ file, recordRef, tags } = {}, idempotencyKey = randomUUID()) {
+      if (!file) throw new TypeError("file is required");
+      const form = new FormData();
+      form.append("file", file instanceof Blob ? file : new Blob([file], { type: "application/octet-stream" }), "object");
+      if (recordRef !== undefined) form.append("recordRef", new Blob([JSON.stringify(recordRef)], { type: "application/json" }));
+      if (tags !== undefined) form.append("tags", new Blob([JSON.stringify(tags)], { type: "application/json" }));
+      return (await request("/v2/objects", { method: "POST", body: form, idempotencyKey })).json();
+    },
+    async listObjectsByMetadata({ recordRef, tag, limit, cursor } = {}) {
+      const query = new URLSearchParams();
+      if (recordRef !== undefined) {
+        if (!recordRef || typeof recordRef !== "object" || Array.isArray(recordRef)) throw new TypeError("recordRef must be an object");
+        for (const [key, value] of Object.entries(recordRef)) {
+          if (value === undefined) continue;
+          query.set(`recordRef[${key}]`, String(value));
+        }
+      }
+      if (tag !== undefined) query.set("tag", tag);
+      if (limit !== undefined) query.set("limit", String(limit));
+      if (cursor !== undefined) query.set("cursor", cursor);
+      return (await request(`/v2/objects${query.size ? `?${query}` : ""}`)).json();
+    },
+    async searchReadableResources(query, { limit, cursor } = {}) {
+      if (typeof query !== "string" || query.length < 1 || query.length > 256) throw new TypeError("query must be a string of 1..256 characters");
+      const search = new URLSearchParams({ q: query });
+      if (limit !== undefined) search.set("limit", String(limit));
+      if (cursor !== undefined) search.set("cursor", cursor);
+      return (await request(`/v1/search?${search}`)).json();
+    },
     async getObject(id) { return (await request(`/v2/objects/${segment(id)}`)).arrayBuffer(); },
     async listDirectoryUnitTypes(page) { return (await directoryList("/v1/directory/unit-types", page)).json(); },
     async putDirectoryUnitType(unitType, name) {
@@ -265,6 +305,42 @@ export function createJuncturaClient({ baseUrl, clientId, clientSecret, timeoutM
           request(`/v1/me/consents/${segment(consentId)}/revoke`, { method: "POST", json: {}, bearer: userToken }).then(response => response.json()),
       });
     },
+    // The data subject's own access history and reports. A verified user token
+    // with the bound subjectId claim is required; the flag id keeps its
+    // `capability:` or `app:` prefix.
+    subjectAccess(userToken) {
+      if (typeof userToken !== "string" || !userToken) throw new TypeError("A verified user access token is required");
+      return Object.freeze({
+        list: ({ limit, cursor } = {}) => {
+          const query = new URLSearchParams();
+          if (limit !== undefined) query.set("limit", String(limit));
+          if (cursor !== undefined) query.set("cursor", cursor);
+          return request(`/v1/me/data-access${query.size ? `?${query}` : ""}`, { bearer: userToken }).then(response => response.json());
+        },
+        flag: (accessId, reason) => {
+          if (typeof accessId !== "string" || !/^(capability|app):[0-9a-f-]{36}$/.test(accessId)) throw new TypeError("accessId must be a prefixed access id");
+          if (!["unrecognized", "other"].includes(reason)) throw new TypeError("reason must be unrecognized or other");
+          return request(`/v1/me/data-access/${accessId}/flag`, { method: "POST", json: { reason }, bearer: userToken }).then(response => response.json());
+        },
+        emergencyFeedback: (executionId, feedback) => {
+          if (typeof executionId !== "string" || !/^[0-9a-f-]{36}$/.test(executionId)) throw new TypeError("executionId must be a UUID");
+          if (!feedback || !["recognized", "unrecognized", "other"].includes(feedback.decision)) throw new TypeError("decision is required");
+          return request(`/v1/me/emergency-accesses/${segment(executionId)}/feedback`, { method: "POST", json: feedback, bearer: userToken }).then(response => response.json());
+        },
+      });
+    },
+    async appendAppAuditEvent(body, { idempotencyKey = randomUUID(), userToken } = {}) {
+      return (await request("/v1/audit-events", { method: "POST", json: body, idempotencyKey, bearer: userToken })).json();
+    },
+    async queryAppAuditEvents({ userToken, ...filters } = {}) {
+      return (await filteredRead("/v1/audit-events", filters, { bearer: userToken })).json();
+    },
+    exportAppAuditEvents({ userToken, signal, ...filters } = {}) {
+      return filteredRead("/v1/audit-events:export", filters, { bearer: userToken, signal, stream: true });
+    },
+    streamAuthorizedEvents({ userToken, signal } = {}) {
+      return request("/v1/events", { bearer: userToken, signal, stream: true });
+    },
     async workflowDefinitions() { return (await request("/v1/workflows/definitions")).json(); },
     async startWorkflow(definitionId, input, idempotencyKey = randomUUID()) {
       return (await request("/v1/workflows/executions", { method: "POST", json: { definitionId, input }, idempotencyKey })).json();
@@ -276,7 +352,7 @@ export function createJuncturaClient({ baseUrl, clientId, clientSecret, timeoutM
       return (await request(workflowPath(executionId), { bearer: userToken })).json();
     },
     async listWorkflowTasks({ limit, cursor, definitionKey, unit, candidateGroup, overdue, userToken } = {}) {
-      return (await workflowRead("/v1/workflows/tasks", { limit, cursor, definitionKey, unit, candidateGroup, overdue }, userToken)).json();
+      return (await filteredRead("/v1/workflows/tasks", { limit, cursor, definitionKey, unit, candidateGroup, overdue }, { bearer: userToken })).json();
     },
     async claimWorkflowTask(taskId, { ttlSeconds, userToken } = {}) {
       return (await request(`/v1/workflows/tasks/${segment(taskId)}/claim`, {
@@ -294,7 +370,7 @@ export function createJuncturaClient({ baseUrl, clientId, clientSecret, timeoutM
       await finish(await request(workflowPath(executionId), { method: "DELETE", bearer: userToken }));
     },
     async listWorkflowTaskHistory(executionId, { limit, cursor, userToken } = {}) {
-      return (await workflowRead(`${workflowPath(executionId)}/history`, { limit, cursor }, userToken)).json();
+      return (await filteredRead(`${workflowPath(executionId)}/history`, { limit, cursor }, { bearer: userToken })).json();
     },
     async discover({ limit, cursor } = {}) {
       const query = new URLSearchParams();

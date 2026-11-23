@@ -297,3 +297,17 @@ Keep the PostgreSQL execution/outbox data and Flowable history together during b
 unconfirmed engine outcome stays pending and retries with a capped delay. A task ended by external deletion
 is marked `cancelled`. A task ended by a different command is marked `unconfirmed`. History contains
 confirmed completions. Use the stored execution and task IDs to reconcile committed records with Flowable.
+
+## File, audit, search and access events (042–046)
+
+- Migration 042 adds application payloads to the existing tenant audit chain. It preserves historical
+  hashes and seals the action, classification and subject visibility at append. Export projects the
+  authorized view under the chain lock and materializes a short-lived snapshot.
+- Migration 043 adds published object metadata, incarnation-bound record links and quotas on bytes.
+- Migration 044 queues index updates in the source transaction and checks live authority before returning
+  search references. Keep Meilisearch private. Its index can be rebuilt from the authoritative store.
+- Migration 045 adds a short-lived per-tenant notification journal. Deferred triggers publish record
+  status changes and consent revocations at commit. Core replicas observe active tasks from Flowable
+  and deduplicate them in PostgreSQL. Clients reconnect from the current head.
+- Migration 046 adds separate subject reports and reads application access through the projection
+  introduced in migration 042.

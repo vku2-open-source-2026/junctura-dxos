@@ -3,10 +3,11 @@
 import { randomUUID } from "node:crypto";
 import { handleApplications } from "./modules/applications/applications.mjs";
 import { APPLICATION_STATS_PATH, handleApplicationStats } from "./modules/applications/stats.mjs";
-import { AUDIT_EVENTS_PATH, AUDIT_VERIFY_PATH, SUBJECT_ACCESS_PATH, handleAudit, handleAuditEvents, handleSubjectAccess } from "./modules/audit/audit.mjs";
+import { AUDIT_EVENTS_PATH, AUDIT_EXPORT_PATH, AUDIT_VERIFY_PATH, handleAudit, handleAuditEvents } from "./modules/audit/audit.mjs";
 import { DIRECTORY_MANAGEMENT_PATH, DIRECTORY_ORGANIZATIONS_PATH, DIRECTORY_PRINCIPALS_PATH, handleDirectory } from "./modules/directory/directory.mjs";
+import { createEventStreams, EVENTS_PATH } from "./modules/events/events.mjs";
 import { handleIdentity, verifiedSubjectBinding } from "./modules/identity/identity.mjs";
-import { handleConsent, isConsentPath, isPlannedSubjectPath } from "./modules/consent/consent.mjs";
+import { handleConsent, isConsentPath } from "./modules/consent/consent.mjs";
 import { createAuthorizer } from "./platform/auth/auth.mjs";
 import { handleApprovals, handleCapabilities } from "./modules/capability/registry/capabilities.mjs";
 import { handleCompositions } from "./modules/capability/composition/registry.mjs";
@@ -17,7 +18,9 @@ import { handleObjects } from "./modules/objects/objects.mjs";
 import { checkReadiness } from "./bootstrap/readiness.mjs";
 import { handleWorkflow } from "./modules/workflow/workflow.mjs";
 import { handleShares, requireLegacyClient, resourceIdentity } from "./modules/resources/resources.mjs";
+import { SEARCH_PATH, handleSearch } from "./modules/search/search.mjs";
 import { handleSecrets } from "./modules/secrets/secrets.mjs";
+import { handleSubjectAccessEvents, SUBJECT_ACCESS_EVENTS_PATH } from "./modules/subject-access/subject-access.mjs";
 import { isStoragePath, handleStorage } from "./modules/storage/storage.mjs";
 import { TRUST_GRAPH_PATH, handleTrust, handleTrustGraph } from "./modules/capability/trust/trust.mjs";
 import { handleMetrics, isMetricsPath, recordRequest } from "./modules/metrics/metrics.mjs";
@@ -26,6 +29,7 @@ const tenantOf = new WeakMap();
 
 export function createApi(config) {
   const authorizer = createAuthorizer(config);
+  const events = config.eventsRuntime ?? createEventStreams(config);
   const authorize = async (request, withContext = false) => {
     const identity = await authorizer(request, withContext);
     tenantOf.set(request, identity.tenantId);
@@ -152,16 +156,11 @@ export function createApi(config) {
           { error: error instanceof HttpError ? error.message : "capabilities_unavailable", issues: error.issues, requestId });
       }
     }
-    if (isConsentPath(path) || (request.method === "POST" && isPlannedSubjectPath(path))) {
+    if (isConsentPath(path)) {
       const requestId = randomUUID();
       response.setHeader("X-Request-Id", requestId);
       try {
         const identity = await authorize(request, true);
-        if (isPlannedSubjectPath(path)) {
-          response.setHeader("Cache-Control", "no-store");
-          if (!await verifiedSubjectBinding(config, identity)) throw new HttpError(403, "verified_subject_required");
-          throw new HttpError(404, "not_found");
-        }
         return await handleConsent(request, response, identity, config, new URL(request.url, "http://core"));
       } catch (error) {
         if (error.status === 413) response.setHeader("Connection", "close");
@@ -169,24 +168,42 @@ export function createApi(config) {
           { error: error instanceof HttpError ? error.message : "consent_unavailable", requestId });
       }
     }
-    if (path === SUBJECT_ACCESS_PATH) {
+    if (path === SUBJECT_ACCESS_EVENTS_PATH || /^\/v1\/me\/(?:data-access\/[^/]+\/flag|emergency-accesses\/[^/]+\/feedback)$/.test(path)) {
       const requestId = randomUUID();
       response.setHeader("X-Request-Id", requestId);
       try {
-        return await handleSubjectAccess(request, response, await authorize(request, true), config, new URL(request.url, "http://core"));
+        const identity = await authorize(request, true);
+        if (!identity.subjectId || (request.method === "POST" && !await verifiedSubjectBinding(config, identity))) {
+          throw new HttpError(403, "verified_subject_required");
+        }
+        return await handleSubjectAccessEvents(request, response, identity, config, new URL(request.url, "http://core"));
       } catch (error) {
+        if (error.status === 413) response.setHeader("Connection", "close");
+        if (error instanceof URIError) return json(response, 400, { error: "invalid_request", requestId });
         return json(response, error instanceof HttpError ? error.status : 503,
-          { error: error instanceof HttpError ? error.message : "audit_unavailable", requestId });
+          { error: error instanceof HttpError ? error.message : "subject_access_unavailable", requestId });
       }
     }
-    if (path === AUDIT_EVENTS_PATH) {
+    if (path === AUDIT_EVENTS_PATH || path === AUDIT_EXPORT_PATH) {
       const requestId = randomUUID();
       response.setHeader("X-Request-Id", requestId);
       try {
         return await handleAuditEvents(request, response, await authorize(request, true), config, new URL(request.url, "http://core"));
       } catch (error) {
+        if (error.status === 413) response.setHeader("Connection", "close");
         return json(response, error instanceof HttpError ? error.status : 503,
           { error: error instanceof HttpError ? error.message : "audit_unavailable", requestId });
+      }
+    }
+    if (path === EVENTS_PATH) {
+      const requestId = randomUUID();
+      response.setHeader("X-Request-Id", requestId);
+      try {
+        return await events.handle(request, response, await authorize(request, true), () => authorize(request, true),
+          new URL(request.url, "http://core"));
+      } catch (error) {
+        return json(response, error instanceof HttpError ? error.status : 503,
+          { error: error instanceof HttpError ? error.message : "events_unavailable", requestId });
       }
     }
     if (path === AUDIT_VERIFY_PATH) {
@@ -250,6 +267,16 @@ export function createApi(config) {
       } catch (error) {
         return json(response, error instanceof HttpError ? error.status : 503,
           { error: error instanceof HttpError ? error.message : "storage_unavailable", requestId });
+      }
+    }
+    if (path === SEARCH_PATH) {
+      const requestId = randomUUID();
+      response.setHeader("X-Request-Id", requestId);
+      try {
+        return await handleSearch(request, response, await authorize(request, true), config, new URL(request.url, "http://core"));
+      } catch (error) {
+        return json(response, error instanceof HttpError ? error.status : 503,
+          { error: error instanceof HttpError ? error.message : "search_unavailable", requestId });
       }
     }
     if (path?.startsWith("/v1/data/")) {

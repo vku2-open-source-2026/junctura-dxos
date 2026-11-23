@@ -111,11 +111,21 @@ jobs:
         run: npm run test:recovery
       - name: Verify protected audit boundary, redaction and persistence
         run: npm run test:audit
+      - name: Verify application audit, multipart objects, search and subject access
+        run: |
+          npm run test:audit-app
+          npm run test:object-metadata
+          npm run test:search
+          npm run test:subject-access
+      - name: Verify authorized live events with scaled Core
+        run: |
+          docker compose up --detach --no-deps --scale core=2 --wait --wait-timeout 60 core
+          npm run test:events
       - name: Verify record operations through the gateway in strict mode
         env:
           STRICT_RECORD_WRITES: "true"
         run: |
-          docker compose up --detach --no-deps --force-recreate --wait --wait-timeout 60 core
+          docker compose up --detach --no-deps --scale core=1 --force-recreate --wait --wait-timeout 60 core
           npm run healthcheck
           npm run test:records
           npm run test:record-queries

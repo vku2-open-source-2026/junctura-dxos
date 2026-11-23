@@ -63,7 +63,7 @@ export function useAppRelated(application: Application | null): AppRelatedData {
       setData({
         capabilities,
         storage,
-        audit: audit.items,
+        audit: audit.items.filter((entry) => entry.source !== "application"),
         principals: principals.items,
         loading: false,
         storageError: storage === null,

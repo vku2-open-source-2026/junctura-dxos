@@ -8,6 +8,38 @@ All notable changes to Junctura are recorded here. Versions follow
 
 ## Unreleased
 
+- **Object metadata and tenant search (issue #67):** `/v2/objects` uploads now accept
+  `multipart/form-data` with an owned `recordRef` and up to 20 `tags` beside the octet-stream form,
+  require a UUID `Idempotency-Key` for both create and replace, and preserve omitted metadata on
+  replace while explicit `null`/`[]` clears it. The stored link keeps the linked record's incarnation,
+  so a deleted or re-created record never presents a stale link, and record links confer no read
+  access. A per-app file quota charges the bytes of currently published versions under a per-app lock
+  (`429 quota_exceeded` with `appFileBytes`, `limit`, `used`), replacement charges the delta, deletion
+  releases the size, and legacy versions are backfilled from the Filer before charging. `GET /v2/objects`
+  lists authorized metadata by `recordRef` and/or `tag` with a caller-bound cursor. Migration 043 adds
+  the metadata columns, quota table and object command RPC. `GET /v1/search` (migration 044) searches
+  declared record fields and text extracted from clean files (plain, Markdown, CSV, JSON and PDFs with
+  a text layer) in a per-tenant Meilisearch index on a private network; the queue is written in the
+  same transaction as the data change, the worker confirms each index task, and every page is
+  re-authorized in PostgreSQL against the current version and schema with sensitive fields never
+  indexed. Cursors bind to the query, caller and index generation and expire to `400 invalid_cursor`.
+  `npm run setup` generates the Meilisearch master key. Migration 046 completes the privacy block:
+  `GET /v1/me/data-access` merges capability calls and application events declared visible to the
+  caller's bound subject with a caller-bound cursor, `POST /v1/me/data-access/{accessId}/flag` reports
+  a visible entry (same-reason retries replay, changed reasons answer `409`), and
+  `POST /v1/me/emergency-accesses/{executionId}/feedback` collects the subject's own emergency-access
+  feedback. Reports are separate rows keyed by the access event; the audit chain and the management
+  review stay byte-identical, and every flag re-checks the exact history predicate so hidden entries
+  stay hidden.
+- Applications can append declared business events to the tenant audit chain, query their own
+  events and export authorized snapshots as NDJSON. Regulators see entries for assigned units,
+  while management readers receive a structural projection of application events. The verifier
+  covers both historical platform hashes and application payloads. The Node SDK exposes append,
+  query and export.
+- `GET /v1/events` streams live task, record status and consent references. Core rechecks
+  current authority at delivery. Replicas use a short-lived PostgreSQL journal, and the gateway
+  forwards SSE without buffering.
+
 - Business workflows now bind tasks to directory units and candidate groups. The task inbox supports
   execution and per-step deadlines, parallel tasks, and expiring claims. Workflow completion accepts
   optional app-owned records with a durable outbox and replays the original `202`. The Flowable worker

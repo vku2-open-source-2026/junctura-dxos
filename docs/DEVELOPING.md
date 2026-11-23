@@ -183,7 +183,7 @@ See [CI](../.github/workflows/ci.yml).
 
 Run [infra/postgres/migrate.sh](../infra/postgres/migrate.sh) with `docker compose run --rm data-migrate`;
 Compose gates `data` and then Core on success. Number after the highest `infra/postgres/NNN-*.sql`:
-currently `041`. Mount new files in `compose.yaml`'s `data-migrate` service.
+currently `046`. Mount new files in `compose.yaml`'s `data-migrate` service.
 **All applied files are immutable**: preserve their exact bytes and add forward migrations.
 
 SHA-256 enters `core.schema_migration_checksums` in the applying transaction
@@ -264,6 +264,11 @@ The runner strips CRLF delimiters for execution but hashes original bytes;
 | 039 | Exact-version workflow unit policies, durable start reservations and deadlines. |
 | 040 | Expiring task claims, completion outbox, worker leases and confirmed task history. |
 | 041 | Cancellation recovery lease, legacy task history and checkpoint key conflict compatibility. |
+| 042 | Versioned application audit payloads, tenant chain and export snapshots. |
+| 043 | Published object metadata, record links and app storage quotas. |
+| 044 | Transactional search indexing jobs and live result authorization. |
+| 045 | Tenant notification journal and authorized live event RPCs. |
+| 046 | Subject access visibility and separate access and emergency reports. |
 
 Set `STRICT_RECORD_WRITES=true` on every Core replica after updating callers to
 send idempotency keys and record preconditions. The default is `false`.
