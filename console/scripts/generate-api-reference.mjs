@@ -30,6 +30,12 @@ const externalSpecs = new Map([
       fs.readFileSync(path.join(contractDir, "composition-v1.schema.json"), "utf8"),
     ),
   ],
+  [
+    "./foundation-api.openapi.json",
+    JSON.parse(
+      fs.readFileSync(path.join(contractDir, "foundation-api.openapi.json"), "utf8"),
+    ),
+  ],
 ]);
 
 const UUID = "c3d4e5f6-7a8b-4c9d-0e1f-2a3b4c5d6e7f";
@@ -124,8 +130,13 @@ function sample(input, spec, depth = 0, seen = new Set(), hint = "") {
 
 function parametersFor(pathItem, operation, spec) {
   return [...(pathItem.parameters ?? []), ...(operation.parameters ?? [])]
-    .map((parameter) => deref(parameter, spec).value)
-    .filter((parameter) => parameter && parameter.in && parameter.name);
+    .map((parameter) => {
+      const { value } = deref(parameter, spec);
+      if (!value?.in || !value.name) {
+        throw new Error(`Unresolved parameter ${parameter.$ref ?? parameter.name} for ${operation.operationId}`);
+      }
+      return value;
+    });
 }
 
 function summarizeParameter(parameter, spec) {
@@ -237,6 +248,12 @@ for (const [endpointPath, pathItem] of Object.entries(capabilitySpec.paths)) {
 }
 
 const payload = { foundation, capability };
+
+const consentPost = capability.find(endpoint => endpoint.path === "/v1/me/consents" && endpoint.method === "POST");
+if (!consentPost?.headerParameters.some(header => header.name === "Idempotency-Key" && header.required)) {
+  throw new Error("POST /v1/me/consents must show the required Idempotency-Key header");
+}
+
 const generated = `${JSON.stringify(payload)}\n`;
 
 if (process.argv.includes("--check")) {

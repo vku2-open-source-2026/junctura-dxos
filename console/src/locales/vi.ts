@@ -2226,6 +2226,7 @@ export const vi = {
   "consents": {
     "title": "Đồng ý của người dùng",
     "subtitle": "Khi lời gọi liên quan tới một người, người đó phải đồng ý trước. Người dùng tự cấp và rút lại đồng ý.",
+    "verifiedHint": "Tài khoản này chưa có subjectId do operator gán. Operator cần gán subjectId của bạn trong nhà cung cấp danh tính; trước đó danh sách và việc cấp đồng ý của bạn bị từ chối.",
     "readOnlyNote": "Quản trị viên chỉ xem; việc rút lại đồng ý do người dùng thực hiện trong ứng dụng.",
     "searchPlaceholder": "Tìm theo người, ứng dụng hoặc phạm vi dữ liệu…",
     "activeCount": "Đồng ý đang hiệu lực",

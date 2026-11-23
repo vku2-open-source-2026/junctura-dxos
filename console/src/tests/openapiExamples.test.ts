@@ -1,5 +1,6 @@
 // SPDX-FileCopyrightText: 2026 Junctura Contributors
 // SPDX-License-Identifier: Apache-2.0
+import { API_DOC_ENDPOINTS, generateDocCurl } from "../constants/apiReferenceData";
 import fs from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
@@ -333,4 +334,19 @@ describe("Executable OpenAPI examples", () => {
       }
     }
   });
+});
+
+
+it("shows a usable consent grant request with a fresh expiry and required key", () => {
+  const endpoint = API_DOC_ENDPOINTS.find(({ method, path }) => method === "POST" && path === "/v1/me/consents");
+  expect(endpoint).toBeDefined();
+  expect(endpoint!.headerParameters).toEqual(expect.arrayContaining([
+    expect.objectContaining({ name: "Idempotency-Key", required: true }),
+  ]));
+  const now = Date.now();
+  const curl = generateDocCurl(endpoint!);
+  expect(curl).toContain('Idempotency-Key: $IDEMPOTENCY_KEY');
+  const body = JSON.parse(curl.match(/-d '({[\s\S]+})'/)![1]);
+  expect(Date.parse(body.expiresAt)).toBeGreaterThan(now);
+  expect(Date.parse(body.expiresAt)).toBeLessThan(now + 366 * 86_400_000);
 });

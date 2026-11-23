@@ -8,6 +8,34 @@ All notable changes to Junctura are recorded here. Versions follow
 
 ## Unreleased
 
+- **Identity review hardening (issue #65, round 1):** migrations 036–038 write their ledger under the
+  migration role; tenant membership now names the tenant root group by full path (`/{tenant}`), so a
+  leaf group name can no longer prove membership in another tenant; the directory sync client imports
+  without a fixed guessable secret (Keycloak generates a random one, `directory:provision` rotates it
+  to the configured value) and Core starts with synchronization disabled when no secret is configured
+  instead of refusing to boot. Directory coordination moved from an in-process lock map to PostgreSQL:
+  every command takes a per-tenant advisory lock, deletions stay as tombstones so a generation is never
+  reused across a delete and recreate, and a confirm that updates zero rows reports `409` instead of
+  success. Member writes verify the subject in the tenant before committing desired state, the Keycloak
+  adapter pages every listing, distinguishes `404` from a broken response and reads the whole membership
+  set back. Directory mutations additionally require the `core-writer` role. Legacy consent rows are
+  backfilled one way, from a login subject to its bound subjectId, rows no binding reaches stay
+  quarantined, and the active-consent limit counts under its own per-subject lock; bindings refuse
+  identifiers shared between a subjectId and a login subject. `@junctura/server-client` consent methods
+  now carry the caller's own OIDC token (`client.consent(userToken)`), the Console API reference
+  resolves cross-file Foundation references (required `Idempotency-Key` headers included) and the
+  Console explains `403 verified_subject_required` on the consents screen. Recovery verification now
+  checks the new roles, forced RLS and the binding gate after a restore.
+- **Verified identity, directory management and subject consents (issue #65):** migrations 036–038 add
+  operator-bound subject identifiers per (tenant, issuer), durable directory desired state with per-row
+  generations synced into Keycloak through a dedicated service account, and consent under the verified
+  subject identity. `GET /v1/identity` now reports verified `units`, `/unit/group` paths and a bound
+  `subjectId`; twelve `/v1/directory/*` management operations (unit types, flat units, per-unit groups,
+  unit members) confirm a change only after reading the provider back at the stored generation; consent
+  list/grant/revoke use the canonical verified subject, keep pre-binding consents authorized through the
+  same mapping and return `403 verified_subject_required` without one. The identity provider realm gains
+  organization group and subjectId mappers plus the `junctura-directory-sync` service account
+  (`npm run directory:provision` reapplies them to an existing realm).
 - **Indexed record queries, archives and app-group shares:** migrations 031, 034 and 035 add
   filtered list and aggregate RPCs, short-lived export snapshots with transactional NDJSON import,
   and operator-managed app groups whose live membership authorizes one-record read shares.

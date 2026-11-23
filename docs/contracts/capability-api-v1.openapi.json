@@ -3037,7 +3037,7 @@
       "post": {
         "operationId": "createCapabilityExecution",
         "summary": "Accept one guarded pinned capability execution",
-        "description": "Opt-in guarded execution. C4B accepts only target and input and pins a published caller-owned composition. Every step rechecks original OIDC authority, active apps and independent same-tenant direct invoke grants; providers authenticate and redeem single-use step-bound tickets. C4B replay returns the durable reservation and never restores a lost lease or retries ambiguous work. Results require original consumer/subject/client and current authority. Success requires validated final output and confirmed Flowable history. No cancellation, resume, delegation or automatic retries. C4A retains its documented untouched-work replay contract. See CAPABILITY_COMPOSITION.md and CAPABILITY_EXECUTION.md. An optional context {purpose, dataSubject} declares why the call is made and whose data it concerns; it is bound into the idempotent request, sealed into the audit chain, passed to the provider on ticket redemption and listed for the data subject by GET /v1/me/data-access. When the context names a dataSubject, an active consent of that person for the consumer application, capability and purpose is required (403 subject_consent_required), unless emergency is true with a justification; emergency calls are queued for review and at most five may be pending per consumer (429 emergency_review_backlog).",
+        "description": "Opt-in guarded execution. C4B accepts only target and input and pins a published caller-owned composition. Every step rechecks original OIDC authority, active apps and independent same-tenant direct invoke grants; providers authenticate and redeem single-use step-bound tickets. C4B replay returns the durable reservation and never restores a lost lease or retries ambiguous work. Results require original consumer/subject/client and current authority. Success requires validated final output and confirmed Flowable history. No cancellation, resume, delegation or automatic retries. C4A retains its documented untouched-work replay contract. See CAPABILITY_COMPOSITION.md and CAPABILITY_EXECUTION.md. An optional context with purpose, dataSubject and dataSubjectKind declares why the call is made and whose data it concerns; it is bound into the idempotent request, sealed into the audit chain, passed to the provider on ticket redemption and listed for the data subject by GET /v1/me/data-access. When the context names a dataSubject, an active consent of that person for the consumer application, capability and purpose is required (403 subject_consent_required), unless emergency is true with a justification; emergency calls are queued for review and at most five may be pending per consumer (429 emergency_review_backlog).",
         "tags": [
           "capability-executions"
         ],
@@ -4208,7 +4208,7 @@
       "get": {
         "operationId": "getSubjectAccessLog",
         "summary": "List capability calls that concerned the caller",
-        "description": "Implemented. Returns the newest 200 capability invocations whose consumer named the caller as dataSubject, with purpose, consumer, provider, capability and state. Any verified principal may ask, only about itself, in its own tenant and issuer. No inputs, outputs, tickets or operator identities are returned. Purpose and a SHA-256 of the data subject are sealed in the audit chain (event execution.subject_accessed).",
+        "description": "Implemented. Returns the newest 200 capability invocations whose consumer named the caller as dataSubject, with purpose, consumer, provider, capability and state. Any verified principal may ask, only about itself, in its own tenant and issuer. No inputs, outputs, tickets or operator identities are returned. Purpose and a SHA-256 of the declared identifier are sealed in the audit chain (event execution.subject_accessed). The hash also covers the kind for canonical identifiers.",
         "tags": [
           "audit-events"
         ],
@@ -4433,384 +4433,215 @@
     },
     "/v1/me/consents": {
       "get": {
-        "operationId": "listSubjectConsents",
-        "summary": "List the caller's consents",
-        "description": "Implemented. The newest 200 consents the caller granted, with state active, expired or revoked.",
-        "tags": [
-          "audit-events"
+        "operationId": "listConsentsBySubjectId",
+        "summary": "List the data subject's consents",
+        "description": "Return the latest 200 consents belonging to the data subject. Uses the authenticated login, tenant and issuer for compatibility. A supplied subjectId claim must match the operator binding or the request returns 403.",
+        "tags": ["tenant"],
+        "x-junctura-status": "implemented-verified-subject",
+        "x-junctura-source": "src/modules/consent/consent.mjs",
+        "x-junctura-test-suite": "capabilities",
+        "x-junctura-query-policy": "closed",
+        "security": [
+          {
+            "oidcBearer": []
+          }
         ],
+        "x-junctura-core-roles": ["core-reader"],
+        "x-junctura-authority": "tenant",
         "responses": {
           "200": {
-            "description": "Consents",
+            "description": "Successful response.",
+            "headers": {
+              "Cache-Control": {"$ref": "./foundation-api.openapi.json#/components/headers/CacheControl"},
+              "X-Content-Type-Options": {"$ref": "./foundation-api.openapi.json#/components/headers/NoSniff"}
+            },
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SubjectConsentList"
+                "schema": {"$ref": "#/components/schemas/SubjectConsents"},
+                "example": {
+                  "consents": [
+                    {
+                      "consentId": "11111111-1111-4111-8111-111111111111",
+                      "consumer": {
+                        "appId": "22222222-2222-4222-8222-222222222222",
+                        "displayName": "Example App"
+                      },
+                      "capabilityId": "urn:junctura:capability:33333333-3333-4333-8333-333333333333:lookup",
+                      "capabilityTitle": "Lookup",
+                      "purposes": ["service_review"],
+                      "createdAt": "2030-01-10T09:00:00Z",
+                      "expiresAt": "2030-01-12T12:00:00Z",
+                      "revokedAt": null,
+                      "state": "active"
+                    }
+                  ]
                 }
               }
             }
           },
-          "400": {
-            "$ref": "#/components/responses/BadRequest"
-          },
-          "401": {
-            "$ref": "#/components/responses/Unauthorized"
-          },
-          "403": {
-            "$ref": "#/components/responses/Forbidden"
-          },
-          "404": {
-            "$ref": "#/components/responses/NotFound"
-          },
-          "429": {
-            "$ref": "#/components/responses/TooManyRequests"
-          },
-          "503": {
-            "$ref": "#/components/responses/Unavailable"
-          }
-        },
-        "x-junctura-required-permissions": [
-          "verified-subject"
-        ],
-        "x-junctura-status": "implemented-subject-consent",
-        "x-junctura-source": "src/modules/consent/consent.mjs",
-        "x-junctura-test-suite": "capabilities",
-        "x-junctura-core-roles": [
-          "core-reader"
-        ],
-        "x-junctura-planned-operation": {
-          "operationId": "listConsentsBySubjectId",
-          "summary": "List the data subject's consents",
-          "description": "Return the latest 200 consents belonging to the data subject. Use the verified token subjectId, tenant and issuer; a supplied subject identifier never selects another person. A missing verified claim returns 403.",
-          "tags": ["tenant"],
-          "x-junctura-status": "planned",
-          "x-junctura-query-policy": "closed",
-          "security": [
-            {
-              "oidcBearer": []
-            }
-          ],
-          "x-junctura-core-roles": ["core-reader"],
-          "x-junctura-authority": "tenant",
-          "responses": {
-            "200": {
-              "description": "Successful response.",
-              "headers": {
-                "Cache-Control": {"$ref": "./foundation-api.openapi.json#/components/headers/CacheControl"},
-                "X-Content-Type-Options": {"$ref": "./foundation-api.openapi.json#/components/headers/NoSniff"}
-              },
-              "content": {
-                "application/json": {
-                  "schema": {"$ref": "#/components/schemas/SubjectConsents"},
-                  "example": {
-                    "consents": [
-                      {
-                        "consentId": "11111111-1111-4111-8111-111111111111",
-                        "consumer": {
-                          "appId": "22222222-2222-4222-8222-222222222222",
-                          "displayName": "Example App"
-                        },
-                        "capabilityId": "urn:junctura:capability:33333333-3333-4333-8333-333333333333:lookup",
-                        "capabilityTitle": "Lookup",
-                        "purposes": ["service_review"],
-                        "createdAt": "2030-01-10T09:00:00Z",
-                        "expiresAt": "2030-01-12T12:00:00Z",
-                        "revokedAt": null,
-                        "state": "active"
-                      }
-                    ]
-                  }
-                }
-              }
-            },
-            "400": {"$ref": "./foundation-api.openapi.json#/components/responses/PlannedBadRequest"},
-            "401": {"$ref": "./foundation-api.openapi.json#/components/responses/Unauthorized"},
-            "403": {"$ref": "./foundation-api.openapi.json#/components/responses/PlannedForbidden"},
-            "404": {"$ref": "./foundation-api.openapi.json#/components/responses/NotFound"},
-            "429": {"$ref": "./foundation-api.openapi.json#/components/responses/PlannedRateLimited"},
-            "502": {"$ref": "./foundation-api.openapi.json#/components/responses/BadGateway"},
-            "503": {"$ref": "./foundation-api.openapi.json#/components/responses/Unavailable"},
-            "504": {"$ref": "./foundation-api.openapi.json#/components/responses/GatewayTimeout"}
-          }
+          "400": {"$ref": "./foundation-api.openapi.json#/components/responses/PlannedBadRequest"},
+          "401": {"$ref": "./foundation-api.openapi.json#/components/responses/Unauthorized"},
+          "403": {"$ref": "./foundation-api.openapi.json#/components/responses/PlannedForbidden"},
+          "404": {"$ref": "./foundation-api.openapi.json#/components/responses/NotFound"},
+          "429": {"$ref": "./foundation-api.openapi.json#/components/responses/PlannedRateLimited"},
+          "502": {"$ref": "./foundation-api.openapi.json#/components/responses/BadGateway"},
+          "503": {"$ref": "./foundation-api.openapi.json#/components/responses/Unavailable"},
+          "504": {"$ref": "./foundation-api.openapi.json#/components/responses/GatewayTimeout"}
         }
+      
       },
       "post": {
-        "operationId": "createSubjectConsent",
-        "summary": "Grant consent",
-        "description": "Implemented. The caller allows one active consumer application to call one capability about the caller for the listed purposes until expiresAt (at most 366 days). A C4A call that names a data subject needs a matching active consent unless it is an emergency.",
-        "tags": [
-          "audit-events"
-        ],
-        "responses": {
-          "201": {
-            "description": "Consent created",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SubjectConsent"
-                }
-              }
-            }
-          },
-          "400": {
-            "$ref": "#/components/responses/BadRequest"
-          },
-          "401": {
-            "$ref": "#/components/responses/Unauthorized"
-          },
-          "403": {
-            "$ref": "#/components/responses/Forbidden"
-          },
-          "404": {
-            "$ref": "#/components/responses/NotFound"
-          },
-          "429": {
-            "$ref": "#/components/responses/TooManyRequests"
-          },
-          "503": {
-            "$ref": "#/components/responses/Unavailable"
-          },
-          "415": {
-            "$ref": "#/components/responses/UnsupportedMediaType"
-          }
-        },
-        "x-junctura-required-permissions": [
-          "verified-subject"
-        ],
-        "x-junctura-status": "implemented-subject-consent",
+        "operationId": "createConsentBySubjectId",
+        "summary": "Grant consent as the data subject",
+        "description": "Grant the active registered app the declared purposes for an existing capability, expiring within 366 days. Uses the authenticated login, tenant and issuer for compatibility. A supplied subjectId claim must match the operator binding or the request returns 403.",
+        "tags": ["tenant"],
+        "x-junctura-status": "implemented-verified-subject",
         "x-junctura-source": "src/modules/consent/consent.mjs",
         "x-junctura-test-suite": "capabilities",
-        "x-junctura-core-roles": [
-          "core-reader"
+        "x-junctura-query-policy": "closed",
+        "security": [
+          {
+            "oidcBearer": []
+          }
         ],
+        "x-junctura-core-roles": ["core-reader"],
+        "x-junctura-authority": "tenant",
         "requestBody": {
           "required": true,
           "content": {
             "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/SubjectConsentCreate"
+              "schema": {"$ref": "#/components/schemas/ConsentCreatePlanned"},
+              "example": {
+                "consumerAppId": "22222222-2222-4222-8222-222222222222",
+                "capabilityId": "urn:junctura:capability:33333333-3333-4333-8333-333333333333:lookup",
+                "purposes": ["service_review"],
+                "expiresAt": "2030-01-12T12:00:00Z"
               }
             }
           }
         },
-        "x-junctura-planned-operation": {
-          "operationId": "createConsentBySubjectId",
-          "summary": "Grant consent as the data subject",
-          "description": "Grant the active registered app the declared purposes for an existing capability, expiring within 366 days. Use the verified token subjectId, tenant and issuer; a supplied subject identifier never selects another person. A missing verified claim returns 403.",
-          "tags": ["tenant"],
-          "x-junctura-status": "planned",
-          "x-junctura-query-policy": "closed",
-          "security": [
-            {
-              "oidcBearer": []
-            }
-          ],
-          "x-junctura-core-roles": ["core-reader"],
-          "x-junctura-authority": "tenant",
-          "requestBody": {
-            "required": true,
+        "x-max-body-bytes": 16384,
+        "responses": {
+          "201": {
+            "description": "Successful response.",
+            "headers": {
+              "Cache-Control": {"$ref": "./foundation-api.openapi.json#/components/headers/CacheControl"},
+              "X-Content-Type-Options": {"$ref": "./foundation-api.openapi.json#/components/headers/NoSniff"},
+              "Location": {"$ref": "./foundation-api.openapi.json#/components/headers/Location"}
+            },
             "content": {
               "application/json": {
-                "schema": {"$ref": "#/components/schemas/ConsentCreatePlanned"},
+                "schema": {"$ref": "#/components/schemas/PlannedSubjectConsent"},
                 "example": {
-                  "consumerAppId": "22222222-2222-4222-8222-222222222222",
+                  "consentId": "11111111-1111-4111-8111-111111111111",
+                  "consumer": {
+                    "appId": "22222222-2222-4222-8222-222222222222",
+                    "displayName": "Example App"
+                  },
                   "capabilityId": "urn:junctura:capability:33333333-3333-4333-8333-333333333333:lookup",
+                  "capabilityTitle": "Lookup",
                   "purposes": ["service_review"],
-                  "expiresAt": "2030-01-12T12:00:00Z"
+                  "createdAt": "2030-01-10T09:00:00Z",
+                  "expiresAt": "2030-01-12T12:00:00Z",
+                  "revokedAt": null,
+                  "state": "active"
                 }
               }
             }
           },
-          "x-max-body-bytes": 16384,
-          "responses": {
-            "201": {
-              "description": "Successful response.",
-              "headers": {
-                "Cache-Control": {"$ref": "./foundation-api.openapi.json#/components/headers/CacheControl"},
-                "X-Content-Type-Options": {"$ref": "./foundation-api.openapi.json#/components/headers/NoSniff"},
-                "Location": {"$ref": "./foundation-api.openapi.json#/components/headers/Location"}
-              },
-              "content": {
-                "application/json": {
-                  "schema": {"$ref": "#/components/schemas/PlannedSubjectConsent"},
-                  "example": {
-                    "consentId": "11111111-1111-4111-8111-111111111111",
-                    "consumer": {
-                      "appId": "22222222-2222-4222-8222-222222222222",
-                      "displayName": "Example App"
-                    },
-                    "capabilityId": "urn:junctura:capability:33333333-3333-4333-8333-333333333333:lookup",
-                    "capabilityTitle": "Lookup",
-                    "purposes": ["service_review"],
-                    "createdAt": "2030-01-10T09:00:00Z",
-                    "expiresAt": "2030-01-12T12:00:00Z",
-                    "revokedAt": null,
-                    "state": "active"
-                  }
-                }
-              }
-            },
-            "400": {"$ref": "./foundation-api.openapi.json#/components/responses/PlannedBadRequest"},
-            "401": {"$ref": "./foundation-api.openapi.json#/components/responses/Unauthorized"},
-            "403": {"$ref": "./foundation-api.openapi.json#/components/responses/PlannedForbidden"},
-            "404": {"$ref": "./foundation-api.openapi.json#/components/responses/NotFound"},
-            "413": {"$ref": "./foundation-api.openapi.json#/components/responses/PlannedTooLarge"},
-            "415": {"$ref": "./foundation-api.openapi.json#/components/responses/UnsupportedMedia"},
-            "422": {"$ref": "./foundation-api.openapi.json#/components/responses/IdempotencyKeyReused"},
-            "429": {"$ref": "./foundation-api.openapi.json#/components/responses/PlannedRateLimited"},
-            "502": {"$ref": "./foundation-api.openapi.json#/components/responses/BadGateway"},
-            "503": {"$ref": "./foundation-api.openapi.json#/components/responses/Unavailable"},
-            "504": {"$ref": "./foundation-api.openapi.json#/components/responses/GatewayTimeout"}
-          },
-          "parameters": [
-            {"$ref": "./foundation-api.openapi.json#/components/parameters/PlannedIdempotencyKey"}
-          ]
-        }
+          "400": {"$ref": "./foundation-api.openapi.json#/components/responses/PlannedBadRequest"},
+          "401": {"$ref": "./foundation-api.openapi.json#/components/responses/Unauthorized"},
+          "403": {"$ref": "./foundation-api.openapi.json#/components/responses/PlannedForbidden"},
+          "404": {"$ref": "./foundation-api.openapi.json#/components/responses/NotFound"},
+          "413": {"$ref": "./foundation-api.openapi.json#/components/responses/PlannedTooLarge"},
+          "415": {"$ref": "./foundation-api.openapi.json#/components/responses/UnsupportedMedia"},
+          "422": {"$ref": "./foundation-api.openapi.json#/components/responses/IdempotencyKeyReused"},
+          "429": {"$ref": "./foundation-api.openapi.json#/components/responses/PlannedRateLimited"},
+          "502": {"$ref": "./foundation-api.openapi.json#/components/responses/BadGateway"},
+          "503": {"$ref": "./foundation-api.openapi.json#/components/responses/Unavailable"},
+          "504": {"$ref": "./foundation-api.openapi.json#/components/responses/GatewayTimeout"}
+        },
+        "parameters": [
+          {"$ref": "./foundation-api.openapi.json#/components/parameters/PlannedIdempotencyKey"}
+        ]
+      
       }
     },
     "/v1/me/consents/{consentId}/revoke": {
       "post": {
-        "operationId": "revokeSubjectConsent",
-        "summary": "Revoke a consent",
-        "description": "Implemented. Revokes one of the caller's consents immediately; calls already reserved under it lose their provider ticket at redemption. Body must be {}.",
-        "tags": [
-          "audit-events"
-        ],
-        "responses": {
-          "200": {
-            "description": "Consent",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SubjectConsent"
-                }
-              }
-            }
-          },
-          "400": {
-            "$ref": "#/components/responses/BadRequest"
-          },
-          "401": {
-            "$ref": "#/components/responses/Unauthorized"
-          },
-          "403": {
-            "$ref": "#/components/responses/Forbidden"
-          },
-          "404": {
-            "$ref": "#/components/responses/NotFound"
-          },
-          "429": {
-            "$ref": "#/components/responses/TooManyRequests"
-          },
-          "503": {
-            "$ref": "#/components/responses/Unavailable"
-          },
-          "415": {
-            "$ref": "#/components/responses/UnsupportedMediaType"
-          }
-        },
-        "x-junctura-required-permissions": [
-          "verified-subject"
-        ],
-        "x-junctura-status": "implemented-subject-consent",
+        "operationId": "revokeConsentBySubjectId",
+        "summary": "Revoke the data subject's consent",
+        "description": "Revoking an already revoked consent returns its current representation. Uses the authenticated login, tenant and issuer for compatibility. A supplied subjectId claim must match the operator binding or the request returns 403.",
+        "tags": ["tenant"],
+        "x-junctura-status": "implemented-verified-subject",
         "x-junctura-source": "src/modules/consent/consent.mjs",
         "x-junctura-test-suite": "capabilities",
-        "x-junctura-core-roles": [
-          "core-reader"
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/AuditVerificationRequest"
-              }
-            }
+        "x-junctura-query-policy": "closed",
+        "security": [
+          {
+            "oidcBearer": []
           }
-        },
+        ],
+        "x-junctura-core-roles": ["core-reader"],
+        "x-junctura-authority": "tenant",
         "parameters": [
           {
             "name": "consentId",
             "in": "path",
             "required": true,
-            "schema": {
-              "type": "string",
-              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
-            }
+            "schema": {"$ref": "./foundation-api.openapi.json#/components/schemas/Uuid"},
+            "example": "11111111-1111-4111-8111-111111111111"
           }
         ],
-        "x-junctura-planned-operation": {
-          "operationId": "revokeConsentBySubjectId",
-          "summary": "Revoke the data subject's consent",
-          "description": "Revoking an already revoked consent returns its current representation. Use the verified token subjectId, tenant and issuer; a supplied subject identifier never selects another person. A missing verified claim returns 403.",
-          "tags": ["tenant"],
-          "x-junctura-status": "planned",
-          "x-junctura-query-policy": "closed",
-          "security": [
-            {
-              "oidcBearer": []
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {"$ref": "./foundation-api.openapi.json#/components/schemas/EmptyObject"},
+              "example": {}
             }
-          ],
-          "x-junctura-core-roles": ["core-reader"],
-          "x-junctura-authority": "tenant",
-          "parameters": [
-            {
-              "name": "consentId",
-              "in": "path",
-              "required": true,
-              "schema": {"$ref": "./foundation-api.openapi.json#/components/schemas/Uuid"},
-              "example": "11111111-1111-4111-8111-111111111111"
-            }
-          ],
-          "requestBody": {
-            "required": true,
+          }
+        },
+        "x-max-body-bytes": 16384,
+        "responses": {
+          "200": {
+            "description": "Successful response.",
+            "headers": {
+              "Cache-Control": {"$ref": "./foundation-api.openapi.json#/components/headers/CacheControl"},
+              "X-Content-Type-Options": {"$ref": "./foundation-api.openapi.json#/components/headers/NoSniff"}
+            },
             "content": {
               "application/json": {
-                "schema": {"$ref": "./foundation-api.openapi.json#/components/schemas/EmptyObject"},
-                "example": {}
+                "schema": {"$ref": "#/components/schemas/PlannedSubjectConsent"},
+                "example": {
+                  "consentId": "11111111-1111-4111-8111-111111111111",
+                  "consumer": {
+                    "appId": "22222222-2222-4222-8222-222222222222",
+                    "displayName": "Example App"
+                  },
+                  "capabilityId": "urn:junctura:capability:33333333-3333-4333-8333-333333333333:lookup",
+                  "capabilityTitle": "Lookup",
+                  "purposes": ["service_review"],
+                  "createdAt": "2030-01-10T09:00:00Z",
+                  "expiresAt": "2030-01-12T12:00:00Z",
+                  "revokedAt": "2030-01-12T12:00:00Z",
+                  "state": "revoked"
+                }
               }
             }
           },
-          "x-max-body-bytes": 16384,
-          "responses": {
-            "200": {
-              "description": "Successful response.",
-              "headers": {
-                "Cache-Control": {"$ref": "./foundation-api.openapi.json#/components/headers/CacheControl"},
-                "X-Content-Type-Options": {"$ref": "./foundation-api.openapi.json#/components/headers/NoSniff"}
-              },
-              "content": {
-                "application/json": {
-                  "schema": {"$ref": "#/components/schemas/PlannedSubjectConsent"},
-                  "example": {
-                    "consentId": "11111111-1111-4111-8111-111111111111",
-                    "consumer": {
-                      "appId": "22222222-2222-4222-8222-222222222222",
-                      "displayName": "Example App"
-                    },
-                    "capabilityId": "urn:junctura:capability:33333333-3333-4333-8333-333333333333:lookup",
-                    "capabilityTitle": "Lookup",
-                    "purposes": ["service_review"],
-                    "createdAt": "2030-01-10T09:00:00Z",
-                    "expiresAt": "2030-01-12T12:00:00Z",
-                    "revokedAt": "2030-01-12T12:00:00Z",
-                    "state": "revoked"
-                  }
-                }
-              }
-            },
-            "400": {"$ref": "./foundation-api.openapi.json#/components/responses/PlannedBadRequest"},
-            "401": {"$ref": "./foundation-api.openapi.json#/components/responses/Unauthorized"},
-            "403": {"$ref": "./foundation-api.openapi.json#/components/responses/PlannedForbidden"},
-            "404": {"$ref": "./foundation-api.openapi.json#/components/responses/NotFound"},
-            "413": {"$ref": "./foundation-api.openapi.json#/components/responses/PlannedTooLarge"},
-            "415": {"$ref": "./foundation-api.openapi.json#/components/responses/UnsupportedMedia"},
-            "429": {"$ref": "./foundation-api.openapi.json#/components/responses/PlannedRateLimited"},
-            "502": {"$ref": "./foundation-api.openapi.json#/components/responses/BadGateway"},
-            "503": {"$ref": "./foundation-api.openapi.json#/components/responses/Unavailable"},
-            "504": {"$ref": "./foundation-api.openapi.json#/components/responses/GatewayTimeout"}
-          }
+          "400": {"$ref": "./foundation-api.openapi.json#/components/responses/PlannedBadRequest"},
+          "401": {"$ref": "./foundation-api.openapi.json#/components/responses/Unauthorized"},
+          "403": {"$ref": "./foundation-api.openapi.json#/components/responses/PlannedForbidden"},
+          "404": {"$ref": "./foundation-api.openapi.json#/components/responses/NotFound"},
+          "413": {"$ref": "./foundation-api.openapi.json#/components/responses/PlannedTooLarge"},
+          "415": {"$ref": "./foundation-api.openapi.json#/components/responses/UnsupportedMedia"},
+          "429": {"$ref": "./foundation-api.openapi.json#/components/responses/PlannedRateLimited"},
+          "502": {"$ref": "./foundation-api.openapi.json#/components/responses/BadGateway"},
+          "503": {"$ref": "./foundation-api.openapi.json#/components/responses/Unavailable"},
+          "504": {"$ref": "./foundation-api.openapi.json#/components/responses/GatewayTimeout"}
         }
+      
       }
     },
     "/v1/me/emergency-accesses/{id}/feedback": {
@@ -7427,7 +7258,12 @@
             "type": "string",
             "minLength": 1,
             "maxLength": 255,
-            "description": "Identity-provider subject of the person whose data the call concerns. Shown to that person in GET /v1/me/data-access."
+            "description": "Identifier of the person whose data the call concerns. Defaults to a login subject."
+          },
+          "dataSubjectKind": {
+            "type": "string",
+            "enum": ["canonical"],
+            "description": "Identifies an operator-bound subjectId. A missing kind means login."
           },
           "emergency": {
             "const": true
@@ -8378,7 +8214,12 @@
             "type": "string",
             "minLength": 1,
             "maxLength": 255,
-            "description": "Identity-provider subject of the person whose data the call concerns. Shown to that person in GET /v1/me/data-access."
+            "description": "Identifier of the person whose data the call concerns. Defaults to a login subject."
+          },
+          "dataSubjectKind": {
+            "type": "string",
+            "enum": ["login", "canonical"],
+            "description": "Use canonical for an operator-bound subjectId. A missing kind means login."
           },
           "emergency": {
             "const": true,
@@ -8392,6 +8233,7 @@
           }
         },
         "dependentRequired": {
+          "dataSubjectKind": ["dataSubject"],
           "emergency": [
             "dataSubject",
             "justification"

@@ -106,12 +106,13 @@ Methods are included with each family; action suffixes are described in the link
 | `/v1/capability-executions` (POST), `/{executionId}` (GET) | Opt-in C4A/C4B invocation and status | Bound consumer, exact invocation authority; writer for submission | [CAPABILITIES.md](CAPABILITIES.md) |
 | `/v1/capability-authorizations/introspect` (POST) | Opt-in provider ticket redemption | Writer, exact bound provider and valid ticket/context | [CAPABILITIES.md](CAPABILITIES.md) |
 | `/v1/compositions` and `/*` (GET, POST, PUT) | Opt-in C4B registry/lifecycle | `config.compositionRuntime`; management `compositions.write` / `compositions.publish` | [CAPABILITIES.md](CAPABILITIES.md) |
-| `/v1/me/consents` (GET, POST), `/{consentId}/revoke` (POST) | Manage the caller's own consents | Verified subject/client; no writer requirement | [SECURITY.md](SECURITY.md) |
-| `/v1/me/data-access` (GET) | Capability calls naming the caller as data subject | Verified subject/client; own tenant/issuer/subject only | [SECURITY.md](SECURITY.md) |
+| `/v1/me/consents` (GET, POST), `/{consentId}/revoke` (POST) | Manage the caller's own consents | Own authenticated login with a matching binding if the token supplies `subjectId` | [SECURITY.md](SECURITY.md) |
+| `/v1/me/data-access` (GET) | Capability calls naming the caller as data subject | Verified client and own tenant, issuer and subject | [SECURITY.md](SECURITY.md) |
 | `/v1/emergency-accesses` (GET), `/{executionId}/review` (POST) | Review emergency invocations | List: management `trust.approve` or `audit.read`; review: `trust.approve` and writer | [SECURITY.md](SECURITY.md) |
 | `/v1/audit-events` (GET), `/v1/audit-events/verify` (POST) | Protected event query and chain verification | Management `audit.read`; no writer requirement | Internal protected audit contract below; [SECURITY.md](SECURITY.md) |
 | `/v1/metrics/traffic`, `/requests`, `/features` (GET) | Per-tenant, process-local traffic observations | Management `audit.read`; verified client ID | Traffic metrics below |
 | `/v1/directory/principals`, `/organizations` (GET) | Tenant principal/application directory | Management `audit.read` | Tenant directory below |
+| `/v1/directory/unit-types`, `/units`, `/units/{unit}/groups`, `/units/{unit}/members` (GET), item PUT/DELETE | Directory management desired state | Management `directory.write`; writer for mutations | Tenant directory below |
 | `/v1/storage/summary`, `/files`, `/collections` (GET) | Storage aggregates and reduced metadata | Management `audit.read` | Storage summary and workflow history below |
 
 Nginx proxies all `^/v[12]/` paths after authentication. With both `config.executionRuntime` and
@@ -125,8 +126,12 @@ Authentication or gateway errors can precede these responses. See [CAPABILITIES.
 - `GET/HEAD /health` checks process liveness. `GET /ready` returns `200` or `503`, checking OIDC discovery/issuer
   and configured data RLS access, filer metadata/registered volume, ClamAV, secrets service and authenticated workflow engine.
   Readiness does not prove every future operation or complete disaster recovery.
-- `GET /v1/identity` returns `{subject,tenantId,roles}` and optional `preferredUsername` from the caller's own
+- `GET /v1/identity` returns `{subject,tenantId,roles,units,groups}` and optional `preferredUsername` from the caller's own
   safe `preferred_username` claim (well-formed, nonblank, at most 255 code points, without C0/DEL controls).
+  `units` and `groups` come from the token's verified group paths under the tenant namespace, default to `[]`,
+  and use `/unit/group` paths. An operator-bound `subjectId` claim appears only while the binding maps it to the
+  caller's own login subject in this tenant and issuer; it is distinct from `subject` and never looked up from
+  provider administration.
 - `/identity/realms/junctura/.well-known/openid-configuration` provides upstream discovery;
   use standard OIDC authorization, token/refresh, userinfo, keys and logout APIs.
 
@@ -432,13 +437,31 @@ Directory, identity, metrics and unrecognized paths map to `other`; only observe
 | `/v1/directory/principals` | GET | `{items:[{subject,issuer,managementClient,permissions,enabled,displayName,organization,jobTitle,kind}],truncated}` |
 | `/v1/directory/organizations` | GET | `{root:{id,name,kind,children},relations:[{from,to,label}],truncated}` |
 
-Both require management `audit.read` in the caller's tenant/issuer, reject query parameters, and return `no-store`. The private `junctura_directory_api` role reads local tables; it never calls Keycloak administration or returns secrets/tokens/bodies.
+Both require management `audit.read` in the caller's tenant/issuer, reject query parameters, and return `no-store`. The private `junctura_directory_api` role reads local tables; it never returns secrets/tokens/bodies.
 Principals are capped at 1000, ordered by subject/issuer/client. Nullable bounded profile fields are operator-owned
 presentation metadata, not provider claims; `kind` is `admin`, `application` or `null`.
 The organization root is the tenant (`platform`); children are registered applications (`application`), without a separate organization table.
 Relations include active, unexpired direct grants only; labels use the capability title, falling back to its exact ID.
 Limits are 1000 applications and 500 relations; `truncated` reports overflow. Application names come from registrations;
 other principals use subjects, while callers can obtain their own `preferredUsername` from identity.
+
+An enrolled management principal with `directory.write` additionally manages the organization itself:
+list `/v1/directory/unit-types` and `/v1/directory/units` with `limit`/`cursor` keyset pages, then PUT or DELETE
+`/v1/directory/unit-types/{unitType}`, `/v1/directory/units/{unit}`, `/v1/directory/units/{unit}/groups/{group}`
+and `/v1/directory/units/{unit}/members/{subject}`. Mutations additionally require the `core-writer` role.
+Units stay flat; every referenced unit type, unit or group
+must already exist, and a member's `groups` array replaces that unit's group assignments for one existing tenant
+subject. Every change is stored as desired state with a per-row generation and applied to the identity provider
+through a dedicated service account; the API reports success only after reading the provider back and finding
+exactly that generation, and a retry of the same desired state converges. Deletions stay as durable tombstones
+until confirmed, so a generation is never reused across a delete and recreate, and every command serializes on a
+per-tenant advisory lock in PostgreSQL, so concurrent replicas never overwrite one another. PUT returns `201` for
+a new row and
+`200` for an updated or identical one; repeating a DELETE returns `204`; deleting a resource that is still
+referenced conflicts with `409 resource_conflict`. Previously issued tokens can retain old membership claims
+until they are renewed. The provider realm keeps organization groups under a per-tenant namespace, so verified
+group paths are `/{tenant}/{unit}/{group}` upstream and `/unit/group` in Core responses; tenant membership
+itself is proven only by the exact root group path `/{tenant}`.
 
 ## Application statistics
 
@@ -635,10 +658,37 @@ below zero, Core returns `409 limit_exceeded` and both quantities stay the same.
 
 An enrolled `directory.write` principal manages `/v1/directory/unit-types`, `/v1/directory/units`,
 and each unit's `groups` and `members`. List each collection and use PUT or DELETE at an item URL.
-The provider synchronizes these changes into Keycloak. Renew a token to refresh membership claims.
-`GET /v1/identity` exposes verified `units` and group paths of the form `/unit/group`.
-Data-subject accounts carry a verified `subjectId` claim. Core uses it, with tenant and issuer, for
-`/v1/me/*` consent, access history, feedback and flagging. The login identifier remains `subject`.
+Core takes a PostgreSQL lease per tenant before changing desired state. A competing write can return
+`409 resource_conflict`. Provider mutations renew the lease, and confirmation requires both the current
+lease and row generation. GET lists show the last confirmed values. With no sync client configured,
+provider-backed writes return `503` before saving changes. A provider outage after a save leaves work for
+the background reconciler. Each replica can run it, and the tenant lease coordinates who applies each job.
+The periodic sweep reads back confirmed rows and deletion tombstones too, so a late Keycloak write
+after lease expiry is corrected without a client retry. Renew the token to refresh membership claims.
+
+For rollout on an existing realm, run `npm run directory:provision` first. It discovers clients using the
+Junctura mapper template and aligns their tenant memberships to full group paths. Pass `--clients` for
+enrolled clients with custom mapper layouts. Configure a replacement sync secret before enabling the
+client. Inventory enrolled clients, renew their tokens and check that each carries its exact
+`/{tenant}` root. Then deploy Core with migrations 036–038. Operators can seed verified one-to-one
+bindings after migration 036 for the migration 038 backfill, or create them afterward and let the
+insert trigger map the login's existing consents. Renew each user's token after assigning `subject_id`
+to use its verified `subjectId`. Account holders cannot edit this managed attribute.
+
+`GET /v1/identity` exposes verified `units` and group paths of the form `/unit/group`. A bound
+`subjectId` is optional. The existing consent and history routes retain compatibility by looking up the
+authenticated login in its tenant and issuer. A consent request with a mismatched `subjectId` claim
+returns `403 verified_subject_required`. The planned flag and feedback routes require a verified binding.
+Consent grants require a UUID `Idempotency-Key`. The first committed result replays for 24 hours.
+
+Capability callers can name a login with `dataSubject`, or set `dataSubjectKind: "canonical"` to name
+an operator-bound subject ID. Unmapped consents stay in the login namespace pending operator
+reconciliation. The access log uses the binding for canonical events and the login for login events.
+Operators review ambiguous historical entries against the original execution and consent before assigning
+an identifier kind. Binding keys are immutable in normal operation.
+The planned delegated-user path for application audit depends on Keycloak token exchange that verifies
+both app and actor, followed by a SQL enrollment check. Resource authorization currently uses the
+enrolled backend service-account subject.
 
 ### Files, events, search and privacy
 

@@ -1289,7 +1289,6 @@
         "tags": [
           "application-admin"
         ],
-        "x-junctura-status": "planned",
         "x-junctura-query-policy": "closed",
         "security": [
           {
@@ -1361,7 +1360,9 @@
           "504": {
             "$ref": "#/components/responses/GatewayTimeout"
           }
-        }
+        },
+        "x-junctura-source": "src/modules/directory/directory.mjs",
+        "x-junctura-test-suite": "directory"
       }
     },
     "/v1/directory/unit-types/{unitType}": {
@@ -1372,7 +1373,6 @@
         "tags": [
           "application-admin"
         ],
-        "x-junctura-status": "planned",
         "x-junctura-query-policy": "closed",
         "security": [
           {
@@ -1380,7 +1380,8 @@
           }
         ],
         "x-junctura-core-roles": [
-          "core-reader"
+          "core-reader",
+          "core-writer"
         ],
         "x-junctura-authority": "tenant",
         "x-junctura-permission": "directory.write",
@@ -1488,7 +1489,9 @@
           "504": {
             "$ref": "#/components/responses/GatewayTimeout"
           }
-        }
+        },
+        "x-junctura-source": "src/modules/directory/directory.mjs",
+        "x-junctura-test-suite": "directory"
       },
       "delete": {
         "operationId": "deleteDirectoryUnitType",
@@ -1497,7 +1500,6 @@
         "tags": [
           "application-admin"
         ],
-        "x-junctura-status": "planned",
         "x-junctura-query-policy": "closed",
         "security": [
           {
@@ -1505,7 +1507,8 @@
           }
         ],
         "x-junctura-core-roles": [
-          "core-reader"
+          "core-reader",
+          "core-writer"
         ],
         "x-junctura-authority": "tenant",
         "x-junctura-permission": "directory.write",
@@ -1552,7 +1555,9 @@
           "504": {
             "$ref": "#/components/responses/GatewayTimeout"
           }
-        }
+        },
+        "x-junctura-source": "src/modules/directory/directory.mjs",
+        "x-junctura-test-suite": "directory"
       }
     },
     "/v1/directory/units": {
@@ -1563,7 +1568,6 @@
         "tags": [
           "application-admin"
         ],
-        "x-junctura-status": "planned",
         "x-junctura-query-policy": "closed",
         "security": [
           {
@@ -1636,7 +1640,9 @@
           "504": {
             "$ref": "#/components/responses/GatewayTimeout"
           }
-        }
+        },
+        "x-junctura-source": "src/modules/directory/directory.mjs",
+        "x-junctura-test-suite": "directory"
       }
     },
     "/v1/directory/units/{unit}": {
@@ -1647,7 +1653,6 @@
         "tags": [
           "application-admin"
         ],
-        "x-junctura-status": "planned",
         "x-junctura-query-policy": "closed",
         "security": [
           {
@@ -1655,7 +1660,8 @@
           }
         ],
         "x-junctura-core-roles": [
-          "core-reader"
+          "core-reader",
+          "core-writer"
         ],
         "x-junctura-authority": "tenant",
         "x-junctura-permission": "directory.write",
@@ -1766,7 +1772,9 @@
           "504": {
             "$ref": "#/components/responses/GatewayTimeout"
           }
-        }
+        },
+        "x-junctura-source": "src/modules/directory/directory.mjs",
+        "x-junctura-test-suite": "directory"
       },
       "delete": {
         "operationId": "deleteDirectoryUnit",
@@ -1775,7 +1783,6 @@
         "tags": [
           "application-admin"
         ],
-        "x-junctura-status": "planned",
         "x-junctura-query-policy": "closed",
         "security": [
           {
@@ -1783,7 +1790,8 @@
           }
         ],
         "x-junctura-core-roles": [
-          "core-reader"
+          "core-reader",
+          "core-writer"
         ],
         "x-junctura-authority": "tenant",
         "x-junctura-permission": "directory.write",
@@ -1830,7 +1838,9 @@
           "504": {
             "$ref": "#/components/responses/GatewayTimeout"
           }
-        }
+        },
+        "x-junctura-source": "src/modules/directory/directory.mjs",
+        "x-junctura-test-suite": "directory"
       }
     },
     "/v1/directory/units/{unit}/groups": {
@@ -1841,7 +1851,6 @@
         "tags": [
           "application-admin"
         ],
-        "x-junctura-status": "planned",
         "x-junctura-query-policy": "closed",
         "security": [
           {
@@ -1924,7 +1933,9 @@
           "504": {
             "$ref": "#/components/responses/GatewayTimeout"
           }
-        }
+        },
+        "x-junctura-source": "src/modules/directory/directory.mjs",
+        "x-junctura-test-suite": "directory"
       }
     },
     "/v1/directory/units/{unit}/groups/{group}": {
@@ -1935,7 +1946,6 @@
         "tags": [
           "application-admin"
         ],
-        "x-junctura-status": "planned",
         "x-junctura-query-policy": "closed",
         "security": [
           {
@@ -1943,7 +1953,8 @@
           }
         ],
         "x-junctura-core-roles": [
-          "core-reader"
+          "core-reader",
+          "core-writer"
         ],
         "x-junctura-authority": "tenant",
         "x-junctura-permission": "directory.write",
@@ -2063,7 +2074,9 @@
           "504": {
             "$ref": "#/components/responses/GatewayTimeout"
           }
-        }
+        },
+        "x-junctura-source": "src/modules/directory/directory.mjs",
+        "x-junctura-test-suite": "directory"
       },
       "delete": {
         "operationId": "deleteDirectoryGroup",
@@ -2072,7 +2085,6 @@
         "tags": [
           "application-admin"
         ],
-        "x-junctura-status": "planned",
         "x-junctura-query-policy": "closed",
         "security": [
           {
@@ -2080,7 +2092,8 @@
           }
         ],
         "x-junctura-core-roles": [
-          "core-reader"
+          "core-reader",
+          "core-writer"
         ],
         "x-junctura-authority": "tenant",
         "x-junctura-permission": "directory.write",
@@ -2137,7 +2150,9 @@
           "504": {
             "$ref": "#/components/responses/GatewayTimeout"
           }
-        }
+        },
+        "x-junctura-source": "src/modules/directory/directory.mjs",
+        "x-junctura-test-suite": "directory"
       }
     },
     "/v1/directory/units/{unit}/members": {
@@ -2148,7 +2163,6 @@
         "tags": [
           "application-admin"
         ],
-        "x-junctura-status": "planned",
         "x-junctura-query-policy": "closed",
         "security": [
           {
@@ -2233,7 +2247,9 @@
           "504": {
             "$ref": "#/components/responses/GatewayTimeout"
           }
-        }
+        },
+        "x-junctura-source": "src/modules/directory/directory.mjs",
+        "x-junctura-test-suite": "directory"
       }
     },
     "/v1/directory/units/{unit}/members/{subject}": {
@@ -2244,7 +2260,6 @@
         "tags": [
           "application-admin"
         ],
-        "x-junctura-status": "planned",
         "x-junctura-query-policy": "closed",
         "security": [
           {
@@ -2252,7 +2267,8 @@
           }
         ],
         "x-junctura-core-roles": [
-          "core-reader"
+          "core-reader",
+          "core-writer"
         ],
         "x-junctura-authority": "tenant",
         "x-junctura-permission": "directory.write",
@@ -2378,7 +2394,9 @@
           "504": {
             "$ref": "#/components/responses/GatewayTimeout"
           }
-        }
+        },
+        "x-junctura-source": "src/modules/directory/directory.mjs",
+        "x-junctura-test-suite": "directory"
       },
       "delete": {
         "operationId": "deleteDirectoryMember",
@@ -2387,7 +2405,6 @@
         "tags": [
           "application-admin"
         ],
-        "x-junctura-status": "planned",
         "x-junctura-query-policy": "closed",
         "security": [
           {
@@ -2395,7 +2412,8 @@
           }
         ],
         "x-junctura-core-roles": [
-          "core-reader"
+          "core-reader",
+          "core-writer"
         ],
         "x-junctura-authority": "tenant",
         "x-junctura-permission": "directory.write",
@@ -2452,7 +2470,9 @@
           "504": {
             "$ref": "#/components/responses/GatewayTimeout"
           }
-        }
+        },
+        "x-junctura-source": "src/modules/directory/directory.mjs",
+        "x-junctura-test-suite": "directory"
       }
     },
     "/v1/search": {
@@ -2749,22 +2769,25 @@
     },
     "/v1/identity": {
       "get": {
-        "operationId": "getIdentity",
-        "summary": "Get identity",
-        "description": "Verified subject, tenant and supported roles. No appId/delegated human fields are returned.",
+        "operationId": "getVerifiedIdentity",
+        "summary": "Get the caller's verified subject and organization context",
+        "description": "subjectId is optional and comes from the verified token claim of a bound data-subject account. It is distinct from the login subject. units and groups reflect verified provider membership (empty when absent). Group paths have the form /unit/group.",
         "tags": [
           "tenant"
         ],
-        "x-junctura-query-policy": "ignored",
-        "x-junctura-source": "src/api.mjs",
+        "x-junctura-query-policy": "closed",
         "security": [
           {
             "coreBearer": []
           }
         ],
+        "x-junctura-core-roles": [
+          "core-reader"
+        ],
+        "x-junctura-authority": "tenant",
         "responses": {
           "200": {
-            "description": "Successful response",
+            "description": "Successful response.",
             "headers": {
               "Cache-Control": {
                 "$ref": "#/components/headers/CacheControl"
@@ -2776,10 +2799,27 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Identity"
+                  "$ref": "#/components/schemas/VerifiedIdentity"
+                },
+                "example": {
+                  "subject": "login-42",
+                  "tenantId": "tenant-a",
+                  "roles": [
+                    "core-reader"
+                  ],
+                  "subjectId": "subject-42",
+                  "units": [
+                    "unit-a"
+                  ],
+                  "groups": [
+                    "/unit-a/reviewers"
+                  ]
                 }
               }
             }
+          },
+          "400": {
+            "$ref": "#/components/responses/PlannedBadRequest"
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
@@ -2787,11 +2827,11 @@
           "403": {
             "$ref": "#/components/responses/Forbidden"
           },
-          "405": {
-            "$ref": "#/components/responses/MethodNotAllowed"
+          "404": {
+            "$ref": "#/components/responses/NotFound"
           },
           "429": {
-            "$ref": "#/components/responses/RateLimited"
+            "$ref": "#/components/responses/PlannedRateLimited"
           },
           "502": {
             "$ref": "#/components/responses/BadGateway"
@@ -2803,88 +2843,8 @@
             "$ref": "#/components/responses/GatewayTimeout"
           }
         },
-        "x-junctura-core-roles": [
-          "core-reader"
-        ],
-        "x-junctura-authority": "tenant",
-        "x-junctura-test-suite": "core",
-        "x-junctura-planned-operation": {
-          "operationId": "getVerifiedIdentity",
-          "summary": "Get the caller's verified subject and organization context",
-          "description": "subjectId is optional and comes from the verified token claim of a bound data-subject account. It is distinct from the login subject. units and groups reflect verified provider membership (empty when absent). Group paths have the form /unit/group.",
-          "tags": [
-            "tenant"
-          ],
-          "x-junctura-status": "planned",
-          "x-junctura-query-policy": "closed",
-          "security": [
-            {
-              "coreBearer": []
-            }
-          ],
-          "x-junctura-core-roles": [
-            "core-reader"
-          ],
-          "x-junctura-authority": "tenant",
-          "responses": {
-            "200": {
-              "description": "Successful response.",
-              "headers": {
-                "Cache-Control": {
-                  "$ref": "#/components/headers/CacheControl"
-                },
-                "X-Content-Type-Options": {
-                  "$ref": "#/components/headers/NoSniff"
-                }
-              },
-              "content": {
-                "application/json": {
-                  "schema": {
-                    "$ref": "#/components/schemas/VerifiedIdentity"
-                  },
-                  "example": {
-                    "subject": "login-42",
-                    "tenantId": "tenant-a",
-                    "roles": [
-                      "core-reader"
-                    ],
-                    "subjectId": "subject-42",
-                    "units": [
-                      "unit-a"
-                    ],
-                    "groups": [
-                      "/unit-a/reviewers"
-                    ]
-                  }
-                }
-              }
-            },
-            "400": {
-              "$ref": "#/components/responses/PlannedBadRequest"
-            },
-            "401": {
-              "$ref": "#/components/responses/Unauthorized"
-            },
-            "403": {
-              "$ref": "#/components/responses/PlannedForbidden"
-            },
-            "404": {
-              "$ref": "#/components/responses/NotFound"
-            },
-            "429": {
-              "$ref": "#/components/responses/PlannedRateLimited"
-            },
-            "502": {
-              "$ref": "#/components/responses/BadGateway"
-            },
-            "503": {
-              "$ref": "#/components/responses/Unavailable"
-            },
-            "504": {
-              "$ref": "#/components/responses/GatewayTimeout"
-            }
-          }
-        }
+        "x-junctura-source": "src/modules/identity/identity.mjs",
+        "x-junctura-test-suite": "core"
       }
     },
     "/v1/data/{collection}": {
@@ -12087,17 +12047,27 @@
             "type": "object",
             "properties": {
               "code": {
-                "enum": ["unique_key_conflict", "resource_conflict", "limit_exceeded"]
+                "enum": [
+                  "unique_key_conflict",
+                  "resource_conflict",
+                  "limit_exceeded"
+                ]
               },
               "field": {
                 "$ref": "#/components/schemas/RecordField"
               }
             },
-            "required": ["code"],
+            "required": [
+              "code"
+            ],
             "additionalProperties": false
           }
         },
-        "required": ["error", "requestId", "details"],
+        "required": [
+          "error",
+          "requestId",
+          "details"
+        ],
         "additionalProperties": false
       },
       "RecordETag": {

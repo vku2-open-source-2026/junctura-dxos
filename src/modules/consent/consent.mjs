@@ -7,10 +7,28 @@
 // Core only asserts the private role for the verified caller.
 import { applicationToken } from "../applications/applications.mjs";
 import { parseStrictJson } from "../capability/compatibility/compatibility.mjs";
-import { HttpError, json, readBody, requireWriter, uuidPattern } from "../../platform/http/http.mjs";
+import { HttpError, json, logicalRequestDigest, readBody, requireWriter, uuidPattern } from "../../platform/http/http.mjs";
 
 export const CONSENTS_PATH = "/v1/me/consents";
+export const isPlannedSubjectPath = path => /^\/v1\/me\/(?:data-access\/[^/]+\/flag|emergency-accesses\/[^/]+\/feedback)$/.test(path);
 export const EMERGENCY_PATH = "/v1/emergency-accesses";
+
+const capabilityPattern = /^urn:junctura:capability:[0-9a-f-]{36}:[a-z][a-z0-9-]{0,62}$/;
+const purposePattern = /^[a-z][a-z0-9_]{1,62}$/;
+
+function validateConsentBody(body) {
+  if (Object.keys(body).sort().join(",") !== "capabilityId,consumerAppId,expiresAt,purposes" ||
+    !uuidPattern.test(body.consumerAppId) || !capabilityPattern.test(body.capabilityId) ||
+    !Array.isArray(body.purposes) || body.purposes.length < 1 || body.purposes.length > 8 ||
+    body.purposes.some(purpose => !purposePattern.test(purpose)) ||
+    typeof body.expiresAt !== "string" ||
+    !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?Z$/.test(body.expiresAt) ||
+    !Number.isFinite(Date.parse(body.expiresAt))) {
+    throw new HttpError(400, "invalid_consent");
+  }
+  return { consumerAppId: body.consumerAppId, capabilityId: body.capabilityId,
+    purposes: body.purposes, expiresAt: body.expiresAt };
+}
 
 async function readObject(request) {
   if (request.headers["content-type"]?.split(";", 1)[0].trim() !== "application/json") throw new HttpError(415, "json_required");
@@ -34,7 +52,7 @@ async function command(config, identity, role, rpc, operation, payload) {
     result = await db.json();
   } catch { throw new HttpError(503, "consent_unavailable"); }
   if (result?.error) throw new HttpError(result.status, result.error);
-  if (![200, 201].includes(result?.status) || !result.value || typeof result.value !== "object") throw new HttpError(503, "consent_unavailable");
+  if (![200, 201, 404, 422, 429].includes(result?.status)) throw new HttpError(503, "consent_unavailable");
   return result;
 }
 
@@ -52,10 +70,13 @@ export async function handleConsent(request, response, identity, config, url) {
       return json(response, 200, (await command(config, identity, "junctura_subject_api", "subject_consent", "list", {})).value);
     }
     if (request.method !== "POST") throw new HttpError(405, "method_not_allowed");
-    const body = await readObject(request);
-    const result = await command(config, identity, "junctura_subject_api", "subject_consent", "create", body);
-    response.setHeader("Location", `${CONSENTS_PATH}/${result.value.consentId}`);
-    return json(response, 201, result.value);
+    const consent = validateConsentBody(await readObject(request));
+    const key = request.headers["idempotency-key"];
+    if (!uuidPattern.test(key ?? "")) throw new HttpError(400, "invalid_request");
+    const result = await command(config, identity, "junctura_subject_api", "subject_consent", "create",
+      { consent, key, digest: logicalRequestDigest({ body: consent }) });
+    response.setHeader("Location", result.headers?.Location ?? `${CONSENTS_PATH}/${result.value.consentId}`);
+    return json(response, result.status, result.value);
   }
   const revoke = path.match(/^\/v1\/me\/consents\/([^/]+)\/revoke$/);
   if (revoke) {

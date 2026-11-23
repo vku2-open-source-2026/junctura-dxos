@@ -64,12 +64,55 @@ export type RecordListFilter = {
   ownerAppId?: string;
 };
 export type RecordAggregateFilter = { count?: true; groupBy?: string[]; where?: Record<string, string>; ownerAppId?: string };
+export type VerifiedIdentity = {
+  subject: string;
+  tenantId: string;
+  roles: string[];
+  units: string[];
+  groups: string[];
+  subjectId?: string;
+  preferredUsername?: string;
+};
+export type DirectoryPage = { items: unknown[]; nextCursor: string | null };
+export type DirectoryUnitType = { unitType: string; name: string };
+export type DirectoryUnit = { unit: string; unitType: string; name: string };
+export type DirectoryGroup = { unit: string; group: string; name: string };
+export type DirectoryMember = { unit: string; subject: string; groups: string[] };
+export type SubjectConsent = {
+  consentId: string;
+  consumer: { appId: string; displayName: string | null };
+  capabilityId: string;
+  capabilityTitle: string | null;
+  purposes: string[];
+  createdAt: string;
+  expiresAt: string;
+  revokedAt: string | null;
+  state: 'active' | 'revoked' | 'expired';
+};
+export type ConsentCreate = { consumerAppId: string; capabilityId: string; purposes: string[]; expiresAt: string };
 
 export function inputDigest(input: Json): string;
 export class JuncturaError extends Error { status: number; code: string; requestId?: string; }
 export function createJuncturaClient(options: { baseUrl: string; clientId: string; clientSecret: string; timeoutMs?: number; fetcher?: typeof fetch }): Readonly<{
   request(path: string, options?: RequestOptions): Promise<Response>;
-  identity(): Promise<{ subject: string; tenantId: string; roles: string[]; [key: string]: unknown }>;
+  identity(): Promise<VerifiedIdentity>;
+  listDirectoryUnitTypes(page?: { limit?: number; cursor?: string }): Promise<DirectoryPage>;
+  putDirectoryUnitType(unitType: string, name: string): Promise<DirectoryUnitType>;
+  deleteDirectoryUnitType(unitType: string): Promise<void>;
+  listDirectoryUnits(page?: { limit?: number; cursor?: string }): Promise<DirectoryPage>;
+  putDirectoryUnit(unit: string, body: { unitType: string; name: string }): Promise<DirectoryUnit>;
+  deleteDirectoryUnit(unit: string): Promise<void>;
+  listDirectoryGroups(unit: string, page?: { limit?: number; cursor?: string }): Promise<DirectoryPage>;
+  putDirectoryGroup(unit: string, group: string, name: string): Promise<DirectoryGroup>;
+  deleteDirectoryGroup(unit: string, group: string): Promise<void>;
+  listDirectoryMembers(unit: string, page?: { limit?: number; cursor?: string }): Promise<DirectoryPage>;
+  putDirectoryMember(unit: string, subject: string, groups: string[]): Promise<DirectoryMember>;
+  deleteDirectoryMember(unit: string, subject: string): Promise<void>;
+  consent(userToken: string): Readonly<{
+    list(): Promise<{ consents: SubjectConsent[] }>;
+    create(consent: ConsentCreate, idempotencyKey?: string): Promise<SubjectConsent>;
+    revoke(consentId: string): Promise<SubjectConsent>;
+  }>;
   createRecord(collection: string, data: Json): Promise<{ id: string; data: Json; [key: string]: unknown }>;
   getRecord(collection: string, id: string): Promise<{ id: string; data: Json; [key: string]: unknown }>;
   listRecords(collection: string, query?: { limit?: number; order?: 'asc' | 'desc'; cursor?: string }): Promise<{ items: { id: string; collection: string; data: Json; created_at: string }[]; nextCursor: string | null }>;

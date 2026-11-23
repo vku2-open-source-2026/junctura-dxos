@@ -187,6 +187,13 @@ function requestExample(endpoint: ApiEndpointDef): RequestExample {
         };
       case "completeWorkflow":
         return { contentType, json: {} };
+      case "putDirectoryUnitType":
+      case "putDirectoryGroup":
+        return { contentType, json: { name: "Example" } };
+      case "putDirectoryUnit":
+        return { contentType, json: { unitType: "office", name: "Example" } };
+      case "putDirectoryMember":
+        return { contentType, json: { groups: ["reviewers"] } };
       default:
         return { contentType, json: {} };
     }

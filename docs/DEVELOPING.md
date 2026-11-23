@@ -59,7 +59,7 @@ PostgreSQL/PostgREST, SeaweedFS, Flowable, ClamAV and OpenBao remain private.
 | `src/modules/capability/composition/execution.mjs`, `src/modules/capability/composition/runtime.mjs` | Private SQL steps, leases and opt-in ordered dispatch/observation. |
 | `src/modules/consent/consent.mjs` | Subject consents and emergency-access reviews. |
 | `src/modules/data/data.mjs` | Structured records through `/v1/data/*` and `/v2/data/*`. |
-| `src/modules/directory/directory.mjs` | Read-only tenant principals and organization tree. |
+| `src/modules/directory/directory.mjs` | Tenant principals and organization tree plus operator-managed directory desired state. |
 | `src/modules/metrics/metrics.mjs` | Per-process request counters and bounded recent traffic. |
 | `src/modules/objects/objects.mjs`, `src/modules/objects/malware-scan.mjs` | Object routes, storage adapter and fail-closed ClamAV scanning. |
 | `src/modules/resources/resources.mjs` | Verified application context, resource authority and read shares. |
@@ -182,7 +182,7 @@ See [CI](../.github/workflows/ci.yml).
 
 Run [infra/postgres/migrate.sh](../infra/postgres/migrate.sh) with `docker compose run --rm data-migrate`;
 Compose gates `data` and then Core on success. Number after the highest `infra/postgres/NNN-*.sql`:
-currently `035`. Mount new files in `compose.yaml`'s `data-migrate` service.
+currently `038`. Mount new files in `compose.yaml`'s `data-migrate` service.
 **All applied files are immutable**: preserve their exact bytes and add forward migrations.
 
 SHA-256 enters `core.schema_migration_checksums` in the applying transaction
@@ -257,6 +257,9 @@ The runner strips CRLF delimiters for execution but hashes original bytes;
 | 033 | Unique-key upserts and atomic record batches. |
 | 034 | Record export snapshots and transactional NDJSON imports. |
 | 035 | Operator-managed app groups and read shares for group members. |
+| 036 | Operator-bound verified subject identifiers per tenant and issuer. |
+| 037 | Directory desired state (unit types, flat units, groups, members) with generations and the `directory.write` permission. |
+| 038 | Consent under the verified subject identity with legacy mapping through subject bindings. |
 
 Set `STRICT_RECORD_WRITES=true` on every Core replica after updating callers to
 send idempotency keys and record preconditions. The default is `false`.

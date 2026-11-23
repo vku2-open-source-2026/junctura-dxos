@@ -294,7 +294,7 @@ test("the router attributes authorized requests to the verified tenant", async (
     json(response, 200, {
       active: token !== "invalid-token", iss: identity.issuer, aud: "junctura-core",
       exp: Math.floor(Date.now() / 1000) + 300, sub: identity.subject,
-      tenant_id: tenantId, tenant_memberships: [tenantId], client_id: identity.clientId,
+      tenant_id: tenantId, tenant_memberships: [`/${tenantId}`], client_id: identity.clientId,
       realm_access: { roles: identity.roles },
     });
   });
@@ -323,7 +323,7 @@ test("the router attributes authorized requests to the verified tenant", async (
         headers: { Authorization: `Bearer ${tenantId}-token`, "X-Tenant-Id": "tenant-c" },
       });
       assert.equal(response.status, 200);
-      assert.deepEqual(await response.json(), { tenantId, subject: identity.subject, roles: identity.roles });
+      assert.deepEqual(await response.json(), { tenantId, subject: identity.subject, roles: identity.roles, units: [], groups: [] });
       const [item] = recentRequests({ tenantId, limit: 1 });
       assert.deepEqual([item.method, item.path, item.status], ["GET", "/v1/identity", 200]);
       assert.ok(item.durationMs >= 0);
