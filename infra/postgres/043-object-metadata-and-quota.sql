@@ -180,7 +180,7 @@ BEGIN
     scope := record_caller_scope(actor);
     RETURN coalesce(record_replay(scope, payload->>'method', payload->>'path',
       (payload->>'key')::uuid, decode(payload->>'digest', 'hex')),
-      jsonb_build_object('status', 200, 'value', to_jsonb(NULL)));
+      jsonb_build_object('status', 200, 'value', 'null'::jsonb));
   END IF;
 
   IF operation = 'commit' THEN
@@ -267,7 +267,7 @@ BEGIN
     RETURN jsonb_build_object('status', 200, 'value', jsonb_build_object(
       'ownerAppId', obj.owner_app_id, 'version', obj.version, 'size', obj.size_bytes,
       'tags', to_jsonb(obj.tags),
-      'recordRef', CASE WHEN obj.record_id IS NULL THEN to_jsonb(NULL)
+      'recordRef', CASE WHEN obj.record_id IS NULL THEN 'null'::jsonb
         ELSE jsonb_build_object('collection', obj.record_collection, 'id', obj.record_id) END));
   END IF;
 
@@ -308,7 +308,7 @@ BEGIN
       jsonb_build_object('id', v_object_id, 'size', next_size, 'tags', to_jsonb(obj.tags),
         'recordRef', CASE WHEN obj.record_id IS NULL
             OR NOT object_link_valid(tenant, obj.record_collection, obj.record_id, obj.record_incarnation)
-          THEN to_jsonb(NULL)
+          THEN 'null'::jsonb
           ELSE jsonb_build_object('collection', obj.record_collection, 'id', obj.record_id) END));
     IF payload ? 'key' THEN
       scope := record_caller_scope(actor);
@@ -337,7 +337,7 @@ BEGIN
     -- response presents, so an expired link filters like the null it shows.
     SELECT coalesce(jsonb_agg(jsonb_build_object(
         'id', o.id, 'size', o.size_bytes, 'tags', to_jsonb(o.tags),
-        'recordRef', CASE WHEN o.record_id IS NULL THEN to_jsonb(NULL)
+        'recordRef', CASE WHEN o.record_id IS NULL THEN 'null'::jsonb
           WHEN object_link_valid(o.tenant_id, o.record_collection, o.record_id, o.record_incarnation)
           THEN jsonb_build_object('collection', o.record_collection, 'id', o.record_id) END)
         ORDER BY o.id), '[]'::jsonb) INTO items
@@ -383,7 +383,7 @@ BEGIN
     IF (payload - 'limit' - 'after') <> '{}'::jsonb OR coalesce(payload->>'limit', '256') !~ '^[0-9]+$'
       OR (payload->>'limit')::integer NOT BETWEEN 1 AND 256
       OR (payload ? 'after' AND (jsonb_typeof(payload->'after') IS DISTINCT FROM 'object'
-        OR (payload->'after' - 'tenantId' - 'appId' - 'id') <> '{}'::jsonb
+        OR ((payload->'after') - 'tenantId' - 'appId' - 'id') <> '{}'::jsonb
         OR (payload->'after'->>'tenantId') !~ '^[a-z][a-z0-9-]{0,62}$'
         OR (payload->'after'->>'appId')::uuid IS NULL OR (payload->'after'->>'id')::uuid IS NULL)) THEN
       RETURN object_error(400, 'invalid_request');
