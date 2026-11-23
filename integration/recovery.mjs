@@ -258,11 +258,16 @@ test("pg_dump/pg_restore preserves real data and tenant RLS in an isolated tempo
       "UPDATE app_private.search_generations SET rebuild_requested=true; SELECT coalesce(bool_and(rebuild_requested),true) FROM app_private.search_generations;"]);
     assert.equal(searchRebuild.stdout.trim().split(/\r?\n/).at(-1), "t",
       "The restore runbook flags every search generation for a rebuild");
+    const rebuildLease = randomUUID();
     const rebuild = await docker(["exec", target, "psql", "-U", "junctura_admin", "-d", "recovered", "-v", "ON_ERROR_STOP=1", "-Atc",
       "SET ROLE junctura_search_worker; SELECT set_config('request.jwt.claims','{\"role\":\"junctura_search_worker\",\"tenant_id\":\"tenant-a\"}',false);" +
-      "SELECT jsonb_build_object('building',core.search_command('prepare','{}'::jsonb)->'value'->>'building_generation'," +
-      "'records',(SELECT count(*) FROM app_private.search_index_jobs WHERE resource_type='record'));"]);
-    const rebuildState = JSON.parse(rebuild.stdout.trim().split(/\r?\n/).at(-1));
+      `SELECT core.search_command('acquire','{"lease":"${rebuildLease}"}'::jsonb)->>'status';` +
+      `SELECT core.search_command('prepare','{"lease":"${rebuildLease}"}'::jsonb)->'value'->>'building_generation';`]);
+    const [acquired, building] = rebuild.stdout.trim().split(/\r?\n/).slice(-2);
+    assert.equal(acquired, "200", "the rebuild worker holds the tenant lease");
+    const queued = await docker(["exec", target, "psql", "-U", "junctura_admin", "-d", "recovered", "-v", "ON_ERROR_STOP=1", "-Atc",
+      "SELECT count(*) FROM app_private.search_index_jobs WHERE tenant_id='tenant-a' AND resource_type='record';"]);
+    const rebuildState = { building, records: Number(queued.stdout.trim().split(/\r?\n/).at(-1)) };
     assert.match(rebuildState.building, /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/,
       "the flagged rebuild prepares a fresh building generation");
     assert.equal(rebuildState.records, 1, "the restored records are re-enqueued from PostgreSQL");
