@@ -6,7 +6,8 @@ import { Readable } from "node:stream";
 import { test } from "node:test";
 import { createApi } from "../src/api.mjs";
 import { HttpError } from "../src/platform/http/http.mjs";
-import { accessFlows, consoleAccessRoles } from "../src/modules/applications/keycloak.mjs";
+import { handleApplications } from "../src/modules/applications/applications.mjs";
+import { accessFlows, consoleAccessRoles, createApplicationProvider } from "../src/modules/applications/keycloak.mjs";
 import { handleApplicationManagement, parseAppList, validateAppMetadata, validateAssignment } from "../src/modules/applications/management.mjs";
 import { createAuthorizer } from "../src/platform/auth/auth.mjs";
 import { DIRECTORY_SYNC_ROLES } from "../scripts/provision-directory.mjs";
@@ -93,6 +94,77 @@ test("realm import grants the app-sync service account its management permission
   assert.deepEqual(account.clientRoles, {
     "realm-management": [...DIRECTORY_SYNC_ROLES, "manage-clients", "manage-realm"],
   });
+});
+
+test("Keycloak updates supported client fields and leaves unrelated scopes alone", async () => {
+  const clientId = "app-x";
+  const client = { id: "client-key", clientId, type: "oidc", standardFlowEnabled: false,
+    redirectUris: ["https://app.example.invalid/callback"], attributes: { custom: "keep" } };
+  const flows = accessFlows(`junctura-${appId}`, clientId);
+  const executions = new Map();
+  function seed(alias, children) {
+    executions.set(alias, children.map(({ name, requirement = "REQUIRED", config, children }) => {
+      if (children) seed(name, children);
+      return { id: name, level: 0, requirement, displayName: name, providerId: name,
+        authenticationConfig: config ? name : undefined };
+    }));
+  }
+  for (const flow of flows) seed(flow.alias, flow.children);
+  const writes = [];
+  let stored = client;
+  const provider = createApplicationProvider({ ...config, appSyncClientId: "sync", appSyncSecret: "test" }, undefined,
+    async (input, options) => {
+      const path = url(input).pathname;
+      if (path.endsWith("/token")) return jsonResponse({ access_token: "admin", expires_in: 60 });
+      if (path.endsWith("/clients")) return jsonResponse([client]);
+      if (path.endsWith("/roles/junctura-access")) return jsonResponse({ id: "role" });
+      if (path.endsWith("/authentication/flows")) return jsonResponse(flows.map(({ alias }) => ({ id: alias, alias })));
+      if (path.endsWith("/executions")) return jsonResponse(executions.get(path.split("/").at(-2)));
+      if (path.includes("/authentication/config/")) return jsonResponse({ id: "config",
+        config: path.endsWith("conditional-user-role") ? { condUserRole: "app-x.junctura-access", negate: "true" }
+          : { denyErrorMessage: "not_assigned_to_app" } });
+      if (path.endsWith("/optional-client-scopes")) return jsonResponse([{ name: "offline_access", id: "offline" }]);
+      if (path.endsWith("/protocol-mappers/models") && options.method === "GET") return jsonResponse([]);
+      if (path.endsWith("/clients/client-key") && options.method === "GET") return jsonResponse(stored);
+      writes.push([path.split("/clients/").at(-1), options.method]);
+      if (path.endsWith("/clients/client-key")) {
+        const update = JSON.parse(options.body);
+        assert.deepEqual(Object.keys(update).sort(), ["attributes", "authenticationFlowBindingOverrides", "clientId",
+          "id", "implicitFlowEnabled", "standardFlowEnabled", "type"].sort());
+        assert.equal(update.clientId, clientId);
+        assert.equal(update.standardFlowEnabled, false);
+        assert.equal(update.attributes["oidc.ciba.grant.enabled"], "false");
+        assert.equal(update.attributes["oauth2.device.authorization.grant.enabled"], "false");
+        assert.equal(update.attributes.custom, "keep");
+        stored = { ...client, ...update };
+      }
+      return new Response(null, { status: 204 });
+    });
+  await provider.configure(clientId, appId);
+  assert.deepEqual(writes, [["client-key", "PUT"], ["client-key/optional-client-scopes/offline", "DELETE"],
+    ["client-key/protocol-mappers/models", "POST"]]);
+});
+
+test("approval reports invalid SQL preconditions before calling the provider", async t => {
+  const phases = [];
+  t.mock.method(globalThis, "fetch", async (input, options) => {
+    const path = url(input).pathname;
+    const { operation, payload } = JSON.parse(options.body);
+    phases.push(operation);
+    assert.equal(payload.appId, appId);
+    if (path.endsWith("/application_command") && operation === "approve_check" && !payload.etag) {
+      return jsonResponse({ status: 428, error: "if_match_required" });
+    }
+    if (operation === "lease") return jsonResponse({ status: 200, value: { providerReady: true, oauthClientId: "app-x" } });
+    return jsonResponse({ status: 200, value: { appId, revision: 2 } });
+  });
+  const approve = headers => handleApplications(request("POST", { approvalId: assignmentId }, headers), response(),
+    { tenantId: "tenant-a", issuer, subject: "approver", clientId: "management", roles: [] },
+    { ...config, appSyncClientId: "sync", appSyncSecret: "test" }, url(`${appPath}/approve`));
+  await assert.rejects(approve({}), { status: 428, message: "if_match_required" });
+  assert.deepEqual(phases, ["approve_check"]);
+  await approve({ "if-match": `"application-${appId}-1"` });
+  assert.deepEqual(phases, ["approve_check", "approve_check", "lease", "approve", "release"]);
 });
 
 test("only application management routes send a target to the access check", async () => {
@@ -278,7 +350,7 @@ test("gateway authorization and the public route use the same audit request ID",
   assert.equal(calls.at(-1).requestId, requestId);
 });
 
-test("capability denials log the same public code and request ID that the API returns", async t => {
+test("capability denials are audited once with the public code and request ID, with or without the app access gate", async t => {
   const audited = [];
   t.mock.method(globalThis, "fetch", async (path, options) => {
     if (path.endsWith("/introspect")) return jsonResponse({
@@ -291,18 +363,21 @@ test("capability denials log the same public code and request ID that the API re
     audited.push(JSON.parse(options.body).payload);
     return jsonResponse({ status: 200 });
   });
-  for (const [failure, code] of [
-    ["invoke_not_authorized", "capability_not_granted"],
-    ["consent_required", "consent_required"], ["consent_expired", "consent_expired"], ["consent_revoked", "consent_revoked"],
-  ]) {
-    const api = createApi({ ...config, enforceAppAccess: true,
-      executionRuntime: { handle() { throw new HttpError(403, failure); } } });
-    const input = request("GET", undefined, { authorization: "Bearer a.b.c" });
-    input.url = `/v1/capability-executions/${appId}`;
-    const reply = response();
-    await api(input, reply);
-    assert.equal(reply.statusCode, 403);
-    assert.deepEqual(reply.body, { error: code, requestId: reply.headers["X-Request-Id"] });
-    assert.deepEqual(audited.at(-1), { code, requestId: reply.body.requestId });
+  for (const accessConfig of [{}, { enforceAppAccess: true }]) {
+    for (const [failure, code] of [
+      ["invoke_not_authorized", "capability_not_granted"],
+      ["consent_required", "consent_required"], ["consent_expired", "consent_expired"], ["consent_revoked", "consent_revoked"],
+    ]) {
+      const api = createApi({ ...config, ...accessConfig,
+        executionRuntime: { handle() { throw new HttpError(403, failure); } } });
+      const input = request("POST", {}, { authorization: "Bearer a.b.c" });
+      input.url = "/v1/capability-executions";
+      const reply = response();
+      const before = audited.length;
+      await api(input, reply);
+      assert.equal(reply.statusCode, 403);
+      assert.deepEqual(reply.body, { error: code, requestId: reply.headers["X-Request-Id"] });
+      assert.deepEqual(audited.slice(before), [{ code, requestId: reply.body.requestId }]);
+    }
   }
 });

@@ -78,7 +78,7 @@ async function cleanupSubjectBindings() {
     ALTER TABLE app_private.subject_bindings ENABLE TRIGGER subject_binding_guard;
     COMMIT;`);
 }
-async function backend(label, principal, administrator, tenant = "tenant-a", writer = true, providerOrigin) {
+async function backend(label, principal, administrator, tenant = "tenant-a", writer = true, providerOrigin, redirectUri) {
   adminToken = await operatorToken();
   const clientId = `${prefix}-${label}`;
   const template = (await (await admin("clients?clientId=tenant-a")).json())[0];
@@ -87,7 +87,8 @@ async function backend(label, principal, administrator, tenant = "tenant-a", wri
   for (const mapper of mappers) delete mapper.id;
   mappers.find(mapper => mapper.name === "tenant").config["claim.value"] = tenant;
   const createdClient = await admin("clients", { clientId, enabled: true, protocol: "openid-connect", publicClient: false,
-    serviceAccountsEnabled: true, standardFlowEnabled: false, directAccessGrantsEnabled: false, protocolMappers: mappers }, "POST");
+    serviceAccountsEnabled: true, standardFlowEnabled: Boolean(redirectUri), directAccessGrantsEnabled: false,
+    ...(redirectUri ? { redirectUris: [redirectUri] } : {}), protocolMappers: mappers }, "POST");
   assert.equal(createdClient.status, 201);
   const id = createdClient.headers.get("location").split("/").at(-1); clientIds.push(id);
   const subject = (await (await admin(`clients/${id}/service-account-user`)).json()).id;
@@ -108,7 +109,7 @@ async function backend(label, principal, administrator, tenant = "tenant-a", wri
     decision: "approve", expiresAt: new Date(Date.now() + 120000).toISOString() });
   assert.equal(decision.status, 201, await decision.clone().text());
   const active = await api(`/v1/applications/${pending.appId}/approve`, administrator, { approvalId: (await decision.json()).approvalId }, { "If-Match": created.headers.get("etag") });
-  assert.equal(active.status, 200);
+  assert.equal(active.status, 200, active.ok ? undefined : await active.text());
   return { app: await active.json(), token, subject, clientId, clientSecret: secret, etag: active.headers.get("etag") };
 }
 

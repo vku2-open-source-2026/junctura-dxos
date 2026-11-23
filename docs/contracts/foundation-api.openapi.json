@@ -5320,10 +5320,10 @@
           "200": {
             "description": "List applications",
             "headers": {
-              "CacheControl": {
+              "Cache-Control": {
                 "$ref": "#/components/headers/CacheControl"
               },
-              "NoSniff": {
+              "X-Content-Type-Options": {
                 "$ref": "#/components/headers/NoSniff"
               }
             },
@@ -5673,10 +5673,10 @@
           "200": {
             "description": "Update application metadata",
             "headers": {
-              "CacheControl": {
+              "Cache-Control": {
                 "$ref": "#/components/headers/CacheControl"
               },
-              "NoSniff": {
+              "X-Content-Type-Options": {
                 "$ref": "#/components/headers/NoSniff"
               },
               "ETag": {
@@ -7618,10 +7618,10 @@
           "200": {
             "description": "Read application assignments",
             "headers": {
-              "CacheControl": {
+              "Cache-Control": {
                 "$ref": "#/components/headers/CacheControl"
               },
-              "NoSniff": {
+              "X-Content-Type-Options": {
                 "$ref": "#/components/headers/NoSniff"
               }
             },
@@ -7710,10 +7710,10 @@
           "200": {
             "description": "Grant application access",
             "headers": {
-              "CacheControl": {
+              "Cache-Control": {
                 "$ref": "#/components/headers/CacheControl"
               },
-              "NoSniff": {
+              "X-Content-Type-Options": {
                 "$ref": "#/components/headers/NoSniff"
               }
             },
@@ -7820,10 +7820,10 @@
           "204": {
             "description": "Revoke application access",
             "headers": {
-              "CacheControl": {
+              "Cache-Control": {
                 "$ref": "#/components/headers/CacheControl"
               },
-              "NoSniff": {
+              "X-Content-Type-Options": {
                 "$ref": "#/components/headers/NoSniff"
               }
             }
@@ -7916,10 +7916,10 @@
           "200": {
             "description": "Read OIDC key rotation history",
             "headers": {
-              "CacheControl": {
+              "Cache-Control": {
                 "$ref": "#/components/headers/CacheControl"
               },
-              "NoSniff": {
+              "X-Content-Type-Options": {
                 "$ref": "#/components/headers/NoSniff"
               }
             },
@@ -8008,10 +8008,10 @@
           "200": {
             "description": "Rotate the OIDC client secret",
             "headers": {
-              "CacheControl": {
+              "Cache-Control": {
                 "$ref": "#/components/headers/CacheControl"
               },
-              "NoSniff": {
+              "X-Content-Type-Options": {
                 "$ref": "#/components/headers/NoSniff"
               }
             },

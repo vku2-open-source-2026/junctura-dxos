@@ -12,8 +12,9 @@ import { createJuncturaClient } from '../sdk/node/index.mjs';
 const base=process.env.PUBLIC_URL ?? "http://127.0.0.1:8080";
 const issuer=`${base}/identity/realms/junctura`;
 const prefix=`app-test-${randomBytes(6).toString("hex")}`;
+const auditTenant=`audit-${prefix}`;
 const clientIds=[], users=[];
-let adminToken, owner, approver, foreign, stranger, serviceToken, app, etag;
+let adminToken, owner, approver, foreign, stranger, serviceToken, app, etag, auditGroupId;
 let resourceA, resourceB, resourceForeign, privateRecord, privateObject, recordShare, objectShare;
 let objectBytes=Buffer.from('private resource fixture');
 const run=(...args)=>promisify(execFile)("docker",args,{timeout:180000});
@@ -135,7 +136,7 @@ before(async()=>{
   // pinned Keycloak profile drops undeclared user attributes on admin create.
   const template=(await (await admin("clients?clientId=tenant-a")).json())[0];
   const source=await (await admin(`clients/${template.id}`)).json();
-  for(const tenant of ["tenant-a","tenant-b","demo","production"]){
+  for(const tenant of ["tenant-a","tenant-b","demo","production",auditTenant]){
     const protocolMappers=structuredClone(source.protocolMappers);
     for(const mapper of protocolMappers) delete mapper.id;
     protocolMappers.find(m=>m.name==="tenant").config["claim.value"]=tenant;
@@ -150,6 +151,10 @@ before(async()=>{
 });
 after(async()=>{
   adminToken=await operatorToken();
+  if(auditGroupId) await sql(`BEGIN;
+    DELETE FROM app_private.audit WHERE tenant_id=${q(auditTenant)};
+    DELETE FROM app_private.audit_chain_heads WHERE tenant_id=${q(auditTenant)};
+    COMMIT;`);
   // Remove only this run's uniquely named technical fixtures, never project data.
   if(users.length){
     const ids=users.map(q).join(",");
@@ -162,14 +167,16 @@ after(async()=>{
         const r=await fetch(process.env.OBJECTS_URL+'/junctura-app/'+p.tenant+'/'+p.owner+'/'+p.id+'?recursive=true',{method:'DELETE'});
         assert.ok([200,202,204,404].includes(r.status));await r.arrayBuffer();
       }`);
-    await sql(`DELETE FROM app_private.audit WHERE subject IN (${ids}) OR subject IN (SELECT resource_subject FROM app_private.enrollments WHERE owner_subject IN (${ids}));
-      DELETE FROM app_private.resource_shares WHERE owner_app_id IN (${apps}) OR grantee_app_id IN (${apps});
+    await sql(`DELETE FROM app_private.resource_shares WHERE owner_app_id IN (${apps}) OR grantee_app_id IN (${apps});
       DELETE FROM app_private.resource_objects WHERE owner_app_id IN (${apps});DELETE FROM core.app_records WHERE owner_app_id IN (${apps});
-      DELETE FROM app_private.approvals WHERE app_id IN (${apps});DELETE FROM app_private.applications WHERE owner_subject IN (${ids});
+      DELETE FROM app_private.approvals WHERE app_id IN (${apps});
+      DELETE FROM app_private.applications a WHERE a.owner_subject IN (${ids})
+        AND NOT EXISTS (SELECT FROM app_private.audit e WHERE (e.tenant_id,e.actor_app_id)=(a.tenant_id,a.app_id));
       DELETE FROM app_private.enrollments WHERE owner_subject IN (${ids});DELETE FROM app_private.principals WHERE subject IN (${ids});`);
   }
   for(const id of clientIds) assert.equal((await admin(`clients/${id}`,undefined,"DELETE")).status,204);
   for(const id of users) assert.equal((await admin(`users/${id}`,undefined,"DELETE")).status,204);
+  if(auditGroupId) assert.equal((await admin(`groups/${auditGroupId}`,undefined,"DELETE")).status,204);
   await verifyContracts('applications');
 });
 
@@ -528,7 +535,14 @@ test("application authority, state, approvals and audit persist across database 
 });
 
 test("audit verification over HTTP seals the tenant chain and requires audit.read",async()=>{
-  const auditor=await human("auditor","tenant-a",["audit.read"]);
+  adminToken=await operatorToken();
+  const group=await admin("groups",{name:auditTenant},"POST");
+  assert.equal(group.status,201);
+  auditGroupId=group.headers.get("location").split("/").at(-1);
+  const auditor=await human("auditor",auditTenant,["audit.read"]);
+  const registrar=await human("audit-registrar",auditTenant,["applications.register"]);
+  const registered=await api("/v1/applications",registrar,await provider("audit-provider",registrar.id,auditTenant));
+  assert.equal(registered.status,201,registered.ok?undefined:await registered.text());
   const deadline=Date.now()+30000;
   let response;
   do {
@@ -538,11 +552,14 @@ test("audit verification over HTTP seals the tenant chain and requires audit.rea
   } while(Date.now()<deadline);
   assert.equal(response.status,200);
   const first=await response.json();
-  assert.equal(first.verified,true);assert.equal(first.firstBreak,null);assert.ok(first.entries>0);
+  assert.equal(first.verified,true,JSON.stringify(first.firstBreak));
+  assert.equal(first.firstBreak,null);assert.ok(first.newlySealed>0);
   assert.match(first.headHash,/^sha256:[0-9a-f]{64}$/);
-  const again=await (await api("/v1/audit-events/verify",auditor,{})).json();
+  const repeated=await api("/v1/audit-events/verify",auditor,{});
+  assert.equal(repeated.status,200);
+  const again=await repeated.json();
   assert.deepEqual([again.verified,again.entries,again.newlySealed,again.headHash],[true,first.entries,0,first.headHash],"verification is repeatable");
-  assert.equal((await api("/v1/audit-events/verify",stranger,{})).status,403);
+  assert.equal((await api("/v1/audit-events/verify",registrar,{})).status,403);
   assert.equal((await api("/v1/audit-events/verify",auditor,{seal:1})).status,400);
   assert.equal((await api("/v1/audit-events/verify",undefined,{})).status,401);
 });

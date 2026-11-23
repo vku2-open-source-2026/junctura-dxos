@@ -141,8 +141,10 @@ export async function handleApplications(request, response, identity, config, ur
   } else if (operation === "approval_create") payload = { appId: body.resourceId, approvalId: randomUUID(), decision: body };
   else payload[kind === "applications" ? "appId" : "approvalId"] = id;
   if (request.headers["if-match"] !== undefined) payload.etag = request.headers["if-match"];
+  const syncApproval = operation === "approve" && config.appSyncSecret;
+  if (syncApproval) await command("approve_check", payload, "application_command");
   const apply = () => command(operation, payload, "application_command");
-  const result = operation === "approve" && config.appSyncSecret
+  const result = syncApproval
     ? await withProvider(config, command, payload.appId, async (fenced, provider, clientId, ready) => {
       if (!ready) {
         await provider.configure(clientId, payload.appId);

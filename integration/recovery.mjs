@@ -71,7 +71,8 @@ test("pg_dump/pg_restore preserves real data and tenant RLS in an isolated tempo
     await docker(["exec", target, "createdb", "-U", "junctura_admin", "recovered"]);
     await docker(["exec", target, "psql", "-U", "junctura_admin", "-d", "recovered", "-v", "ON_ERROR_STOP=1", "-c", "CREATE ROLE junctura_api NOLOGIN NOBYPASSRLS; CREATE ROLE junctura_app_api NOLOGIN NOBYPASSRLS; CREATE ROLE junctura_app_owner NOLOGIN NOBYPASSRLS; CREATE ROLE junctura_resource_api NOLOGIN NOBYPASSRLS; CREATE ROLE junctura_record_api NOLOGIN NOBYPASSRLS; ALTER ROLE junctura_record_api SET statement_timeout='4s'; CREATE ROLE junctura_audit_api NOLOGIN NOBYPASSRLS; CREATE ROLE junctura_capability_api NOLOGIN NOBYPASSRLS; CREATE ROLE junctura_trust_api NOLOGIN NOBYPASSRLS; CREATE ROLE junctura_execution_api NOLOGIN NOBYPASSRLS; CREATE ROLE junctura_composition_api NOLOGIN NOBYPASSRLS; CREATE ROLE junctura_subject_api NOLOGIN NOBYPASSRLS; CREATE ROLE junctura_directory_api NOLOGIN NOBYPASSRLS; CREATE ROLE junctura_directory_worker NOLOGIN NOBYPASSRLS; CREATE ROLE junctura_storage_api NOLOGIN NOBYPASSRLS; CREATE ROLE junctura_storage_collections_api NOLOGIN NOBYPASSRLS; CREATE ROLE junctura_workflow_audit_api NOLOGIN NOBYPASSRLS; CREATE ROLE junctura_workflow_api NOLOGIN NOBYPASSRLS; CREATE ROLE junctura_workflow_worker NOLOGIN NOBYPASSRLS; CREATE ROLE junctura_application_stats_api NOLOGIN NOBYPASSRLS;" +
       "CREATE ROLE junctura_event_api NOLOGIN NOBYPASSRLS; CREATE ROLE junctura_event_observer NOLOGIN NOBYPASSRLS; " +
-      "CREATE ROLE junctura_search_worker NOLOGIN NOBYPASSRLS; CREATE ROLE junctura_objects_worker NOLOGIN NOBYPASSRLS;"]);
+      "CREATE ROLE junctura_search_worker NOLOGIN NOBYPASSRLS; CREATE ROLE junctura_objects_worker NOLOGIN NOBYPASSRLS; " +
+      "CREATE ROLE junctura_app_access_api NOLOGIN NOBYPASSRLS;"]);
     await sourceSql(`INSERT INTO app_private.subject_bindings(tenant_id,issuer,subject_id,login_subject)
       VALUES('tenant-a','https://recovery.example.invalid','subject-${id}','recovery-${id}');`);
     bindingSeeded = true;
@@ -79,11 +80,14 @@ test("pg_dump/pg_restore preserves real data and tenant RLS in an isolated tempo
     const restore = spawn("docker", ["exec", "-i", target, "pg_restore", "-U", "junctura_admin", "--exit-on-error", "--dbname=recovered"], { stdio: ["pipe", "ignore", "pipe"] });
     const dumpCode = closeCode(dump);
     const restoreCode = closeCode(restore);
-    dump.stderr.resume();
-    restore.stderr.resume();
-    await pipeline(dump.stdout, restore.stdin);
-    assert.equal(await dumpCode, 0, "Source dump succeeds");
-    assert.equal(await restoreCode, 0, "Restore with ownership/ACL/policies succeeds");
+    let dumpError = "", restoreError = "";
+    dump.stderr.setEncoding("utf8").on("data", chunk => { dumpError += chunk; });
+    restore.stderr.setEncoding("utf8").on("data", chunk => { restoreError += chunk; });
+    const [dumpStatus, restoreStatus, transfer] = await Promise.all([dumpCode, restoreCode,
+      pipeline(dump.stdout, restore.stdin).then(() => undefined, error => error)]);
+    assert.equal(restoreStatus, 0, `Restore with ownership/ACL/policies failed\n${restoreError}`);
+    assert.equal(dumpStatus, 0, `Source dump failed\n${dumpError}`);
+    if (transfer) throw transfer;
     for (const [tenant, expected] of [["tenant-a", "1"], ["tenant-b", "0"]]) {
       const sql = `SET ROLE junctura_api; SELECT set_config('request.jwt.claims','{"tenant_id":"${tenant}"}',false); SELECT count(*) FROM core.records WHERE id='${id}';`;
       const result = await docker(["exec", target, "psql", "-U", "junctura_admin", "-d", "recovered", "-v", "ON_ERROR_STOP=1", "-Atc", sql]);
@@ -311,7 +315,6 @@ test("pg_dump/pg_restore preserves real data and tenant RLS in an isolated tempo
       ALTER TABLE app_private.subject_bindings ENABLE TRIGGER subject_binding_guard;
       COMMIT;`);
     if (applicationSeeded) await sourceSql(`DELETE FROM core.app_records WHERE owner_app_id='${id}' AND collection='recovery_fixture';
-      DELETE FROM app_private.audit WHERE tenant_id='tenant-a' AND resource_id='${id}';
       DELETE FROM app_private.principals WHERE tenant_id='tenant-a' AND subject='recovery-${id}' AND management_client='restore-${id}';
       DELETE FROM app_private.enrollments WHERE oauth_client_id IN ('restore-${id}','restore-${otherApp}');
       DELETE FROM app_private.applications WHERE app_id IN ('${id}','${otherApp}') AND owner_subject='restore-${id}';`);

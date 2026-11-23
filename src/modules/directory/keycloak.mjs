@@ -53,7 +53,10 @@ export function createDirectorySync(config, fetcher = fetch, beforeWrite = async
       });
     } catch { throw new SyncFailure("unavailable"); }
     if (response.status === 404) { await response.body?.cancel(); return undefined; }
-    if (!response.ok) { await response.body?.cancel(); throw new SyncFailure("unavailable"); }
+    if (!response.ok) {
+      await response.body?.cancel();
+      throw Object.assign(new SyncFailure("unavailable"), { method, providerStatus: response.status });
+    }
     if (method !== "GET") { await response.body?.cancel(); return; }
     const value = await response.json().catch(() => { throw new SyncFailure("unavailable"); });
     if (response.status !== 200 || !expect(value)) throw new SyncFailure("unavailable");

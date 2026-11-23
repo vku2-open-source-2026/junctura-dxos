@@ -64,7 +64,7 @@ export async function createRuntimeFixture(options) {
     return inside(`const r=await fetch(data.url,{method:data.method,redirect:'error',headers:data.headers,
       body:data.body===undefined?undefined:data.body,signal:AbortSignal.timeout(15000)});
       const text=await r.text();let body;try{body=JSON.parse(text)}catch{body=null}
-      console.log(JSON.stringify({status:r.status,body,headers:Object.fromEntries(['location','etag'].map(k=>[k,r.headers.get(k)]))}));`,
+      console.log(JSON.stringify({status:r.status,body,headers:Object.fromEntries(['location','etag','x-request-id'].map(k=>[k,r.headers.get(k)]))}));`,
     { url, method, headers: { ...(identity ? { Authorization: `Bearer ${identity.token ?? identity}` } : {}), ...(body === undefined ? {} : { "Content-Type": "application/json" }), ...headers },
       ...(body === undefined ? {} : { body: typeof body === "string" ? body : JSON.stringify(body) }) });
   }

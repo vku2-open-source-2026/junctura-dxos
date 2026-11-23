@@ -203,9 +203,10 @@ after(async () => {
       DELETE FROM trust_private.grants WHERE provider_app_id IN (${apps});
       DELETE FROM app_private.capability_publication_approvals WHERE requester_app_id IN (${apps}) OR version_id IN (SELECT version_id FROM app_private.capability_versions WHERE provider_app_id IN (${apps}));
       DELETE FROM app_private.capability_versions WHERE provider_app_id IN (${apps});
-      DELETE FROM app_private.audit WHERE subject IN (${ids}) OR actor_app_id IN (${apps});
       DELETE FROM execution_private.subject_consents WHERE consumer_app_id IN (${apps});
-      DELETE FROM app_private.approvals WHERE app_id IN (${apps}); DELETE FROM app_private.applications WHERE owner_subject IN (${ids});
+      DELETE FROM app_private.approvals WHERE app_id IN (${apps});
+      DELETE FROM app_private.applications a WHERE a.owner_subject IN (${ids})
+        AND NOT EXISTS (SELECT FROM app_private.audit e WHERE (e.tenant_id,e.actor_app_id)=(a.tenant_id,a.app_id));
       DELETE FROM app_private.enrollments WHERE owner_subject IN (${ids}); DELETE FROM app_private.principals WHERE subject IN (${ids});`);
   }
   await cleanupSubjectBindings();
@@ -787,7 +788,8 @@ test("C4A real two-application OIDC invocation redeems a ticket and completes th
   assert.equal(strangerLog.status, 403);
   assert.equal((await strangerLog.json()).error, "verified_subject_required");
   assert.equal((await c4aApi("/v1/capability-executions", c4aConsumer, { ...executionBody(), context: { purpose: "Not valid" } }, { "Idempotency-Key": crypto.randomUUID() })).status, 422);
-  assert.equal((await c4aStart({ ...executionBody("purpose"), context: { ...context, purpose: "marketing" } })).body.error, "consent_required", "consent covers named purposes only");
+  const outsidePurpose = await c4aStart({ ...executionBody("purpose"), context: { ...context, purpose: "marketing" } });
+  assert.deepEqual([outsidePurpose.status, outsidePurpose.body.error], [403, "consent_required"], "consent covers named purposes only");
   const consents = await (await api("/v1/me/consents", owner)).json();
   trustCases.push({ schema: "SubjectConsentList", value: consents });
   assert.ok(consents.consents.some(item => item.consentId === consent.consentId && item.state === "active"));
@@ -807,11 +809,12 @@ test("C4A real two-application OIDC invocation redeems a ticket and completes th
     WHERE consent_id=${q(expiringId)};`);
   const expiredCall = await c4aStart({ ...executionBody("purpose"), context: { ...context, purpose: "record_review" } });
   assert.deepEqual([expiredCall.status, expiredCall.body.error], [403, "consent_expired"]);
-  for (const { body } of [unconsented, revokedCall, expiredCall]) {
+  for (const { body, headers } of [unconsented, outsidePurpose, revokedCall, expiredCall]) {
     assert.match(body.requestId, /^[0-9a-f-]{36}$/);
+    assert.equal(body.requestId, headers["x-request-id"]);
     const denial = await sql(`SELECT count(*) FROM app_private.audit WHERE event='authorization.denied'
       AND outcome='denied' AND reason_code=${q(body.error)} AND reason=${q(body.requestId)};`);
-    assert.equal(denial.stdout.trim(), "1");
+    assert.equal(denial.stdout.trim(), "1", `audit for ${body.error} (${body.requestId})`);
   }
 
   // Break-glass: no consent, but a justification; sealed, visible to the person, reviewed.

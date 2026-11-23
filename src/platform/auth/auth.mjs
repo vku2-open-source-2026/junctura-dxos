@@ -71,7 +71,7 @@ function managementAppId(path, method) {
 }
 
 export async function logAccessDenial(config, identity, requestId, code) {
-  if (!config.enforceAppAccess || !identity?.clientId) return;
+  if (!identity?.clientId) return;
   const response = await fetch(`${config.dataUrl}/rpc/record_app_denial`, {
     method: "POST", redirect: "error", signal: AbortSignal.timeout(3000),
     headers: { Authorization: `Bearer ${signInternalToken(config.dataSecret, {

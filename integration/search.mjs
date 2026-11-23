@@ -12,12 +12,13 @@ const { api, sql, q } = support;
 const collection = `${prefix}_notes`;
 let owner, other, recipient, manager, recordId, objectId, secretId;
 
-const waitUntil = async (probe, seconds = 30) => {
-  const deadline = Date.now() + seconds * 1000;
+const waitUntil = async (description, probe) => {
+  // A recreated Core may wait for the previous worker's 60-second lease.
+  const deadline = Date.now() + 90_000;
   for (;;) {
     const value = await probe();
     if (value) return value;
-    if (Date.now() > deadline) throw new Error("search index did not settle");
+    if (Date.now() > deadline) assert.fail(`Search index did not settle: ${description}`);
     await new Promise(resolve => setTimeout(resolve, 500));
   }
 };
@@ -58,7 +59,7 @@ test("declared record fields become searchable with live ACL checks", async () =
     headers: { "Idempotency-Key": randomUUID() },
   }), 201);
   secretId = visible.id;
-  await waitUntil(async () => (await hits(owner, `needle-${prefix}`)).length);
+  await waitUntil("owner record", async () => (await hits(owner, `needle-${prefix}`)).length);
   const items = await hits(owner, `needle-${prefix}`);
   assert.deepEqual(items, [{ type: "record", recordRef: { collection, id: recordId } }]);
   // The owner matches the sensitive value; the management grant does not.
@@ -66,7 +67,7 @@ test("declared record fields become searchable with live ACL checks", async () =
     [{ type: "record", recordRef: { collection, id: recordId } }]);
   // The management projection is a separate document indexed on its own;
   // wait for it before asserting what management can and cannot match.
-  const managed = await waitUntil(async () => {
+  const managed = await waitUntil("management projection", async () => {
     const items = await hits(manager, `needle-${prefix}`);
     return items.length ? items : null;
   });
@@ -80,38 +81,42 @@ test("declared record fields become searchable with live ACL checks", async () =
 });
 
 test("object text becomes searchable after a clean publish", async () => {
+  const original = `quarterly findings ${prefix}`;
+  const replacement = `replacement ${prefix}`;
   const created = await jsonResult(await api("/v2/objects", owner, {
     method: "POST",
     headers: { "Idempotency-Key": randomUUID(), "Content-Type": "application/octet-stream" },
-    body: Buffer.from("quarterly findings memo"),
+    body: Buffer.from(original),
   }), 201);
   objectId = created.id;
-  await waitUntil(async () => (await hits(owner, "quarterly findings")).some(hit => hit.type === "object"));
-  const items = await hits(owner, "quarterly findings");
+  await waitUntil("published object", async () => (await hits(owner, original)).some(hit => hit.objectId === objectId));
+  const items = await hits(owner, original);
   assert.deepEqual(items.filter(hit => hit.type === "object"), [{ type: "object", objectId }]);
   // Replacing the published version replaces the indexed text.
   assert.equal((await api(`/v2/objects/${objectId}`, owner, {
     method: "PUT",
     headers: { "Idempotency-Key": randomUUID(), "Content-Type": "application/octet-stream" },
-    body: Buffer.from("replacement only"),
+    body: Buffer.from(replacement),
   })).status, 200);
-  await waitUntil(async () => {
-    const found = await hits(owner, "replacement");
+  await waitUntil("replacement object text", async () => {
+    const found = await hits(owner, replacement);
     return found.some(hit => hit.type === "object" && hit.objectId === objectId);
   });
   // The superseded document's purge follows its replacement's visibility, so
   // the old text settles out of the index like the delete case below.
-  await waitUntil(async () =>
-    (await hits(owner, "quarterly findings")).every(hit => hit.type !== "object"));
+  await waitUntil("superseded object text removed", async () =>
+    (await hits(owner, original)).every(hit => hit.objectId !== objectId));
   // Deletion tombstones the object and drops it from the index.
   assert.equal((await api(`/v2/objects/${objectId}`, owner, { method: "DELETE" })).status, 204);
-  await waitUntil(async () => {
-    const found = await hits(owner, "replacement");
+  await waitUntil("deleted object text removed", async () => {
+    const found = await hits(owner, replacement);
     return !found.some(hit => hit.type === "object" && hit.objectId === objectId);
   });
 });
 
 test("shares decide visibility at query time and revocation is immediate", async () => {
+  await waitUntil("record available before sharing", async () => (await hits(owner, `needle-${prefix}`))
+    .some(hit => hit.recordRef?.id === recordId));
   await jsonResult(await api("/v2/resource-shares", owner, { method: "POST", body: {
     resourceType: "record", resourceId: recordId, granteeAppId: recipient.appId,
     action: "read", expiresAt: new Date(Date.now() + 3600000).toISOString(),
@@ -134,7 +139,7 @@ test("cursors carry the query, caller and generation and fail closed", async () 
       method: "POST", body: { data: { code } }, headers: { "Idempotency-Key": randomUUID() },
     }), 201);
   }
-  await waitUntil(async () => (await hits(owner, term)).length >= 2);
+  await waitUntil("both cursor records", async () => (await hits(owner, term)).length >= 2);
   const page = await jsonResult(await api(`/v1/search?q=${encodeURIComponent(term)}&limit=1`, owner), 200);
   assert.equal(page.items.length, 1);
   assert.ok(page.nextCursor);

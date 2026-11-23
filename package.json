@@ -72,6 +72,6 @@
     "console:build": "npm --prefix console run build",
     "console:test": "npm --prefix console test",
     "console:check:endpoints": "npm --prefix console run check:endpoints",
-    "test:app-access": "node --test integration/app-access.mjs"
+    "test:app-access": "node --env-file-if-exists=.env --test integration/app-access.mjs"
   }
 }

@@ -128,17 +128,15 @@ export function createApplicationProvider(config, beforeWrite, fetcher = fetch) 
       "oauth2.jwt.authorization.grant.enabled": "false", "oidc.ciba.grant.enabled": "false",
       "oauth2.device.authorization.grant.enabled": "false", "pkce.code.challenge.method": "S256" };
     const overrides = { ...item.authenticationFlowBindingOverrides, browser: browserId, direct_grant: directId };
-    const flags = { implicitFlowEnabled: false, oauth2DeviceAuthorizationGrantEnabled: false, oidcCibaGrantEnabled: false };
-    const optional = (item.optionalClientScopes ?? []).filter(scope => scope !== "offline_access");
     const standardFlowEnabled = clientId === "junctura-console" ||
-      (Boolean(item.redirectUris?.length) && item.redirectUris.every(uri => !uri.includes("*")));
+      (Boolean(item.standardFlowEnabled) && Boolean(item.redirectUris?.length) && item.redirectUris.every(uri => !uri.includes("*")));
     if (Object.keys(attributes).some(key => attributes[key] !== item.attributes?.[key]) ||
         Object.keys(overrides).some(key => overrides[key] !== item.authenticationFlowBindingOverrides?.[key]) ||
-        Object.keys(flags).some(key => item[key] === true) || (item.optionalClientScopes ?? []).includes("offline_access") ||
-        Boolean(item.standardFlowEnabled) !== standardFlowEnabled) {
-      await write(path, "PUT", { id: item.id, ...flags, standardFlowEnabled, attributes,
-        optionalClientScopes: optional, authenticationFlowBindingOverrides: overrides,
-        ...(!item.authenticationFlowBindingOverrides?.browser && (item.standardFlowEnabled || item.directAccessGrantsEnabled)
+        item.implicitFlowEnabled || Boolean(item.standardFlowEnabled) !== standardFlowEnabled) {
+      await write(path, "PUT", { id: item.id, clientId, type: item.type, implicitFlowEnabled: false,
+        standardFlowEnabled, attributes, authenticationFlowBindingOverrides: overrides,
+        ...(item.authorizationServicesEnabled ? { authorizationServicesEnabled: true } : {}),
+        ...(!item.authenticationFlowBindingOverrides?.browser && (item.standardFlowEnabled || item.implicitFlowEnabled || item.directAccessGrantsEnabled)
           ? { notBefore: Math.floor(Date.now() / 1000) } : {}) });
     }
     const optionalScopes = await get(`${path}/optional-client-scopes`, isList);
@@ -192,7 +190,8 @@ export function createApplicationProvider(config, beforeWrite, fetcher = fetch) 
       if (item.publicClient || item.clientAuthenticatorType !== "client-secret") throw new Error("oidc_secret_unsupported");
       const path = clientPath(item.id);
       return async secret => {
-        await write(path, "PUT", { id: item.id, secret });
+        await write(path, "PUT", { id: item.id, clientId, type: item.type, secret,
+          ...(item.authorizationServicesEnabled ? { authorizationServicesEnabled: true } : {}) });
         const stored = await get(`${path}/client-secret`, value => typeof value?.value === "string");
         if (stored?.value !== secret) fail();
         await write(`${path}/client-secret/rotated`, "DELETE");

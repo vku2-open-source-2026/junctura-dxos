@@ -127,6 +127,7 @@ services:
       - ./infra/postgres/047-app-access.sql:/migrations/047-app-access.sql:ro
       - ./infra/postgres/048-app-data-units.sql:/migrations/048-app-data-units.sql:ro
       - ./infra/postgres/049-access-denial-reasons.sql:/migrations/049-access-denial-reasons.sql:ro
+      - ./infra/postgres/050-app-access-compatibility.sql:/migrations/050-app-access-compatibility.sql:ro
     depends_on:
       database:
         condition: service_healthy

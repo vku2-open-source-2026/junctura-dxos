@@ -29,7 +29,8 @@ export function assertRequiredReleaseFiles(files) {
     "infra/postgres/042-application-audit.sql", "infra/postgres/043-object-metadata-and-quota.sql",
     "infra/postgres/044-search-index-jobs.sql", "infra/postgres/045-authorized-events.sql",
     "infra/postgres/046-subject-access-reports.sql", "infra/postgres/047-app-access.sql",
-    "infra/postgres/048-app-data-units.sql", "infra/postgres/049-access-denial-reasons.sql"]) {
+    "infra/postgres/048-app-data-units.sql", "infra/postgres/049-access-denial-reasons.sql",
+    "infra/postgres/050-app-access-compatibility.sql"]) {
     assert.ok(files.includes(required), `Missing release file ${required}`);
   }
 }

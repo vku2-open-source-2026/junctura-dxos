@@ -360,7 +360,8 @@ export async function drainTenant(config, meili, tenantId) {
       if (!Array.isArray(jobs) || !jobs.length) {
         if (!building) break;
         const finished = await fenced("finish");
-        if (!finished || typeof finished !== "object") continue;
+        // Pending jobs can be waiting for their retry time. Yield until the next sweep.
+        if (!finished || typeof finished !== "object") break;
         building = null;
         if (uuidPattern.test(finished.retired_generation ?? "")) {
           await meili.dropIndex(searchIndexUid(tenantId, finished.retired_generation));

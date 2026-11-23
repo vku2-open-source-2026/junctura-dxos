@@ -613,15 +613,10 @@ Keycloak logs a denied sign-in and shows the localized reason in its login theme
 | `consent_expired` | The matching consent passed its expiry. |
 | `unit_mismatch` | The selected unit is invalid, or a directly addressed resource belongs to a different unit. |
 
-To exercise the live HTTP and browser flow, run `npm run test:app-access` against an isolated stack
-with the migrations and application sync installed. Provide `BASE`, `ADMIN_TOKEN`,
-`APP_ID`, `CLIENT_SECRET`, `REDIRECT_URI`, `UNIT_A`, `UNIT_B`, `GROUP_B`, `USER_A`, `USER_B`,
-`PASSWORD_A`, `PASSWORD_B`, `SUBJECT_A` and `SUBJECT_B` with the `APP_ACCESS_TEST_` prefix.
-Use a `USER_A` with valid credentials and no Console access role.
-Use a disposable active confidential app without prior assignments and a second app in the same tenant
-for the pagination check. The administrator needs app management and audit read. The users each belong
-to their named unit and the second user belongs to the named group. The suite changes the test app's
-deployment, adds records and rotates its secret.
+Run `npm run test:app-access` against an isolated development stack with the migrations and both
+synchronization accounts configured. The suite provisions its own Keycloak users and clients,
+enrolls two applications, creates directory units, checks browser sign-in and unit isolation, and
+rotates the fixture client's secret in OpenBao.
 
 
 ## Application statistics
