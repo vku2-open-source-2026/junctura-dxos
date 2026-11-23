@@ -94,7 +94,10 @@ test("object text becomes searchable after a clean publish", async () => {
     const found = await hits(owner, "replacement");
     return found.some(hit => hit.type === "object" && hit.objectId === objectId);
   });
-  assert.deepEqual((await hits(owner, "quarterly findings")).filter(hit => hit.type === "object"), []);
+  // The superseded document's purge follows its replacement's visibility, so
+  // the old text settles out of the index like the delete case below.
+  await waitUntil(async () =>
+    (await hits(owner, "quarterly findings")).every(hit => hit.type !== "object"));
   // Deletion tombstones the object and drops it from the index.
   assert.equal((await api(`/v2/objects/${objectId}`, owner, { method: "DELETE" })).status, 204);
   await waitUntil(async () => {

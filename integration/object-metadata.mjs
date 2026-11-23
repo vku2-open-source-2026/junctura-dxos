@@ -87,7 +87,7 @@ test("replacement preserves omitted metadata and honours explicit null and empty
   }), 201);
   // Omitted parts preserve the previous link and tags.
   const kept = await jsonResult(await upload(owner, created.id, { file: octets(Buffer.from("second-bytes")) }, { method: "PUT" }), 200);
-  assert.equal(kept.size, 13);
+  assert.equal(kept.size, 12);
   assert.deepEqual(kept.recordRef, { collection, id: recordId });
   assert.deepEqual(kept.tags, ["keep"]);
   // Explicit null and [] clear them.
@@ -169,7 +169,7 @@ test("concurrent identical uploads publish one version and replay the other", as
   const replaced = await jsonResult(await upload(owner, receipt.id, {
     file: octets(Buffer.from("grown-twin")),
   }, { method: "PUT" }), 200);
-  assert.equal(replaced.size, 11);
+  assert.equal(replaced.size, 10);
 });
 
 test("concurrent replaces under different keys commit both and end on one live version", async () => {
@@ -259,11 +259,14 @@ test("upload rejections follow the planned envelope", async () => {
   const foreign = await upload(other, undefined, { file: octets(Buffer.from("x")),
     recordRef: { collection, id: recordId } });
   assert.equal(foreign.status, 404);
-  const missingKey = await contractFetch(`${base}/v2/objects`, { method: "POST",
-    headers: { Authorization: `Bearer ${owner.token}`, "Content-Type": "application/octet-stream" },
+  // A malformed key is rejected before any byte is stored; a keyless upload
+  // stays compatible and records no receipt.
+  const malformedKey = await contractFetch(`${base}/v2/objects`, { method: "POST",
+    headers: { Authorization: `Bearer ${owner.token}`, "Content-Type": "application/octet-stream",
+      "Idempotency-Key": "not-a-uuid" },
     body: Buffer.from("x"), signal: AbortSignal.timeout(30000) });
-  assert.equal(missingKey.status, 400);
-  assert.match((await missingKey.json()).error, /^invalid_request$/);
+  assert.equal(malformedKey.status, 400);
+  assert.match((await malformedKey.json()).error, /^invalid_request$/);
   // A closing delimiter that runs on into other bytes is a malformed envelope.
   const boundary = `${prefix}bad`;
   const malformed = await contractFetch(`${base}/v2/objects`, { method: "POST",

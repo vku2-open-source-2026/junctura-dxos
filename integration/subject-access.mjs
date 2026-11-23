@@ -270,7 +270,9 @@ test("emergency feedback belongs to the subject's own emergency access", async (
   const changed = await post(owner, feedbackPath, { decision: "unrecognized" });
   assert.equal(changed.status, 409);
   assert.equal((await changed.json()).error, "resource_conflict");
-  const plain = page.entries.find(entry => !entry.emergency);
+  // Only capability entries carry the emergency flag; an application entry
+  // would have no executionId to answer feedback for.
+  const plain = page.entries.find(entry => entry.source === "capability" && !entry.emergency);
   const refused = await post(owner, `/v1/me/emergency-accesses/${plain.executionId}/feedback`, { decision: "other" });
   assert.equal(refused.status, 404);
   const strangerFeedback = await post(stranger, feedbackPath, { decision: "other" });
