@@ -57,6 +57,9 @@ export function applicationToken(identity, secret, role = "junctura_app_api") {
     ...(role === "junctura_directory_api" ? { directory_writer: identity.roles.includes("core-writer") } : {}),
     // The candidate subjectId travels to RPCs that verify the operator binding.
     app_sync_worker: identity.appSyncWorker, console_role: identity.consoleRole, resource_unit: identity.resourceUnit, human_app_id: identity.humanAppId,
+    // Catalog exposure filters match the caller's token groups, so the unit
+    // memberships of the current login travel with capability reads only.
+    ...(role === "junctura_capability_api" ? { units: identity.units } : {}),
     ...(identity.subjectId ? { subject_id: identity.subjectId } : {}),
     iss: identity.issuer, client_id: identity.clientId, aud: "junctura-data", exp: Math.floor(Date.now() / 1000) + 30 });
 }
