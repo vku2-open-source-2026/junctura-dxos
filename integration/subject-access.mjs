@@ -294,7 +294,7 @@ test("writing a report never disturbs the sealed audit chain", async () => {
   // so the tenant chain may already report a gap; the report must leave the
   // chain exactly as it found it, intact or not.
   const before = await verify();
-  assert.ok(before.entries >= 1);
+  if (before.verified) assert.ok(before.entries >= 1);
   const page = await (await api("/v1/me/data-access", owner)).json();
   const target = page.entries.find(entry => entry.source === "capability" && !entry.flaggedAt);
   assert.equal((await post(owner, `/v1/me/data-access/${target.accessId}/flag`, { reason: "other" })).status, 201);
