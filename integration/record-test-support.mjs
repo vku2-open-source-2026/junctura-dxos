@@ -89,6 +89,9 @@ export function recordTestSupport(prefix) {
         await sql(`DELETE FROM app_private.record_export_snapshots WHERE owner_app_id='${app.appId}';
           DELETE FROM app_private.record_query_cursors WHERE owner_app_id='${app.appId}';`);
         await sql(`DELETE FROM app_private.idempotency_results WHERE concrete_path LIKE '%${prefix}%';
+          DELETE FROM app_private.audit_app_payloads p USING app_private.audit a
+            WHERE p.tenant_id=a.tenant_id AND p.event_id=a.event_id
+              AND (a.actor_app_id='${app.appId}' OR a.subject='${app.subject}');
           DELETE FROM app_private.audit WHERE actor_app_id='${app.appId}' OR subject='${app.subject}';
           DELETE FROM app_private.resource_shares WHERE owner_app_id='${app.appId}' OR grantee_app_id='${app.appId}';
           -- Objects go before their owning application.

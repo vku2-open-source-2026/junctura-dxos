@@ -290,8 +290,10 @@ test("writing a report never disturbs the sealed audit chain", async () => {
     assert.equal(response.status, 200);
     return response.json();
   };
+  // Other suites on this shared stack delete their own fixture audit rows,
+  // so the tenant chain may already report a gap; the report must leave the
+  // chain exactly as it found it, intact or not.
   const before = await verify();
-  assert.equal(before.verified, true);
   assert.ok(before.entries >= 1);
   const page = await (await api("/v1/me/data-access", owner)).json();
   const target = page.entries.find(entry => entry.source === "capability" && !entry.flaggedAt);
@@ -300,7 +302,8 @@ test("writing a report never disturbs the sealed audit chain", async () => {
   // A report is a separate row keyed by the visible access event: the audit
   // chain and the management review stay untouched — the entry count, the
   // seal and the head hash are exactly where they were.
-  assert.equal(after.verified, true);
+  assert.equal(after.verified, before.verified);
+  assert.deepEqual(after.brokenAt ?? null, before.brokenAt ?? null);
   assert.equal(after.entries, before.entries);
   assert.equal(after.newlySealed, 0);
   assert.equal(after.headHash, before.headHash);
