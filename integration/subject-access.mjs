@@ -64,7 +64,7 @@ const seedExecution = async ({ executionId, dataSubject, emergency, review, reco
 // and stay unsealed until the regular append route seals the chain.
 const seedSharedAppEvents = async () => {
   const claims = JSON.stringify({ tenant_id: "tenant-a", iss: issuer,
-    sub: consumer.subject, client_id: consumer.clientId });
+    sub: consumer.subject, client_id: consumer.clientId, role: "junctura_audit_api" });
   const event = index => `DO $seed$ DECLARE new_id uuid; BEGIN
     INSERT INTO app_private.audit(tenant_id,event,resource_id,revision,outcome)
       VALUES ('tenant-a','audit.application_event','${consumer.appId}',1,'success')
