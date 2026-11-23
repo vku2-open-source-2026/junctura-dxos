@@ -54,7 +54,7 @@ test("declared record fields become searchable with live ACL checks", async () =
   }), 201);
   recordId = found.id;
   const visible = await jsonResult(await api(`/v2/data/${collection}`, owner, {
-    method: "POST", body: { data: { code: "plain-code", note: "also hidden" } },
+    method: "POST", body: { data: { code: "plain-code", note: "unrelated remark" } },
     headers: { "Idempotency-Key": randomUUID() },
   }), 201);
   secretId = visible.id;
