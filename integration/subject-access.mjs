@@ -116,10 +116,15 @@ before(async () => {
   // consumer and provider are distinct applications.
   versionId = randomUUID();
   grantId = randomUUID();
+  // A published version carries the validation evidence the registry
+  // requires (capability_published_validation): it was validated at the
+  // previous revision under policy revision 1 with the same digest.
   await sql(`INSERT INTO app_private.capability_versions (tenant_id, version_id, capability_id, provider_app_id,
-      version, manifest, digest, state, created_by, updated_by)
+      version, manifest, digest, state, created_by, updated_by, revision, validation_status, validation_digest,
+      validation_revision, validation_policy_revision, validated_at, validation_report, published_at)
     VALUES ('tenant-a', '${versionId}', '${capabilityId}', '${provider.appId}', '1.0.0', '{"title":"Lookup"}',
-      '${digest}', 'published', 'fixture', 'fixture');`);
+      '${digest}', 'published', 'fixture', 'fixture', 2, 'valid', '${digest}', 1, 1, now(),
+      jsonb_build_object('status','valid','digest','${digest}','revision','1','policyRevision','1'), now());`);
   await sql(`INSERT INTO trust_private.grants (tenant_id, grant_id, issuer, provider_app_id, consumer_app_id,
       version_id, capability_id, version, manifest_digest, proposal, digest, state, expires_at, created_by, management_client)
     VALUES ('tenant-a', '${grantId}', ${q(issuer)}, '${provider.appId}', '${consumer.appId}', '${versionId}',
