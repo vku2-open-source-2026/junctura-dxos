@@ -255,16 +255,16 @@ test("pg_dump/pg_restore preserves real data and tenant RLS in an isolated tempo
     // tenant proves its rebuild source: preparing the rebuild enqueues the
     // restored data again instead of starting from an empty index.
     const searchRebuild = await docker(["exec", target, "psql", "-U", "junctura_admin", "-d", "recovered", "-v", "ON_ERROR_STOP=1", "-Atc",
-      "UPDATE app_private.search_generations SET rebuild_requested=true; SELECT coalesce(bool_and(rebuild_requested),true) FROM app_private.search_generations;"]);
+      "DELETE FROM app_private.search_worker_leases; UPDATE app_private.search_generations SET rebuild_requested=true; SELECT coalesce(bool_and(rebuild_requested),true) FROM app_private.search_generations;"]);
     assert.equal(searchRebuild.stdout.trim().split(/\r?\n/).at(-1), "t",
       "The restore runbook flags every search generation for a rebuild");
     const rebuildLease = randomUUID();
     const rebuild = await docker(["exec", target, "psql", "-U", "junctura_admin", "-d", "recovered", "-v", "ON_ERROR_STOP=1", "-Atc",
       "SET ROLE junctura_search_worker; SELECT set_config('request.jwt.claims','{\"role\":\"junctura_search_worker\",\"tenant_id\":\"tenant-a\"}',false);" +
-      `SELECT core.search_command('acquire','{"lease":"${rebuildLease}"}'::jsonb)->>'status';` +
-      `SELECT core.search_command('prepare','{"lease":"${rebuildLease}"}'::jsonb)->'value'->>'building_generation';`]);
+      `SELECT core.search_command('acquire','{"lease":"${rebuildLease}"}'::jsonb)::text;` +
+      `SELECT coalesce(core.search_command('prepare','{"lease":"${rebuildLease}"}'::jsonb)->'value'->>'building_generation','none');`]);
     const [acquired, building] = rebuild.stdout.trim().split(/\r?\n/).slice(-2);
-    assert.equal(acquired, "200", "the rebuild worker holds the tenant lease");
+    assert.equal(JSON.parse(acquired).status, 200, `the rebuild worker holds the tenant lease: ${acquired}`);
     const queued = await docker(["exec", target, "psql", "-U", "junctura_admin", "-d", "recovered", "-v", "ON_ERROR_STOP=1", "-Atc",
       "SELECT count(DISTINCT resource_id) FROM app_private.search_index_jobs WHERE tenant_id='tenant-a' AND resource_type='record';"]);
     const rebuildState = { building, records: Number(queued.stdout.trim().split(/\r?\n/).at(-1)) };
