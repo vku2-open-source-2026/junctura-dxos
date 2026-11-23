@@ -339,3 +339,71 @@ test("a database newer than the runner is refused", async () => {
     assert.match(await refused({ MIGRATION_DIR: "/migrations/subset" }), /newer than this migration set/);
   } finally { rmSync(subset, { recursive: true, force: true }); }
 });
+
+test("application audit verifies hashes written before its migration", async () => {
+  const database = "audit_upgrade";
+  const upgradeDir = join(directory, database);
+  mkdirSync(upgradeDir);
+  const migrateAudit = () => migrate({ MIGRATION_DIR: `/migrations/${database}` }, database);
+  const user = { tenant_id: "legacy-audit", iss: "https://audit.example.invalid", sub: "manager",
+    client_id: "console", role: "junctura_audit_api" };
+  const setClaims = `SELECT set_config('request.jwt.claims','${JSON.stringify(user)}',false)`;
+  const verify = async () => {
+    const output = await sql(`SET ROLE junctura_audit_api; ${setClaims}; SELECT core.audit_verify('{}')->'value';`, database);
+    return JSON.parse(output.split("\n").at(-1));
+  };
+  try {
+    await sql(`CREATE DATABASE ${database} OWNER junctura_data`);
+    for (const file of migrations.filter(entry => Number(entry.slice(0, 3)) <= 41)) {
+      cpSync(join(directory, file), join(upgradeDir, file));
+    }
+    await migrateAudit();
+    await sql(`INSERT INTO app_private.principals(tenant_id,issuer,subject,management_client,permissions)
+      VALUES('legacy-audit','https://audit.example.invalid','manager','console',ARRAY['audit.read']);
+      SET ROLE junctura_app_owner; ${setClaims};
+      SELECT app_private.audit_append('audit.legacy_fixture','audit','${randomUUID()}',1);`, database);
+    const before = await verify();
+    assert.equal(before.verified, true);
+    assert.equal(before.entries, 1);
+    cpSync(join(directory, "042-application-audit.sql"), join(upgradeDir, "042-application-audit.sql"));
+    await migrateAudit();
+    const after = await verify();
+    assert.deepEqual([after.verified, after.entries, after.newlySealed, after.headHash],
+      [true, 1, 0, before.headHash]);
+  } finally {
+    await sql(`DROP DATABASE IF EXISTS ${database}`);
+    rmSync(upgradeDir, { recursive: true, force: true });
+  }
+});
+
+test("workflow notification observations deduplicate across Core replicas and require a current matching group", async () => {
+  const tenant = `events-${randomUUID()}`;
+  const task = { taskId: "example-task", executionId: "example-run", definitionId: "review:1:example",
+    stepKey: "review", createdAt: new Date().toISOString() };
+  await sql(`INSERT INTO app_private.directory_unit_types(tenant_id,unit_type,name,generation,synced_generation)
+      VALUES('${tenant}','office','Office',1,1);
+    INSERT INTO app_private.directory_units(tenant_id,unit,unit_type,name,generation,synced_generation)
+      VALUES('${tenant}','unit-a','office','Office',1,1);
+    INSERT INTO app_private.directory_groups(tenant_id,unit,unit_group,name,generation,synced_generation)
+      VALUES('${tenant}','unit-a','readers','Readers',1,1);
+    INSERT INTO app_private.workflow_executions(tenant_id,caller_scope,request_key,digest,definition_id,
+      definition_key,steps,execution_id,start_result)
+      VALUES('${tenant}',sha256(''::bytea),'${randomUUID()}',sha256(''::bytea),'${task.definitionId}',
+        'review','{"review":{"unit":"unit-a","groups":["readers"]}}','${task.executionId}','{}');`);
+  const rpc = async (role, query, groups = []) => {
+    const claims = JSON.stringify({ role, tenant_id: tenant, groups });
+    const output = await sql(`SET ROLE ${role}; SELECT set_config('request.jwt.claims','${claims}',false); SELECT ${query};`);
+    return JSON.parse(output.split("\n").at(-1));
+  };
+  const observe = () => rpc("junctura_event_observer", `core.event_observe_tasks('${JSON.stringify([task])}')`);
+  await Promise.all([observe(), observe()]);
+  const page = await rpc("junctura_event_api", "core.event_stream_command('poll','{\"after\":\"0\"}')");
+  assert.equal(page.value.overflow, false);
+  assert.deepEqual(page.value.items, [{ sequence: "1", event: "workflow.task.created", task }]);
+  const deliver = groups => rpc("junctura_event_api", "core.event_stream_command('deliver','{\"sequence\":\"1\"}')", groups);
+  assert.deepEqual((await deliver(["/unit-a/readers"])).value, { taskId: task.taskId, executionId: task.executionId });
+  assert.equal((await deliver(["/unit-b/readers"])).value, null);
+  await sql(`UPDATE app_private.directory_groups SET pending_delete=true WHERE tenant_id='${tenant}';`);
+  assert.equal((await deliver(["/unit-a/readers"])).value, null);
+  await assert.rejects(rpc("junctura_event_api", "core.event_observe_tasks('[]')"), /permission denied/);
+});

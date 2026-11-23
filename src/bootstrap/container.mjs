@@ -6,7 +6,10 @@ import { readFileSync } from "node:fs";
 import { createApi } from "../api.mjs";
 import { createCapabilityRuntime } from "../modules/capability/execution/runtime.mjs";
 import { startDirectoryReconciler } from "../modules/directory/directory.mjs";
+import { createEventStreams } from "../modules/events/events.mjs";
 import { createCompositionRuntime } from "../modules/capability/composition/runtime.mjs";
+import { startObjectReconciler } from "../modules/objects/objects.mjs";
+import { startSearchIndexer } from "../modules/search/search.mjs";
 import { startWorkflowReconciler } from "../modules/workflow/workflow.mjs";
 
 // Approved public origins plus, when configured, internal origins trusted only
@@ -27,11 +30,14 @@ export function createApplication(config, execution, composition) {
     compositionRuntime = createCompositionRuntime(config, providerNetworkOptions(composition));
     config = { ...config, compositionRuntime };
   }
-  const route = createApi(config);
+  const eventsRuntime = createEventStreams(config);
+  const route = createApi({ ...config, eventsRuntime });
   const stopDirectory = startDirectoryReconciler(config);
   const stopWorkflow = startWorkflowReconciler(config);
+  const stopObjects = startObjectReconciler(config);
+  const stopSearch = startSearchIndexer(config);
   return {
     route,
-    close() { stopDirectory?.(); stopWorkflow?.(); executionRuntime?.close(); compositionRuntime?.close(); },
+    close() { eventsRuntime.close(); stopDirectory?.(); stopWorkflow?.(); stopObjects?.(); stopSearch?.(); executionRuntime?.close(); compositionRuntime?.close(); },
   };
 }

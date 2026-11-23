@@ -244,3 +244,105 @@ test("SDK workflow task calls use the supplied verified token, filters and stabl
     ["GET", "/v1/workflows/executions/exec%3A1/history?cursor=next", undefined, null],
   ]);
 });
+
+test("application audit methods forward the key, scope and caller token and return the export stream", async () => {
+  const requests = [];
+  const body = { action: "record.viewed", resourceRef: { type: "record", collection: "entries", id: "record-id" },
+    outcome: "success", purpose: "service_review" };
+  const client = createJuncturaClient({ baseUrl: "https://gateway.example.invalid", clientId: "app", clientSecret: "secret",
+    fetcher: async (url, { method, headers, body: payload }) => {
+      requests.push({ url, method, headers, payload });
+      return url.pathname.endsWith(":export") ? new Response('{"type":"chainHead","sequence":0,"hash":null}\n') :
+        Response.json(method === "POST" ? { eventId: "receipt" } : { items: [], nextCursor: null });
+    },
+  });
+  const idempotencyKey = "11111111-1111-4111-8111-111111111111";
+  assert.deepEqual(await client.appendAppAuditEvent(body, { idempotencyKey, userToken: "delegated" }), { eventId: "receipt" });
+  assert.deepEqual(await client.queryAppAuditEvents({ app: "self", action: body.action, userToken: "delegated" }),
+    { items: [], nextCursor: null });
+  const stream = await client.exportAppAuditEvents({ unit: "unit-a", userToken: "regulator" });
+  assert.equal(JSON.parse(await stream.text()).type, "chainHead");
+  assert.equal(requests[0].headers.get("Idempotency-Key"), idempotencyKey);
+  assert.equal(requests[0].headers.get("Authorization"), "Bearer delegated");
+  assert.deepEqual(JSON.parse(requests[0].payload), body);
+  assert.equal(requests[1].url.searchParams.get("app"), "self");
+  assert.equal(requests[1].url.searchParams.get("action"), body.action);
+  assert.equal(requests[2].url.searchParams.get("unit"), "unit-a");
+  assert.equal(requests[2].headers.get("Authorization"), "Bearer regulator");
+});
+
+test("the event stream keeps the caller's abort signal after the connection timeout", async () => {
+  let upstream;
+  const client = createJuncturaClient({ ...options, timeoutMs: 5, fetcher: async (url, init) => {
+    assert.equal(url.pathname, "/v1/events");
+    assert.equal(init.headers.get("Authorization"), "Bearer user-token");
+    upstream = init.signal;
+    return new Response(": connected\n\n", { headers: { "Content-Type": "text/event-stream" } });
+  } });
+  const controller = new AbortController();
+  const response = await client.streamAuthorizedEvents({ userToken: "user-token", signal: controller.signal });
+  await new Promise(resolve => setTimeout(resolve, 20));
+  assert.equal(upstream.aborted, false);
+  assert.equal(await response.text(), ": connected\n\n");
+  controller.abort();
+  assert.equal(upstream.aborted, true);
+});
+
+test("object metadata upload, list and search round-trip through the SDK", async () => {
+  const requests = [];
+  const client = createJuncturaClient({ ...options, fetcher: async (url, init) => {
+    requests.push({ url, init });
+    if (url.pathname.includes("/token")) return auth();
+    if (url.pathname === "/v2/objects" && init.method === "POST") return json({ id: "66666666-6666-4666-8666-666666666666", size: 7, recordRef: null, tags: [] }, 201);
+    if (url.pathname === "/v2/objects" && init.method === "GET") return json({ items: [], nextCursor: null });
+    if (url.pathname === "/v1/search") return json({ items: [{ type: "object", objectId: "66666666-6666-4666-8666-666666666666" }], nextCursor: null });
+    return json({ id: "66666666-6666-4666-8666-666666666666", size: 7, recordRef: { collection: "entries", id: "44444444-4444-4444-8444-444444444444" }, tags: ["source"] }, 200);
+  } });
+  const created = await client.uploadObject({ file: new Blob(["bytes"]), recordRef: { collection: "entries", id: "44444444-4444-4444-8444-444444444444" }, tags: ["source"] });
+  assert.equal(created.size, 7);
+  const upload = requests.find(entry => !entry.url.pathname.includes("/token") && entry.init.method === "POST");
+  assert.equal(upload.url.pathname, "/v2/objects");
+  assert.ok(upload.init.headers.get("Idempotency-Key"));
+  assert.ok(upload.init.body instanceof FormData);
+  assert.equal(upload.init.headers.get("Content-Type"), null);
+  const replaced = await client.putObject("66666666-6666-4666-8666-666666666666", new Blob(["bytes"]));
+  assert.deepEqual(replaced.recordRef, { collection: "entries", id: "44444444-4444-4444-8444-444444444444" });
+  const put = requests.find(entry => entry.init.method === "PUT");
+  assert.ok(put.init.headers.get("Idempotency-Key"));
+  assert.equal(put.init.headers.get("Content-Type"), "application/octet-stream");
+  await client.listObjectsByMetadata({ recordRef: { collection: "entries", id: "44444444-4444-4444-8444-444444444444" }, tag: "source", limit: 25 });
+  const listing = requests.find(entry => entry.url.pathname === "/v2/objects" && entry.init.method === "GET");
+  assert.equal(listing.url.searchParams.get("recordRef[collection]"), "entries");
+  assert.equal(listing.url.searchParams.get("recordRef[id]"), "44444444-4444-4444-8444-444444444444");
+  assert.equal(listing.url.searchParams.get("tag"), "source");
+  assert.equal(listing.url.searchParams.get("limit"), "25");
+  await client.searchReadableResources("review", { limit: 10, cursor: "opaque" });
+  const search = requests.at(-1);
+  assert.equal(search.url.pathname, "/v1/search");
+  assert.equal(search.url.searchParams.get("q"), "review");
+  assert.equal(search.url.searchParams.get("cursor"), "opaque");
+  await assert.rejects(client.searchReadableResources(""), TypeError);
+  await assert.rejects(client.uploadObject({ recordRef: null }), TypeError);
+});
+
+test("subject access methods carry the verified user token and keep the access id prefix", async () => {
+  const requests = [];
+  const client = createJuncturaClient({ ...options, fetcher: async (url, init) => {
+    requests.push({ url, init });
+    if (url.pathname.includes("/token")) return auth();
+    return json({ entries: [], nextCursor: null, truncated: false, generatedAt: "2030-01-12T12:00:00.000Z" });
+  } });
+  const access = client.subjectAccess("user-token");
+  await access.list({ limit: 25 });
+  assert.equal(requests.at(-1).url.pathname, "/v1/me/data-access");
+  assert.equal(requests.at(-1).init.headers.get("Authorization"), "Bearer user-token");
+  assert.equal(requests.at(-1).url.searchParams.get("limit"), "25");
+  await access.flag("app:55555555-5555-4555-8555-555555555555", "unrecognized");
+  assert.equal(requests.at(-1).url.pathname, "/v1/me/data-access/app:55555555-5555-4555-8555-555555555555/flag");
+  assert.deepEqual(JSON.parse(requests.at(-1).init.body), { reason: "unrecognized" });
+  await access.emergencyFeedback("11111111-1111-4111-8111-111111111111", { decision: "other" });
+  assert.equal(requests.at(-1).url.pathname, "/v1/me/emergency-accesses/11111111-1111-4111-8111-111111111111/feedback");
+  assert.throws(() => access.flag("55555555-5555-4555-8555-555555555555", "other"), TypeError);
+  assert.throws(() => access.emergencyFeedback("11111111-1111-4111-8111-111111111111", {}), TypeError);
+  assert.throws(() => client.subjectAccess(""), TypeError);
+});

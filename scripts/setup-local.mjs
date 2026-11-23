@@ -9,6 +9,7 @@ const names = [
   "WORKFLOW_DB_PASSWORD", "KEYCLOAK_ADMIN_PASSWORD", "CORE_CLIENT_SECRET",
   "TENANT_A_SECRET", "TENANT_B_SECRET", "READER_SECRET", "SSO_USER_PASSWORD",
   "DATA_JWT_SECRET", "WORKFLOW_ADMIN_PASSWORD", "DIRECTORY_SYNC_CLIENT_SECRET",
+  "MEILI_MASTER_KEY",
 ];
 try {
   const { values } = parseArgs({ options: {
@@ -32,7 +33,7 @@ try {
   console.log("Created local configuration with random credentials; existing files are never overwritten.");
   console.log("Next: npm run doctor, npm run local:up, npm run healthcheck. See docs/GETTING_STARTED.md.");
 } catch (error) {
-  if (error.code === "EEXIST") console.error(".env already exists; preserve it and add missing settings manually");
+  if (error.code === "EEXIST") console.error(".env already exists; preserve it and add missing settings manually (an upgraded install without MEILI_MASTER_KEY needs a generated key; see docs/RELEASE.md)");
   else console.error("Could not create configuration. Check options, distinct ports (1-65535), and directory permissions.");
   process.exitCode = 1;
 }

@@ -6,31 +6,35 @@ import { after, before, test } from "node:test";
 import { handleAudit, handleAuditEvents } from "../src/modules/audit/audit.mjs";
 import { HttpError, json } from "../src/platform/http/http.mjs";
 
-const identity = { tenantId: "tenant-a", subject: "auditor", issuer: "https://identity.example.invalid", clientId: "management", roles: ["core-reader"] };
+const identity = { tenantId: "tenant-a", subject: "auditor", issuer: "https://identity.example.invalid", clientId: "management", roles: ["core-reader", "core-writer"] };
 let reply = { status: 200, value: { verified: true, entries: 3, newlySealed: 1, headHash: `sha256:${"a".repeat(64)}`, firstBreak: null, verifiedAt: "2026-11-04T00:00:00.000Z" } };
 let seen = [];
 let data, core, base;
-const listen = server => new Promise(resolve => server.listen(0, "127.0.0.1", () => resolve(`http://127.0.0.1:${server.address().port}`)));
+const listen = server => new Promise((resolve, reject) => {
+  server.once("error", reject);
+  server.listen(0, "127.0.0.1", () => resolve(`http://127.0.0.1:${server.address().port}`));
+});
 
 before(async () => {
   data = createServer(async (request, response) => {
     const chunks = []; for await (const chunk of request) chunks.push(chunk);
     seen.push({ url: request.url, authorization: request.headers.authorization, body: Buffer.concat(chunks).toString() });
-    if (reply === "down") { response.writeHead(503); return response.end(); }
-    response.writeHead(200, { "Content-Type": "application/json" }); response.end(JSON.stringify(reply));
+    const result = typeof reply === "function" ? reply(JSON.parse(seen.at(-1).body)) : reply;
+    if (result === "down") { response.writeHead(503); return response.end(); }
+    response.writeHead(200, { "Content-Type": "application/json" }); response.end(JSON.stringify(result));
   });
   const dataUrl = await listen(data);
   core = createServer(async (request, response) => {
     try {
       const url = new URL(request.url, "http://core");
-      const handler = url.pathname === "/v1/audit-events" ? handleAuditEvents : handleAudit;
+      const handler = url.pathname.endsWith("/verify") ? handleAudit : handleAuditEvents;
       await handler(request, response, identity, { dataUrl, dataSecret: "x".repeat(32) }, url);
     }
     catch (error) { json(response, error instanceof HttpError ? error.status : 500, { error: error.message }); }
   });
   base = await listen(core);
 });
-after(() => { data.close(); core.close(); });
+after(() => { data?.close(); core?.close(); });
 
 const verify = (options = {}) => fetch(`${base}${options.path ?? "/v1/audit-events/verify"}`, {
   method: options.method ?? "POST", headers: { "Content-Type": "application/json" }, body: options.body ?? "{}" });
@@ -89,7 +93,7 @@ test("listing rejects unknown, repeated or malformed query parameters before the
   for (const bad of ["?tenant=other", "?limit=5&limit=6", "?limit=abc", "?limit=1000", "?since="]) {
     assert.equal((await events(bad)).status, 400, bad);
   }
-  assert.equal((await fetch(`${base}/v1/audit-events`, { method: "POST", body: "{}" })).status, 405);
+  assert.equal((await fetch(`${base}/v1/audit-events`, { method: "PUT", body: "{}" })).status, 405);
   assert.equal(seen.length, 0);
 });
 
@@ -102,4 +106,93 @@ test("listing passes database authority errors through and fails closed on outag
   assert.equal((await events("")).status, 503);
   reply = { status: 200, value: { nextCursor: null } };
   assert.equal((await events("")).status, 503, "malformed database answer is not reported as a page");
+});
+
+const eventId = "11111111-1111-4111-8111-111111111111";
+const key = "22222222-2222-4222-8222-222222222222";
+const auditEvent = { action: "record.viewed", resourceRef: { type: "record", collection: "entries", id: eventId },
+  outcome: "success", purpose: "service_review" };
+const postEvent = body => fetch(`${base}/v1/audit-events`, {
+  method: "POST", headers: { "Content-Type": "application/json", "Idempotency-Key": key }, body: JSON.stringify(body),
+});
+
+test("application append checks scalar metadata and returns the committed receipt or catalog error", async () => {
+  seen = [];
+  for (const meta of [{ k: { nested: true } }, { k: "é".repeat(1021) }, { "invalid-key": 1 }]) {
+    const response = await postEvent({ ...auditEvent, meta });
+    assert.equal(response.status, 400);
+    assert.equal((await response.json()).error, "invalid_audit_meta");
+  }
+  assert.equal((await postEvent({ ...auditEvent, actor: { kind: "application" } })).status, 400);
+  assert.equal(seen.length, 0);
+  const body = { ...auditEvent, meta: { k: "é".repeat(1020) } };
+  const receipt = { eventId, appId: key, occurredAt: "2026-11-22T00:00:00Z", actor: { kind: "application" } };
+  reply = { status: 201, value: receipt };
+  const accepted = await postEvent(body);
+  assert.equal(accepted.status, 201);
+  assert.deepEqual(await accepted.json(), receipt);
+  assert.deepEqual(JSON.parse(seen[0].body), { payload: { body, key } });
+  reply = { status: 422, error: "unknown_action" };
+  const undeclared = await postEvent({ ...auditEvent, action: "record.undeclared" });
+  assert.equal(undeclared.status, 422);
+  assert.equal((await undeclared.json()).error, "unknown_action");
+});
+
+test("audit export writes the snapshot header first and releases the snapshot", async () => {
+  const head = { type: "chainHead", sequence: 0, hash: `sha256:${"0".repeat(64)}`, generatedAt: "2026-11-22T00:00:00Z" };
+  const cleaned = Promise.withResolvers();
+  seen = [];
+  reply = ({ operation }) => {
+    if (operation === "start") return { status: 200, value: { snapshotId: eventId, head } };
+    if (operation === "page") return { status: 200, value: { lines: [], nextAfter: null } };
+    cleaned.resolve();
+    return { status: 204 };
+  };
+  const response = await fetch(`${base}/v1/audit-events:export?app=self`);
+  assert.equal(response.status, 200);
+  assert.match(response.headers.get("content-type"), /^application\/x-ndjson/);
+  assert.equal(await response.text(), `${JSON.stringify(head)}\n`);
+  await cleaned.promise;
+  assert.deepEqual(seen.map(entry => JSON.parse(entry.body)), [
+    { operation: "start", payload: { app: "self" } },
+    { operation: "page", payload: { snapshotId: eventId } },
+    { operation: "end", payload: { snapshotId: eventId } },
+  ]);
+});
+
+test("audit export fails closed on a malformed page instead of looping from the start", async () => {
+  seen = [];
+  for (const page of [
+    { lines: [{ sequence: 1 }], nextAfter: "0" },
+    { lines: [{ sequence: 1 }], nextAfter: 5 },
+    { lines: [{ sequence: 1 }], nextAfter: "not-a-sequence" },
+    { lines: [], nextAfter: "5" },
+  ]) {
+    reply = ({ operation }) => operation === "start"
+      ? { status: 200, value: { snapshotId: eventId, head: { type: "chainHead", sequence: 1, hash: `sha256:${"a".repeat(64)}`, generatedAt: "2026-11-22T00:00:00Z" } } }
+      : { status: 200, value: page };
+    const response = await fetch(`${base}/v1/audit-events:export?app=self`);
+    assert.equal(response.status, 503, JSON.stringify(page));
+  }
+  // A well-formed continuation page still streams.
+  const head = { type: "chainHead", sequence: 5, hash: `sha256:${"b".repeat(64)}`, generatedAt: "2026-11-22T00:00:00Z" };
+  const done = Promise.withResolvers();
+  reply = ({ operation, payload }) => {
+    if (operation === "start") return { status: 200, value: { snapshotId: eventId, head } };
+    if (operation === "page") return payload.after === "5"
+      ? { status: 200, value: { lines: [], nextAfter: null } }
+      : { status: 200, value: { lines: [{ sequence: 1 }], nextAfter: "5" } };
+    done.resolve();
+    return { status: 204 };
+  };
+  seen = [];
+  const response = await fetch(`${base}/v1/audit-events:export?app=self`);
+  assert.equal(response.status, 200);
+  await done.promise;
+  assert.deepEqual(seen.map(entry => JSON.parse(entry.body)), [
+    { operation: "start", payload: { app: "self" } },
+    { operation: "page", payload: { snapshotId: eventId } },
+    { operation: "page", payload: { snapshotId: eventId, after: "5" } },
+    { operation: "end", payload: { snapshotId: eventId } },
+  ]);
 });

@@ -51,7 +51,9 @@ async function human(label, tenant, permissions) {
 // Assign an operator subjectId to a human fixture, bind it in (tenant, issuer)
 // and sign in again so the fresh token carries the verified claim. Bindings
 // are stable: rerunning the same assignment converges, and moving the same
-// subjectId to another login is never a silent fixture operation.
+// subjectId to another login is never a silent fixture operation. The sql
+// adapter of the calling suite either returns trimmed output or a result
+// object; both shapes are accepted here.
 async function verifiedSubject(person, subjectId) {
   adminToken = await operatorToken();
   const user = await (await admin(`users/${person.id}`)).json();
@@ -61,7 +63,8 @@ async function verifiedSubject(person, subjectId) {
     ON CONFLICT (tenant_id,issuer,subject_id) DO UPDATE SET updated_at=clock_timestamp()
     WHERE app_private.subject_bindings.login_subject=${q(person.id)}
     RETURNING subject_id;`);
-  assert.equal(bound.stdout.trim().split(/\r?\n/)[0], subjectId,
+  const output = String(typeof bound === "string" ? bound : bound.stdout).trim();
+  assert.equal(output.split(/\r?\n/)[0], subjectId,
     "the binding must map this login; move the subjectId through operator reconciliation instead");
   bindings.push([person.tenant, person.id, subjectId]);
   return { ...person, token: await login(person.username, person.password, person.clientId) };

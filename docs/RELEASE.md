@@ -81,6 +81,9 @@ they restart shared services. Do not run recovery/fault suites on a real data st
    evidence. They do not establish a coordinated whole-platform recovery point.
 4. Keep the existing `.env`, project name and named volumes. Read the changelog and
    compare `.env.example` key names. Do not regenerate secrets or edit applied SQL.
+   A key introduced after your install needs a value without rerunning setup: for
+   `MEILI_MASTER_KEY`, generate one (`node -e "console.log(require('node:crypto').randomBytes(32).toString('hex'))"`)
+   and append it to the existing `.env`; Compose refuses to start while it is missing.
 5. Build the new Core/Console and run `docker compose run --rm data-migrate`. The
    runner verifies checksums, applied-version inventory, locks and schema drift.
    Stop on refusal; see [MIGRATIONS](DEVELOPING.md#database-migrations). Do not adopt drift blindly.

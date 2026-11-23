@@ -18,6 +18,7 @@ import type {
   WorkflowSummary,
   AuditVerification,
   AuditEventPage,
+  AuditEventEntry,
   TrustGraph,
   TrustGraphEdge,
   TrustGraphNode,
@@ -744,6 +745,26 @@ export class ApiClient {
       items: Array.isArray(data.items) ? data.items : [],
       nextCursor: data.nextCursor ?? null,
     };
+  }
+
+  // Management pages mix platform and application entries while the screens
+  // below only show platform ones; follow the cursor until enough entries
+  // survive the filter instead of dropping whole pages.
+  public async getPlatformAuditEvents(limit = 100): Promise<AuditEventEntry[]> {
+    const entries: AuditEventEntry[] = [];
+    let cursor: string | null = null;
+    let pages = 0;
+    do {
+      const page = await this.getAuditEvents({
+        limit, ...(cursor ? { cursor } : {}),
+      });
+      entries.push(...page.items.filter(
+        (entry): entry is AuditEventEntry => entry.source !== "application",
+      ));
+      cursor = page.nextCursor;
+      pages++;
+    } while (cursor && entries.length < limit && pages < 5);
+    return entries.slice(0, limit);
   }
 
   public async verifyAuditChain(): Promise<AuditVerification> {

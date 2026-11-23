@@ -70,13 +70,10 @@ export const GrantsScreen: React.FC = () => {
       setGraph(nextGraph);
       const optional = <T,>(promise: Promise<T>, fallback: T) =>
         promise.catch(() => fallback);
-      const [auditPage, principalPage] = await Promise.all([
+      const [auditEntries, principalPage] = await Promise.all([
         canReadAudit
-          ? optional(api.getAuditEvents({ limit: 100 }), {
-              items: [],
-              nextCursor: null,
-            })
-          : Promise.resolve({ items: [], nextCursor: null }),
+          ? optional(api.getPlatformAuditEvents(), [])
+          : Promise.resolve([]),
         canReadAudit
           ? optional(api.getDirectoryPrincipals(), {
               items: [],
@@ -84,7 +81,7 @@ export const GrantsScreen: React.FC = () => {
             })
           : Promise.resolve({ items: [], truncated: false }),
       ]);
-      setAudit(auditPage.items);
+      setAudit(auditEntries);
       setPrincipals(principalPage.items);
     } catch (failure) {
       const code = failure instanceof Error ? failure.message : "";

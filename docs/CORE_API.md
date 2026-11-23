@@ -107,9 +107,11 @@ Methods are included with each family; action suffixes are described in the link
 | `/v1/capability-authorizations/introspect` (POST) | Opt-in provider ticket redemption | Writer, exact bound provider and valid ticket/context | [CAPABILITIES.md](CAPABILITIES.md) |
 | `/v1/compositions` and `/*` (GET, POST, PUT) | Opt-in C4B registry/lifecycle | `config.compositionRuntime`; management `compositions.write` / `compositions.publish` | [CAPABILITIES.md](CAPABILITIES.md) |
 | `/v1/me/consents` (GET, POST), `/{consentId}/revoke` (POST) | Manage the caller's own consents | Own authenticated login with a matching binding if the token supplies `subjectId` | [SECURITY.md](SECURITY.md) |
-| `/v1/me/data-access` (GET) | Capability calls naming the caller as data subject | Verified client and own tenant, issuer and subject | [SECURITY.md](SECURITY.md) |
+| `/v1/me/data-access` (GET), `/{accessId}/flag` (POST) | Merged access history naming the caller as data subject; flag a visible entry for review | Verified client and own tenant, issuer and subject | [SECURITY.md](SECURITY.md) |
+| `/v1/me/emergency-accesses/{executionId}/feedback` (POST) | The subject's feedback on their own emergency access | Verified client and own tenant, issuer and subject | [SECURITY.md](SECURITY.md) |
 | `/v1/emergency-accesses` (GET), `/{executionId}/review` (POST) | Review emergency invocations | List: management `trust.approve` or `audit.read`; review: `trust.approve` and writer | [SECURITY.md](SECURITY.md) |
-| `/v1/audit-events` (GET), `/v1/audit-events/verify` (POST) | Protected event query and chain verification | Management `audit.read`; no writer requirement | Internal protected audit contract below; [SECURITY.md](SECURITY.md) |
+| `/v1/events` (GET) | Live task, record status and consent references over SSE | Bearer with `core-reader` and current resource authorization | Live events below |
+| `/v1/audit-events` (GET, POST), `/v1/audit-events:export` (GET), `/v1/audit-events/verify` (POST) | Append, query, export and verify the tenant audit chain | Active app writer for append. App self, assigned regulator or management `audit.read` for reads. Management `audit.read` for verify. | Application audit log below and [SECURITY.md](SECURITY.md) |
 | `/v1/metrics/traffic`, `/requests`, `/features` (GET) | Per-tenant, process-local traffic observations | Management `audit.read`; verified client ID | Traffic metrics below |
 | `/v1/directory/principals`, `/organizations` (GET) | Tenant principal/application directory | Management `audit.read` | Tenant directory below |
 | `/v1/directory/unit-types`, `/units`, `/units/{unit}/groups`, `/units/{unit}/members` (GET), item PUT/DELETE | Directory management desired state | Management `directory.write`; writer for mutations | Tenant directory below |
@@ -292,12 +294,32 @@ caller, including live app-group shares with current membership.
 | `/v1/objects` | POST | Generated UUID upload; `201 {id,size}` |
 | `/v1/objects/{uuid}` | PUT | Caller-chosen UUID upload/replace; `201` created or `200` replaced |
 | `/v1/objects/{uuid}` | GET, DELETE | Read/delete a tenant object; inaccessible or missing IDs return `404` |
+| `/v2/objects` | POST, GET | Multipart or octet-stream upload with owned `recordRef` and `tags`; authorized metadata list |
+| `/v2/objects/{uuid}` | PUT, GET, DELETE | Replace with metadata merge semantics; download; tombstoning delete |
 
-Uploads require writer, `application/octet-stream` and 1 byte–5 MiB. GET requires reader; DELETE requires writer.
-Query parameters, invalid paths and unsupported upload content types are rejected. Bytes are opaque; original filenames
-and MIME-based rendering are not API inputs. Downloads use octet-stream, attachment disposition, `nosniff` and `no-store`.
-V2 uses the same methods/envelopes under `/v2/objects`, resolving ownership server-side, allowing only owner writes
-and exact read shares. See [SECURITY.md](SECURITY.md) for resource authorization.
+Uploads require writer and 1 byte–5 MiB file bytes. The UUID `Idempotency-Key` stays optional for
+backward compatibility: a keyless upload records no receipt, so a retry publishes a new version,
+while a request that carries a key replays its first committed result for 24 hours. V2 accepts
+`multipart/form-data` (exactly one `file` part plus optional `recordRef` and `tags` JSON parts) or
+`application/octet-stream`. A missing metadata part preserves the previous value on replace while an
+explicit `null`/`[]` clears it; the idempotency digest covers file bytes and metadata presence, so a
+changed part under the same key replays nothing and returns `422 idempotency_key_reused`. A `recordRef`
+must point to a live record owned by the caller; the stored link keeps the record's incarnation, a
+deleted or re-created record makes the link invalid without deleting the file, and links confer no read
+access. Query parameters, invalid paths and unsupported upload content types are rejected. Bytes are
+opaque; original filenames and MIME-based rendering are not API inputs. Downloads use octet-stream,
+attachment disposition, `nosniff` and `no-store`.
+V2 ownership resolves server-side: only owner writes and exact read shares authorize a listing
+(`recordRef[collection]` and `recordRef[id]` together, a `tag`, or both; sorted by object ID with a
+caller-bound cursor). The per-app quota charges the bytes of currently published versions under a
+per-app lock and answers `429 quota_exceeded` with `quota.resource: appFileBytes`, `limit` and `used`;
+replacement charges the delta and deletion releases the size. An internal reconciliation task
+measures versions the quota does not know yet from the Filer's current bytes, so while any version
+is unmeasured the upload answers `503 quota_unmeasured` and the listing omits it; a version whose
+bytes no longer exist stays uncounted. Every upload records its candidate version before the Filer
+stores bytes, and the reconciliation task removes staged versions only after confirming the
+database no longer references them, so a lost commit response never deletes published bytes. See
+[SECURITY.md](SECURITY.md) for resource authorization.
 
 Both versions quarantine uploads, scan bytes with ClamAV and publish only a clean result. Detection returns
 `422 malware_detected`; scanner transport/protocol/timeout failures return `503`. Quarantine cleanup is best effort.
@@ -574,10 +596,9 @@ case-title rules are defined once under Workflow display metadata above. Permiss
 
 Authority/control-plane mutations append `app_private.audit` events transactionally; append failure rolls back the mutation.
 Migration 005 derives actor/tenant metadata, validates events/outcomes and redacts free text. Application roles cannot
-read/write the table directly. `core.audit_query(jsonb)` accepts only `since`, `until`, `limit` (1–100, default 50) and `cursor`,
-requires management `audit.read`, and grants execution only to private `junctura_audit_api`.
-Core exposes `GET /v1/audit-events` and `POST /v1/audit-events/verify` (empty JSON object) with that permission;
-verification checks the per-tenant SHA-256 chain. The deployed operations are documented in
+read/write the table directly. The private `junctura_audit_api` role executes the audit RPCs.
+`POST /v1/audit-events/verify` accepts an empty JSON object and requires management `audit.read`.
+Verification checks the per-tenant SHA-256 chain. The deployed operations are documented in
 [Capability OpenAPI](contracts/capability-api-v1.openapi.json). See [SECURITY.md](SECURITY.md).
 
 ## Application registration and capabilities
@@ -644,8 +665,10 @@ reserve a workflow step while someone works on it.
 
 Send a UUID `Idempotency-Key` when creating a record, writing a batch, importing records, upserting
 by unique key, incrementing with PATCH, acquiring or renewing a record lock, starting a workflow or
-completing a step, appending an audit event, uploading a file, creating a share or granting consent.
-Core keeps the first recorded result for 24 hours in the verified tenant, caller, method and URL
+completing a step, appending an audit event, uploading a file with replayable retries, creating a
+share or granting consent. Plain `application/octet-stream` uploads and record creates without a key
+stay compatible and record no receipt. Core keeps the first recorded result for 24 hours in the
+verified tenant, caller, method and URL
 path scope. A retry with the same key and logical request, including any write precondition, replays
 the original status, body and resource headers. A changed request with the same key returns
 `422 idempotency_key_reused`. Use a fresh key for each new operation.
@@ -713,43 +736,70 @@ an operator-bound subject ID. Unmapped consents stay in the login namespace pend
 reconciliation. The access log uses the binding for canonical events and the login for login events.
 Operators review ambiguous historical entries against the original execution and consent before assigning
 an identifier kind. Binding keys are immutable in normal operation.
-The planned delegated-user path for application audit depends on Keycloak token exchange that verifies
-both app and actor, followed by a SQL enrollment check. Resource authorization currently uses the
+Application audit accepts a delegated-user token for the enrolled client when the operator has bound
+that login subject to the app and verified its subject ID. Resource authorization currently uses the
 enrolled backend service-account subject.
 
-### Files, events, search and privacy
+### Files, search and privacy
 
 - Upload to `/v2/objects` with `multipart/form-data` to attach an owned `recordRef` and `tags`.
   Keep the file and metadata the same when retrying with the original key.
   Octet-stream uploads remain available. Files pass malware scanning before publication. Use
   `GET /v2/objects` with `recordRef[collection]` and `recordRef[id]`, a `tag`, or both to
   list authorized file metadata. Only current published object bytes count toward the app quota.
-- `GET /v1/events` streams new group tasks, record status changes and consent revocations as
-  Server-Sent Events. Messages carry references. Use the bearer header and refresh the source
-  lists after reconnecting to recover changes missed while offline.
-- `GET /v1/search?q=…` searches declared fields and clean text files, subject to live read permissions.
-  Meilisearch holds the index. The API returns references. Authorized administrators and viewers see record data with sensitive
-  fields omitted. Filters, sorting, grouping and search also exclude those fields for these readers.
+- `GET /v1/search?q=…&limit=…&cursor=…` searches declared fields and clean text files, subject to live read permissions.
+  Meilisearch holds one index per generation and only ranks candidates; the API returns references checked against
+  PostgreSQL at query time. Authorized administrators and viewers see record data with sensitive fields omitted.
+  A `cursor` is a signed page key bound to the query, the caller and the caller's current read scope and index
+  generation, and it fails closed with `400 invalid_cursor` when reused by anyone else or after a rebuild.
+- `GET /v1/me/data-access` merges capability calls and application events that were declared visible
+  to the caller's bound subject at append time, newest first with a stable `accessId` tie-break and a
+  cursor bound to the caller. Restricted actions and unresolved outcomes stay invisible. The page is
+  re-checked against the live bindings on every request.
 - `POST /v1/me/emergency-accesses/{id}/feedback` records the data subject's feedback on their own
   emergency access. `POST /v1/me/data-access/{id}/flag` flags a visible access event using its
-  `accessId`. Both store a separate report and preserve the original event.
+  `accessId`; retrying with the same reason replays the original report and a changed reason answers
+  `409 resource_conflict`. Both store a separate report keyed by the access event, never overwrite the
+  audit chain or the management review, and answer `404` for entries outside the caller's own visible
+  history.
 
-### Application audit log (planned)
+### Live events
 
-The business event append API is a planned contract. The implemented `/v1/audit-events` route is read-only for query and verification.
+`GET /v1/events` streams new group tasks, record status changes and consent revocations as
+Server-Sent Events. Use the bearer header with an empty query string. A change to a record's
+top-level `status` publishes a reference, including creation with that field. Task notifications
+come from active Flowable tasks on confirmed executions. Core rechecks the bearer and resource authority
+before each delivery. The feed has no event IDs or replay. Refresh source lists after reconnecting.
+Core sends comment heartbeats and closes streams on credential expiry, backpressure or a journal gap.
 
-- Register the app-wide `auditActions` catalog with the collection schema operation. Each action
-  declares its sensitivity and whether the subject may see it. Supplying a catalog replaces it.
-  `POST /v1/audit-events` accepts a registered action, resource reference, outcome, purpose,
-  an optional subject and up to 2 KiB of non-sensitive metadata. Supply a UUID `Idempotency-Key`.
-  Core stamps the verified actor, app and time and appends to the tenant's audit hash chain.
-- Use `GET /v1/audit-events?app=self` for the app's own events. Filter by `action`, `subjectId`,
-  `from` and `to` within the permitted scope. Principals with the `regulator` role read within their assigned units.
-  Enrolled administrators retain platform audit access and see only structural fields for app events.
-  `GET /v1/me/data-access` includes both capability calls and declared subject-visible app events.
-- `GET /v1/audit-events:export` streams authorized NDJSON for reconciliation and long-term storage.
-  Its first line captures the tenant chain head. Event lines carry their chain positions and digests.
-  Scoped exports can have gaps. The existing privileged verify operation checks the full chain.
+### Application audit log
+
+Register the app-wide `auditActions` catalog with the collection schema operation. Supplying the
+catalog replaces its entries. Each declaration sets sensitivity and whether the subject may see an
+event. The stored event retains these values even if the catalog later changes. Restricted entries
+are outside the subject view.
+
+- `POST /v1/audit-events` requires an enrolled active app, the writer role and a UUID
+  `Idempotency-Key`. An undeclared action returns `422 unknown_action`. Use an opaque resource
+  reference, a coded purpose and at most 2 KiB of compact scalar metadata. Core stamps the actor,
+  app, unit and time. An identical retry within 24 hours returns the same committed receipt.
+  Each app may append up to 120 new entries per minute.
+- An app credential takes its unit from the operator's `app_private.audit_app_units` binding when
+  present. A delegated user token must identify the enrolled client, an operator-bound subject ID
+  and a login listed in `app_private.audit_app_delegates`. A delegated actor with exactly one
+  verified unit uses that unit. Events without a resolved unit carry `null`.
+- `GET /v1/audit-events?app=self` shows the active app's events. Regulators see app entries for
+  assigned units. Their restricted view withholds actor, subject, resource, purpose and metadata,
+  and the subject filter searches standard entries only. Management with `audit.read` sees
+  platform events and the structural projection of app events. It can still use `since` and
+  `until` for the inclusive time range. Keep the filters and caller scope across pages.
+- `GET /v1/audit-events:export` streams an authorized snapshot as NDJSON. The first line gives the
+  tenant head even for an empty result; an empty chain reports sequence 0 with the zero hash of 64
+  zeros, which the chain verifier accepts as the genesis predecessor. Each event line gives its
+  sequence and digest. Scoped views can have sequence gaps. A tenant can have two active exports,
+  each with up to 10,000 events. An export beyond that limit answers `400 audit_export_too_large`
+  instead of a rate limit; narrow the time range and retry. The privileged verify endpoint checks the
+  full tenant chain, including both historical platform hashes and application events.
 
 ### Error responses
 
@@ -761,6 +811,7 @@ Pointer paths into the request and, for NDJSON, one-based line numbers.
 | --- | --- | --- | --- |
 | `invalid_request`, `invalid_query`, `invalid_schema` | 400 | An envelope, parameter or schema declaration is invalid, or a required idempotency key is missing or malformed | Correct the request and resubmit. |
 | `invalid_cursor` | 400 | A cursor is malformed or belongs to different filters or scope | Restart from the first page with the intended filters. |
+| `audit_export_too_large` | 400 | The authorized export matches more than 10,000 audit events | Narrow the time range or split the export. |
 | `forbidden`, `verified_subject_required` | 403 | The caller lacks the required authority or subject claim | Use an authorized identity or obtain a token with the required verified claim. |
 | `task_group_required` | 403 | The caller belongs to no candidate group for the task's unit | Refresh the inbox and route the task to an eligible group member. |
 | `unique_key_conflict`, `resource_conflict` | 409 | A key, record ID or directory resource conflicts with existing state | Inspect the existing resource and reconcile the change before retrying. |

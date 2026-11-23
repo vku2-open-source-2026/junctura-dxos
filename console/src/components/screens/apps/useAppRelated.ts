@@ -47,11 +47,8 @@ export function useAppRelated(application: Application | null): AppRelatedData {
       optional(api.getCapabilities(), [] as CapabilityVersion[]),
       optional(api.getStorageSummary(), null as StorageSummary | null),
       canReadAudit
-        ? optional(api.getAuditEvents({ limit: 100 }), {
-            items: [],
-            nextCursor: null,
-          })
-        : Promise.resolve({ items: [], nextCursor: null }),
+        ? optional(api.getPlatformAuditEvents(), [] as AuditEventEntry[])
+        : Promise.resolve([] as AuditEventEntry[]),
       canReadAudit
         ? optional(api.getDirectoryPrincipals(), {
             items: [],
@@ -63,7 +60,7 @@ export function useAppRelated(application: Application | null): AppRelatedData {
       setData({
         capabilities,
         storage,
-        audit: audit.items,
+        audit,
         principals: principals.items,
         loading: false,
         storageError: storage === null,

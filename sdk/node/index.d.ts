@@ -73,6 +73,28 @@ export type VerifiedIdentity = {
   subjectId?: string;
   preferredUsername?: string;
 };
+export type RecordRef = { collection: string; id: string };
+export type ObjectMetadata = { id: string; size: number; recordRef: RecordRef | null; tags: string[] };
+export type ObjectMetadataPage = { items: ObjectMetadata[]; nextCursor: string | null };
+export type SearchHit = { type: 'record'; recordRef: RecordRef } | { type: 'object'; objectId: string };
+export type SearchPage = { items: SearchHit[]; nextCursor: string | null };
+export type ObjectUpload = { file: Blob | Uint8Array | ArrayBuffer | string; recordRef?: RecordRef | null; tags?: string[] };
+export type ObjectListFilter = { recordRef?: RecordRef; tag?: string; limit?: number; cursor?: string };
+export type CapabilitySubjectAccessEntry = {
+  source: 'capability'; accessId: string; executionId: string; accessedAt: string; purpose: string;
+  flaggedAt: string | null; state: string; emergency: boolean; review: 'pending' | 'justified' | 'unjustified' | null;
+  consumer: { appId: string; displayName: string | null }; provider: { appId: string; displayName: string | null };
+  capability: { capabilityId: string; version: string; title: string | null };
+};
+export type AppSubjectAccessEntry = {
+  source: 'application'; accessId: string; accessedAt: string; purpose: string; flaggedAt: string | null;
+  app: { appId: string; displayName: string | null }; action: string; outcome: 'success' | 'denied' | 'failed';
+};
+export type SubjectAccessPage = {
+  entries: (CapabilitySubjectAccessEntry | AppSubjectAccessEntry)[]; nextCursor: string | null;
+  truncated: boolean; generatedAt: string;
+};
+
 export type DirectoryPage = { items: unknown[]; nextCursor: string | null };
 export type DirectoryUnitType = { unitType: string; name: string };
 export type DirectoryUnit = { unit: string; unitType: string; name: string };
@@ -90,6 +112,30 @@ export type SubjectConsent = {
   state: 'active' | 'revoked' | 'expired';
 };
 export type ConsentCreate = { consumerAppId: string; capabilityId: string; purposes: string[]; expiresAt: string };
+export type AuditResourceRef =
+  | { type: 'record'; collection: string; id: string }
+  | { type: 'object' | 'workflowExecution'; id: string };
+export type AuditActor = { kind: 'application' } | { kind: 'user'; subject: string };
+export type AppAuditWrite = {
+  action: string;
+  subjectId?: string;
+  resourceRef: AuditResourceRef;
+  outcome: 'success' | 'denied' | 'failed';
+  purpose: string;
+  meta?: Record<string, string | number | boolean | null>;
+};
+export type AppAuditReceipt = { eventId: string; appId: string; occurredAt: string; actor: AuditActor };
+export type AppAuditEntry = Omit<AppAuditReceipt, 'actor'> & Pick<AppAuditWrite, 'action' | 'outcome'> &
+  Partial<Pick<AppAuditReceipt, 'actor'> & Pick<AppAuditWrite, 'subjectId' | 'resourceRef' | 'purpose' | 'meta'>> &
+  { source: 'application'; unit: string | null; sensitivity: 'standard' | 'restricted' };
+export type PlatformAuditEntry = {
+  eventId: string; occurredAt: string; tenantId: string; schemaVersion: number; event: string;
+  resourceType: string; resourceId: string | null; revision: number | null; actorAppId: string | null;
+  issuer: string; subject: string; managementClient: string | null;
+  outcome: string; reasonCode: string | null; reason: string | null;
+};
+export type AuditFilter = { app?: 'self'; action?: string; subjectId?: string; unit?: string; from?: string; to?: string };
+export type AuditPage = { items: (PlatformAuditEntry | AppAuditEntry)[]; nextCursor: string | null };
 export type WorkflowStart = {
   definitionId: string;
   input?: JsonObject;
@@ -160,6 +206,12 @@ export function createJuncturaClient(options: { baseUrl: string; clientId: strin
     create(consent: ConsentCreate, idempotencyKey?: string): Promise<SubjectConsent>;
     revoke(consentId: string): Promise<SubjectConsent>;
   }>;
+  subjectAccess(userToken: string): Readonly<{
+    list(options?: { limit?: number; cursor?: string }): Promise<SubjectAccessPage>;
+    flag(accessId: string, reason: 'unrecognized' | 'other'): Promise<{ accessId: string; flaggedAt: string }>;
+    emergencyFeedback(executionId: string, feedback: { decision: 'recognized' | 'unrecognized' | 'other'; message?: string }):
+      Promise<{ executionId: string; submittedAt: string }>;
+  }>;
   createRecord(collection: string, data: Json): Promise<{ id: string; data: Json; [key: string]: unknown }>;
   getRecord(collection: string, id: string): Promise<{ id: string; data: Json; [key: string]: unknown }>;
   listRecords(collection: string, query?: { limit?: number; order?: 'asc' | 'desc'; cursor?: string }): Promise<{ items: { id: string; collection: string; data: Json; created_at: string }[]; nextCursor: string | null }>;
@@ -178,8 +230,15 @@ export function createJuncturaClient(options: { baseUrl: string; clientId: strin
   exportAppRecords(query?: { collection?: string }): Promise<Response>;
   importAppRecords(ndjson: string | Uint8Array | ArrayBuffer | ReadableStream<Uint8Array> | Blob, options?: { idempotencyKey?: string }): Promise<RecordImportResult>;
   shareResourceWithAppOrGroup(target: ResourceShareTarget, idempotencyKey?: string): Promise<ResourceShareResult>;
-  putObject(id: string, bytes: BodyInit): Promise<unknown>;
+  putObject(id: string, bytes: BodyInit, idempotencyKey?: string): Promise<ObjectMetadata>;
+  uploadObject(upload: ObjectUpload, idempotencyKey?: string): Promise<ObjectMetadata>;
+  listObjectsByMetadata(filters?: ObjectListFilter): Promise<ObjectMetadataPage>;
+  searchReadableResources(query: string, options?: { limit?: number; cursor?: string }): Promise<SearchPage>;
   getObject(id: string): Promise<ArrayBuffer>;
+  appendAppAuditEvent(body: AppAuditWrite, options?: { idempotencyKey?: string; userToken?: string }): Promise<AppAuditReceipt>;
+  queryAppAuditEvents(options?: AuditFilter & { since?: string; until?: string; limit?: number; cursor?: string; userToken?: string }): Promise<AuditPage>;
+  exportAppAuditEvents(options?: AuditFilter & { userToken?: string; signal?: AbortSignal }): Promise<Response>;
+  streamAuthorizedEvents(options?: { userToken?: string; signal?: AbortSignal }): Promise<Response>;
   workflowDefinitions(): Promise<unknown>;
   startWorkflow(definitionId: string, input: Json, idempotencyKey?: string): Promise<unknown>;
   startWorkflowWithDeadlines(body: WorkflowStart, options?: { idempotencyKey?: string; userToken?: string }): Promise<WorkflowExecution & { dueAt?: string | null }>;

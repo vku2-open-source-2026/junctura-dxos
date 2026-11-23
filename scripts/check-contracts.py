@@ -73,7 +73,7 @@ def composition_inventory(spec, source=None):
 # Independently reviewed handler inventory, not extracted from the specification.
 # When handlers change, review this inventory and add an observed positive case.
 EXPECTED = {
-    '/health': {'get', 'head'}, '/ready': {'get'}, '/v1/identity': {'get'},
+    '/health': {'get', 'head'}, '/ready': {'get'}, '/v1/identity': {'get'}, '/v1/events': {'get'},
     '/v1/applications': {'post'}, '/v1/applications/stats': {'get'}, '/v1/applications/{appId}': {'get'},
     '/v1/applications/{appId}/approve': {'post'}, '/v1/applications/{appId}/state': {'post'},
     '/v1/approvals': {'post'}, '/v1/approvals/{approvalId}': {'get'},
@@ -101,8 +101,10 @@ EXPECTED = {
 for version in ('v1', 'v2'):
     EXPECTED.update({f'/{version}/data/{{collection}}': {'get', 'post'},
                      f'/{version}/data/{{collection}}/{{id}}': {'get', 'patch', 'delete'},
-                     f'/{version}/objects': {'post'},
                      f'/{version}/objects/{{id}}': {'get', 'put', 'delete'}})
+EXPECTED['/v1/objects'] = {'post'}
+EXPECTED['/v2/objects'] = {'get', 'post'}
+EXPECTED['/v1/search'] = {'get'}
 OIDC = '/identity/realms/junctura'
 EXPECTED[OIDC + '/.well-known/openid-configuration'] = {'get'}
 for suffix, methods in {'auth': {'get'}, 'token': {'post'}, 'certs': {'get'},
@@ -229,7 +231,7 @@ def validate_paths(spec, dereference, *, foundation=False):
             return
         if not planned:
             require((ROOT / operation['x-junctura-source']).is_file(), oid + ': source missing')
-            require(operation['x-junctura-test-suite'] in ('core', 'applications', 'records', 'record-queries', 'record-archives', 'app-group-shares', 'directory', 'workflow-tasks'), oid + ': coverage suite missing')
+            require(operation['x-junctura-test-suite'] in ('core', 'applications', 'records', 'record-queries', 'record-archives', 'app-group-shares', 'directory', 'workflow-tasks', 'events', 'object-metadata', 'search', 'subject-access'), oid + ': coverage suite missing')
         parameters = [dereference(p) for p in operation.get('parameters', [])]
         require(len({(p['in'], p['name']) for p in parameters}) == len(parameters), oid + ': duplicate parameter')
         require({p['name'] for p in parameters if p['in'] == 'path'} == set(re.findall(r'{([^}]+)}', path)), oid + ': path parameters differ')
@@ -395,13 +397,13 @@ def self_test(spec):
         except ContractError:
             continue
         raise ContractError('Batch replacement or deletion did not require ifMatch')
-    planned = spec['paths']['/v2/objects']['get']
     fixture = copy.deepcopy(spec)
-    fixture['paths']['/v2/objects']['get']['x-junctura-test-suite'] = 'planned-fixture'
+    # A synthetic planned route: observations may only reject it, never succeed.
+    fixture['paths']['/v2/objects']['get']['x-junctura-status'] = 'planned'
     missing = {**good, 'path':'/v2/objects', 'status':405, 'responseBody':{'error':'method_not_allowed'}}
-    validate_observations(fixture, [missing], 'planned-fixture')
+    validate_observations(fixture, [missing])
     try:
-        validate_observations(spec, [{**missing, 'status':200}])
+        validate_observations(fixture, [{**missing, 'status':200}])
     except ContractError as error:
         require(str(error) == 'Undocumented method succeeded', 'Planned route was checked as live')
     else:
@@ -418,8 +420,7 @@ def self_test(spec):
         except ContractError:
             continue
         raise ContractError('Conformance validator accepted a deliberate regression')
-    for change in ('duplicate', 'reference', 'route', 'security', 'legacy', 'planned-status',
-                   'planned-live-route', 'planned-security', 'planned-overlay'):
+    for change in ('duplicate', 'reference', 'route', 'security', 'legacy', 'bearer'):
         bad = copy.deepcopy(spec)
         if change == 'duplicate':
             bad['paths']['/health']['get']['operationId'] = bad['paths']['/ready']['get']['operationId']
@@ -431,14 +432,8 @@ def self_test(spec):
             bad['paths']['/v2/objects']['post']['security'] = []
         elif change == 'legacy':
             bad['paths']['/v1/objects']['post']['deprecated'] = False
-        elif change == 'planned-status':
-            bad['paths']['/v2/objects']['get']['x-junctura-status'] = planned['x-junctura-status'].upper()
-        elif change == 'planned-live-route':
-            bad['paths']['/v2/objects']['post']['x-junctura-status'] = 'planned'
-        elif change == 'planned-security':
+        elif change == 'bearer':
             bad['paths']['/v2/objects']['get']['security'] = []
-        else:
-            del bad['paths']['/v2/objects']['post']['x-junctura-planned-operation']['x-junctura-status']
         try:
             validate_document(bad, official=False)
         except ContractError:

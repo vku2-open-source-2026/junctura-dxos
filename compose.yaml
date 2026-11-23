@@ -105,6 +105,11 @@ services:
       - ./infra/postgres/039-workflow-deadlines.sql:/migrations/039-workflow-deadlines.sql:ro
       - ./infra/postgres/040-workflow-completion-outbox.sql:/migrations/040-workflow-completion-outbox.sql:ro
       - ./infra/postgres/041-workflow-task-recovery.sql:/migrations/041-workflow-task-recovery.sql:ro
+      - ./infra/postgres/042-application-audit.sql:/migrations/042-application-audit.sql:ro
+      - ./infra/postgres/043-object-metadata-and-quota.sql:/migrations/043-object-metadata-and-quota.sql:ro
+      - ./infra/postgres/044-search-index-jobs.sql:/migrations/044-search-index-jobs.sql:ro
+      - ./infra/postgres/045-authorized-events.sql:/migrations/045-authorized-events.sql:ro
+      - ./infra/postgres/046-subject-access-reports.sql:/migrations/046-subject-access-reports.sql:ro
     depends_on:
       database:
         condition: service_healthy
@@ -149,6 +154,23 @@ services:
         limits:
           memory: 2G
     # Internal only: no published ports. Signature updates use FreshClam inside the image.
+  search:
+    image: getmeili/meilisearch:v1.19@sha256:abab6e9054572fea9fd409cf0f4fe3b65f6c8e70cd0f213004592b6d0e9587ac
+    restart: unless-stopped
+    environment:
+      MEILI_MASTER_KEY: ${MEILI_MASTER_KEY:?Run npm run setup first, or on an upgrade append a generated MEILI_MASTER_KEY to the existing .env}
+      MEILI_NO_ANALYTICS: "true"
+      MEILI_ENV: production
+    volumes:
+      - meili-data:/meili_data
+    networks: [searchnet]
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:7700/health >/dev/null"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+      start_period: 10s
+    # Internal only: no published ports. Only Core reaches the index network.
   secrets:
     image: openbao/openbao:2.7.2@sha256:5046911075e137e154ce49ab051502f4ec7cf367d484ae4a4dce665d9b90561f
     restart: unless-stopped
@@ -249,6 +271,8 @@ services:
       CLAMAV_HOST: clamav
       CLAMAV_PORT: "3310"
       CLAMAV_TIMEOUT_MS: ${CLAMAV_TIMEOUT_MS:-30000}
+      MEILI_URL: http://search:7700
+      MEILI_MASTER_KEY: ${MEILI_MASTER_KEY:?Run npm run setup first, or on an upgrade append a generated MEILI_MASTER_KEY to the existing .env}
       SECRETS_URL: http://secrets:8200
       SECRETS_TOKEN_FILE: /run/junctura/core-token
       SECRETS_MOUNT: ${SECRETS_MOUNT:-secret}
@@ -284,7 +308,7 @@ services:
       - no-new-privileges:true
     init: true
     stop_grace_period: 10s
-    networks: [identity, data, objects, scanner, secrets, workflow, edge]
+    networks: [identity, data, objects, scanner, secrets, workflow, edge, searchnet]
   gateway:
     image: nginx:stable-bookworm@sha256:552e7481ca93ffccd046aa658dbbed22caefbc09c66fa7cd247cbb90b8a5c609
     restart: unless-stopped
@@ -344,11 +368,14 @@ networks:
     internal: true
   workflow:
     internal: true
+  searchnet:
+    internal: true
 
 volumes:
   postgres-data:
   object-data:
   clamav-signatures:
+  meili-data:
   openbao-data:
   openbao-operator:
   openbao-init:

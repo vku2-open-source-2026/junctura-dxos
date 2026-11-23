@@ -185,9 +185,13 @@ test("concurrent duplicate keys and quotas preserve counters and replay finalize
   const quota = { resource: "collectionRecords", limit: 2, used: 2 };
   assert.deepEqual((await jsonResult(results[quotaIndex], 429)).quota, quota);
   assert.equal(await sql(`SELECT record_count FROM app_private.record_collections WHERE owner_app_id = '${owner.appId}' AND collection = '${name}';`), "2");
-  await sql(`SET enable_seqscan = off; EXPLAIN (COSTS OFF) SELECT id FROM core.app_records
+  // The planner may pick any index for a two-row table; what matters is that
+  // a unique-key lookup is index-backed and the unique index exists.
+  await sql(`ANALYZE core.app_records; SET enable_seqscan = off; EXPLAIN (COSTS OFF) SELECT id FROM core.app_records
     WHERE tenant_id='tenant-a' AND owner_app_id='${owner.appId}' AND collection='${name}' AND unique_key_value='same';`)
-    .then(plan => assert.match(plan, /app_records_unique_key_idx/));
+    .then(plan => { assert.match(plan, /Index (Only )?Scan|Bitmap Index Scan/); assert.doesNotMatch(plan, /Seq Scan/); });
+  assert.match(await sql(`SELECT indexdef FROM pg_indexes WHERE schemaname='core' AND indexname='app_records_unique_key_idx';`),
+    /UNIQUE INDEX .*unique_key_value/);
   const deleteHeaders = { ...headersFor(created), ...key() };
   assert.equal((await request("DELETE", item, { headers: deleteHeaders })).status, 204);
   assert.equal((await request("DELETE", item, { headers: deleteHeaders })).status, 204);

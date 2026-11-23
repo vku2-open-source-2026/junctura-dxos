@@ -312,12 +312,13 @@ export interface AuditVerification {
 }
 
 export interface AuditEventEntry {
+  source?: never;
   eventId: string;
   occurredAt: string;
   event: string;
   outcome: string;
   tenantId?: string;
-  schemaVersion?: string;
+  schemaVersion?: number;
   resourceType?: string | null;
   resourceId?: string | null;
   revision?: number | null;
@@ -329,8 +330,21 @@ export interface AuditEventEntry {
   reason?: string | null;
 }
 
+export interface ApplicationAuditEntry {
+  source: "application";
+  eventId: string;
+  appId: string;
+  occurredAt: string;
+  action: string;
+  outcome: "success" | "denied" | "failed";
+  unit: string | null;
+  sensitivity: "standard" | "restricted";
+}
+
+export type AuditQueryEntry = AuditEventEntry | ApplicationAuditEntry;
+
 export interface AuditEventPage {
-  items: AuditEventEntry[];
+  items: AuditQueryEntry[];
   nextCursor: string | null;
 }
 

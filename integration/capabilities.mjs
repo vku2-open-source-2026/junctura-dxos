@@ -754,9 +754,9 @@ test("C4A real two-application OIDC invocation redeems a ticket and completes th
   const legacyAccess = await c4aStart({ ...executionBody("legacy"), context: { purpose: context.purpose, dataSubject: stranger.id } });
   assert.equal(legacyAccess.status, 202);
   await c4aWait(legacyAccess.body.executionId, ["succeeded"]);
-  for (const [person, own, foreign] of [
-    [owner, canonicalAccess, legacyAccess], [stranger, legacyAccess, canonicalAccess],
-  ]) {
+  // Only the verified caller reads their own history: the owner sees the
+  // canonical execution and none of the stranger's legacy one.
+  for (const [person, own, foreign] of [[owner, canonicalAccess, legacyAccess]]) {
     const history = await (await api("/v1/me/data-access", person)).json();
     assert.ok(history.entries.some(row => row.executionId === own.body.executionId));
     assert.ok(!history.entries.some(row => row.executionId === foreign.body.executionId));
@@ -776,13 +776,16 @@ test("C4A real two-application OIDC invocation redeems a ticket and completes th
   const accessLog = await api("/v1/me/data-access", owner);
   assert.equal(accessLog.status, 200);
   const accessed = await accessLog.json();
-  trustCases.push({ schema: "SubjectAccessLog", value: accessed });
+  trustCases.push({ schema: "SubjectAccessPage", value: accessed });
   const entry = accessed.entries.find(item => item.executionId === purposefulDone.executionId);
   assert.ok(entry, "the data subject sees the call");
   assert.deepEqual([entry.purpose, entry.consumer.appId, entry.provider.appId, entry.capability.capabilityId],
     ["service_delivery", c4aConsumer.app.appId, c4aProvider.app.appId, c4aReference.capabilityId]);
-  const strangerLog = await (await api("/v1/me/data-access", stranger)).json();
-  assert.ok(!strangerLog.entries.some(item => item.executionId === purposefulDone.executionId), "other subjects see nothing");
+  // The stranger login carries no verified subject binding: the history route
+  // answers verified_subject_required instead of leaking entries.
+  const strangerLog = await api("/v1/me/data-access", stranger);
+  assert.equal(strangerLog.status, 403);
+  assert.equal((await strangerLog.json()).error, "verified_subject_required");
   assert.equal((await c4aApi("/v1/capability-executions", c4aConsumer, { ...executionBody(), context: { purpose: "Not valid" } }, { "Idempotency-Key": crypto.randomUUID() })).status, 422);
   assert.equal((await c4aStart({ ...executionBody("purpose"), context: { ...context, purpose: "marketing" } })).body.error, "subject_consent_required", "consent covers named purposes only");
   const consents = await (await api("/v1/me/consents", owner)).json();
@@ -815,7 +818,7 @@ test("C4A real two-application OIDC invocation redeems a ticket and completes th
   const ownLog = await (await api("/v1/me/data-access", owner)).json();
   const emergencyEntry = ownLog.entries.find(item => item.executionId === emergency.body.executionId);
   assert.deepEqual([emergencyEntry.emergency, emergencyEntry.review], [true, "justified"], "the person sees the emergency access and its review");
-  trustCases.push({ schema: "SubjectAccessLog", value: ownLog });
+  trustCases.push({ schema: "SubjectAccessPage", value: ownLog });
 });
 
 test("verified identity preserves legacy consent isolation and gates planned routes", async () => {

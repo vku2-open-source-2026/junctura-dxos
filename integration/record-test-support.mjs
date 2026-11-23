@@ -89,8 +89,14 @@ export function recordTestSupport(prefix) {
         await sql(`DELETE FROM app_private.record_export_snapshots WHERE owner_app_id='${app.appId}';
           DELETE FROM app_private.record_query_cursors WHERE owner_app_id='${app.appId}';`);
         await sql(`DELETE FROM app_private.idempotency_results WHERE concrete_path LIKE '%${prefix}%';
+          DELETE FROM app_private.audit_app_payloads p USING app_private.audit a
+            WHERE p.tenant_id=a.tenant_id AND p.event_id=a.event_id
+              AND (a.actor_app_id='${app.appId}' OR a.subject='${app.subject}');
           DELETE FROM app_private.audit WHERE actor_app_id='${app.appId}' OR subject='${app.subject}';
           DELETE FROM app_private.resource_shares WHERE owner_app_id='${app.appId}' OR grantee_app_id='${app.appId}';
+          -- Objects go before their owning application.
+          DELETE FROM app_private.object_upload_staging WHERE tenant_id='tenant-a' AND owner_app_id='${app.appId}';
+          DELETE FROM app_private.resource_objects WHERE tenant_id='tenant-a' AND owner_app_id='${app.appId}';
           DELETE FROM app_private.record_read_grants WHERE owner_app_id='${app.appId}';
           DELETE FROM app_private.principals WHERE tenant_id='tenant-a' AND management_client=${q(app.clientId)};
           DELETE FROM app_private.app_group_memberships WHERE app_id='${app.appId}';
@@ -113,10 +119,13 @@ export function recordTestSupport(prefix) {
       method,
       headers: {
         ...(who ? { Authorization: `Bearer ${who.token ?? who}` } : {}),
-        ...(body === undefined ? {} : { "Content-Type": "application/json" }),
+        ...(body === undefined || body instanceof Uint8Array ? {} : { "Content-Type": "application/json" }),
         ...headers,
       },
-      body: body === undefined ? undefined : typeof body === "string" ? body : JSON.stringify(body),
+      // Octet-stream callers pass bytes (Buffer/Uint8Array) untouched; JSON
+      // bodies serialize as before.
+      body: body === undefined || body instanceof Uint8Array ? body :
+        typeof body === "string" ? body : JSON.stringify(body),
       signal: signal ?? AbortSignal.timeout(30000),
     });
   }

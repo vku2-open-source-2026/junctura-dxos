@@ -194,9 +194,12 @@ Single-capability reservations with context append `execution.subject_accessed`
 (`execution.emergency_access` for emergency calls), with purpose as `reason_code`
 and, for a named data subject, `data_subject_sha256:` plus its SHA-256 as `reason`.
 The binding lives in owner-only, forced-RLS `execution_private.execution_contexts`.
-`GET /v1/me/data-access` accepts no query, requires only an authenticated `core-reader` caller with a verified client ID (no management permission),
-and returns only the caller's tenant/issuer/subject entries, newest first, up to 200 with
-`truncated`. Entries describe declared reservations rather than proving completed access.
+`GET /v1/me/data-access` accepts `limit` and a caller-bound `cursor`, requires only an authenticated
+`core-reader` caller with a verified client ID (no management permission), and returns only the
+caller's tenant/issuer/subject entries, newest first, up to 200 with `truncated`. The cursor is a
+signed page key whose fixed-length fingerprint covers the tenant, issuer, login subject and verified
+subject, so an issuer of any length stays inside the cursor limit and a cursor replayed by anyone
+else fails closed. Entries describe declared reservations rather than proving completed access.
 
 For a development stack, enroll a demo app first, e.g. `npm run app:enroll -- demo`. The
 helper provisions `junctura-demo-auditor-<tenant>` with only `audit.read`:
