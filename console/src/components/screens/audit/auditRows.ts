@@ -34,12 +34,12 @@ export function resultOf(outcome: string): AuditResult {
 }
 
 export function buildAuditRows(entries: AuditQueryEntry[]): AuditRow[] {
-  return entries.map((entry) => entry.source === "application" ? {
+  return entries.map((entry) => entry.source ? {
     id: entry.eventId,
     timestamp: entry.occurredAt,
-    actor: entry.appId,
+    actor: entry.source === "resource_consent" ? entry.reader : entry.appId,
     action: entry.action,
-    target: entry.unit ?? "",
+    target: entry.source === "resource_consent" ? `${entry.unit} · ${entry.resourceRef.id}` : entry.unit ?? "",
     result: resultOf(entry.outcome),
     outcome: entry.outcome,
   } : {

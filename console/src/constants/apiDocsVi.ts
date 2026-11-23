@@ -126,6 +126,9 @@ export const API_DOCS_COPY_VI: Record<string, ApiDocsCopy> = {
   listConsentsBySubjectId: { summary: "Liệt kê các đồng ý của chủ thể đã xác minh.", when: "Dùng để xem ứng dụng nào đang được phép dùng dữ liệu của mình; thiếu chủ thể đã xác minh sẽ bị từ chối." },
   createConsentBySubjectId: { summary: "Cho phép một ứng dụng dùng dữ liệu của chính mình theo subjectId đã xác minh.", when: "Dùng khi người dùng đồng ý cho một mục đích và thời hạn cụ thể; cần Idempotency-Key." },
   revokeConsentBySubjectId: { summary: "Rút lại một đồng ý đã cấp của chủ thể đã xác minh.", when: "Dùng khi người dùng không muốn ứng dụng tiếp tục dùng dữ liệu; rút lặp lại vẫn trả trạng thái hiện tại." },
+  listResourceConsents: { summary: "Liệt kê các đồng ý đã cấp cho đơn vị đọc tài nguyên của mình.", when: "Dùng để xem đồng ý nào đang hiệu lực, đã hết hạn hoặc đã thu hồi." },
+  createResourceConsent: { summary: "Cho một đơn vị trong tổ chức đọc tài nguyên của mình.", when: "Dùng khi đã chọn tài nguyên, đơn vị nhận và mục đích. Có thể đặt thời hạn." },
+  revokeResourceConsent: { summary: "Thu hồi đồng ý cho một đơn vị đọc tài nguyên.", when: "Dùng để ngừng cấp quyền đọc theo đồng ý đã chọn." },
   listEmergencyAccesses: { summary: "Liệt kê các lượt truy cập ngoại lệ cần hậu kiểm.", when: "Dùng khi quản trị viên cần rà soát truy cập không có đồng ý trước." },
   reviewEmergencyAccess: { summary: "Ghi kết quả hậu kiểm một lượt truy cập ngoại lệ.", when: "Dùng sau khi kiểm tra lý do và phạm vi của lượt truy cập ngoại lệ." },
 };

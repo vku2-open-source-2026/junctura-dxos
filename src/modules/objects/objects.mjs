@@ -3,6 +3,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import { HttpError, json, requestIdFor, logicalRequestDigest, parseRecordJson, readBody, requireWriter, uuidPattern } from "../../platform/http/http.mjs";
 import { resourceCommand, resourceRequest } from "../resources/resources.mjs";
+import { readResourceConsent } from "../consent/consent.mjs";
 import { requireCleanObject } from "./malware-scan.mjs";
 import { boundaryOf, parseMultipart } from "./multipart.mjs";
 
@@ -372,11 +373,23 @@ async function serveObjects(request, response, identity, config, url) {
   }
   if (request.method === "GET" && id) {
     if (url.search) throw new HttpError(400, "invalid_object_path");
-    const scope = scoped ? await command("object_get", { id }) : undefined;
+    const objectScope = async (expectedVersion) => {
+      try { return await command("object_get", { id }); }
+      catch (error) {
+        if (error.status !== 404) throw error;
+        const result = await readResourceConsent(request, config, identity, { kind: "object", id, expectedVersion });
+        if (!result) throw error;
+        return result.value;
+      }
+    };
+    const scope = scoped ? await objectScope() : undefined;
     // v2 object_get already denies version=NULL (never committed / never scanned clean).
     const result = await storage(config, identity.tenantId, id, {}, scope);
     const bytes = Buffer.from(await result.arrayBuffer());
-    if (scoped) await command("object_get", { id });
+    if (scoped) {
+      const current = await objectScope(scope.version);
+      if (identity.actor && current.version !== scope.version) throw new HttpError(404, "not_found");
+    }
     response.writeHead(200, { "Content-Type": "application/octet-stream", "Content-Length": bytes.length,
       "Content-Disposition": `attachment; filename="${id}.bin"`, "X-Content-Type-Options": "nosniff", "Cache-Control": "no-store" });
     return response.end(bytes);

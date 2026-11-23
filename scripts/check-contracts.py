@@ -74,6 +74,7 @@ def composition_inventory(spec, source=None):
 # When handlers change, review this inventory and add an observed positive case.
 EXPECTED = {
     '/health': {'get', 'head'}, '/ready': {'get'}, '/v1/identity': {'get'}, '/v1/events': {'get'}, '/v1/token-exchange': {'post'},
+    '/v1/me/resource-consents': {'get', 'post'}, '/v1/me/resource-consents/{consentId}/revoke': {'post'},
     '/v1/applications': {'get', 'post'}, '/v1/applications/stats': {'get'}, '/v1/applications/{appId}': {'get', 'patch'},
     '/v1/applications/{appId}/assignments': {'get', 'post'},
     '/v1/applications/{appId}/assignments/{assignmentId}': {'delete'},
@@ -234,14 +235,14 @@ def validate_paths(spec, dereference, *, foundation=False):
             return
         if not planned:
             require((ROOT / operation['x-junctura-source']).is_file(), oid + ': source missing')
-            require(operation['x-junctura-test-suite'] in ('core', 'applications', 'records', 'record-queries', 'record-archives', 'app-group-shares', 'directory', 'workflow-tasks', 'events', 'object-metadata', 'search', 'subject-access', 'app-access', 'delegation'), oid + ': coverage suite missing')
+            require(operation['x-junctura-test-suite'] in ('core', 'applications', 'records', 'record-queries', 'record-archives', 'app-group-shares', 'directory', 'workflow-tasks', 'events', 'object-metadata', 'search', 'subject-access', 'app-access', 'delegation', 'consent'), oid + ': coverage suite missing')
         parameters = [dereference(p) for p in operation.get('parameters', [])]
         require(len({(p['in'], p['name']) for p in parameters}) == len(parameters), oid + ': duplicate parameter')
         require({p['name'] for p in parameters if p['in'] == 'path'} == set(re.findall(r'{([^}]+)}', path)), oid + ': path parameters differ')
         require(all(p.get('required') for p in parameters if p['in'] == 'path'), oid + ': path parameter optional')
         if path.startswith(('/v1/', '/v2/')):
             require(operation.get('security') == [{bearer: []}], oid + ': bearer protection missing')
-            reader_only_write = path == '/v1/token-exchange' or path.startswith(('/v1/applications', '/v1/approvals')) or (
+            reader_only_write = path == '/v1/token-exchange' or path.startswith(('/v1/applications', '/v1/approvals', '/v1/me/resource-consents')) or (
                 planned and path.startswith(('/v1/me/', '/v1/directory/')))
             roles = ['core-reader'] + (['core-writer'] if method != 'get' and not reader_only_write else [])
             require(operation.get('x-junctura-core-roles') == roles, oid + ': role contract differs')

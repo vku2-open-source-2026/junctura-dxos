@@ -382,7 +382,19 @@ export interface ApplicationAuditEntry {
   sensitivity: "standard" | "restricted";
 }
 
-export type AuditQueryEntry = AuditEventEntry | ApplicationAuditEntry;
+export interface ResourceConsentAuditEntry {
+  source: "resource_consent";
+  eventId: string;
+  appId: string;
+  occurredAt: string;
+  action: "resource.read";
+  outcome: "success" | "denied";
+  reader: string;
+  unit: string;
+  resourceRef: { type: "record" | "object"; id: string; collection?: string };
+}
+
+export type AuditQueryEntry = AuditEventEntry | ApplicationAuditEntry | ResourceConsentAuditEntry;
 
 export interface AuditEventPage {
   items: AuditQueryEntry[];

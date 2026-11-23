@@ -807,9 +807,7 @@ export class ApiClient {
     };
   }
 
-  // Management pages mix platform and application entries while the screens
-  // below only show platform ones; follow the cursor until enough entries
-  // survive the filter instead of dropping whole pages.
+  // Follow the cursor until enough platform events survive the filter.
   public async getPlatformAuditEvents(limit = 100): Promise<AuditEventEntry[]> {
     const entries: AuditEventEntry[] = [];
     let cursor: string | null = null;
@@ -819,7 +817,7 @@ export class ApiClient {
         limit, ...(cursor ? { cursor } : {}),
       });
       entries.push(...page.items.filter(
-        (entry): entry is AuditEventEntry => entry.source !== "application",
+        (entry): entry is AuditEventEntry => entry.source === undefined,
       ));
       cursor = page.nextCursor;
       pages++;
