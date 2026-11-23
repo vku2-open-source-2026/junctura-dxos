@@ -64,9 +64,14 @@ test("declared record fields become searchable with live ACL checks", async () =
   // The owner matches the sensitive value; the management grant does not.
   assert.deepEqual(await hits(owner, "hidden-personal"),
     [{ type: "record", recordRef: { collection, id: recordId } }]);
+  // The management projection is a separate document indexed on its own;
+  // wait for it before asserting what management can and cannot match.
+  const managed = await waitUntil(async () => {
+    const items = await hits(manager, `needle-${prefix}`);
+    return items.length ? items : null;
+  });
+  assert.deepEqual(managed, [{ type: "record", recordRef: { collection, id: recordId } }]);
   assert.deepEqual(await hits(manager, "hidden-personal"), []);
-  assert.deepEqual(await hits(manager, `needle-${prefix}`),
-    [{ type: "record", recordRef: { collection, id: recordId } }]);
   // A candidate whose row disappeared between index and query never surfaces:
   // delete, then search for the still-indexed term.
   await sql(`DELETE FROM core.app_records WHERE tenant_id='tenant-a' AND id='${visible.id}';`);
