@@ -51,7 +51,8 @@ test("application audit shares the platform chain and enforces archive, regulato
   assert.equal(empty.value.head.hash, `sha256:${"0".repeat(64)}`);
   await archive("end", { snapshotId: empty.value.snapshotId });
 
-  await audit(`app_private.audit_append('audit.platform_fixture','audit',${q(randomUUID())},1)`, management, "junctura_app_owner");
+  await sql(`SET ROLE junctura_app_owner; SELECT set_config('request.jwt.claims',${q(JSON.stringify(management))},false);
+    SELECT app_private.audit_append('audit.platform_fixture','audit',${q(randomUUID())},1);`);
   const old = await verify();
   assert.deepEqual([old.value.verified, old.value.entries], [true, 1]);
 
