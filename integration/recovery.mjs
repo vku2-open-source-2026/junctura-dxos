@@ -266,7 +266,7 @@ test("pg_dump/pg_restore preserves real data and tenant RLS in an isolated tempo
     const [acquired, building] = rebuild.stdout.trim().split(/\r?\n/).slice(-2);
     assert.equal(JSON.parse(acquired).status, 200, `the rebuild worker holds the tenant lease: ${acquired}`);
     const queued = await docker(["exec", target, "psql", "-U", "junctura_admin", "-d", "recovered", "-v", "ON_ERROR_STOP=1", "-Atc",
-      "SELECT count(DISTINCT resource_id) FROM app_private.search_index_jobs WHERE tenant_id='tenant-a' AND resource_type='record';"]);
+      `SELECT count(DISTINCT resource_id) FROM app_private.search_index_jobs WHERE tenant_id='tenant-a' AND resource_type='record' AND resource_id='${id}';`]);
     const rebuildState = { building, records: Number(queued.stdout.trim().split(/\r?\n/).at(-1)) };
     assert.match(rebuildState.building, /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/,
       "the flagged rebuild prepares a fresh building generation");
