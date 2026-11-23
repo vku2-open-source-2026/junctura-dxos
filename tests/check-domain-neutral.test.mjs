@@ -39,7 +39,7 @@ test("keeps platform health vocabulary and generic records allowed", () => {
 test("covers each scoped prefix and explicit root file", () => {
   const paths = ["src/example.mjs", "infra/example.sql", "scripts/example.mjs", "sdk/node/example.mjs",
     "console/src/example.ts", "examples/example.mjs", "docs/contracts/example.json",
-    "compose.yaml", "compose.providers.yaml", "Dockerfile", "console/Dockerfile", ".env.example"];
+    "README.md", "docs/DEVELOPING.md", "integration/example.mjs", "compose.yaml", "compose.providers.yaml", "Dockerfile", "console/Dockerfile", ".env.example"];
   const result = scan(Object.fromEntries(paths.map((path) => [path, "hospital"])));
   assert.equal(result.scanned, paths.length);
   assert.deepEqual(result.violations.map((entry) => entry.path), [...paths].sort());
@@ -47,7 +47,7 @@ test("covers each scoped prefix and explicit root file", () => {
 
 test("leaves unrelated paths outside vocabulary scope", () => {
   assert.deepEqual(findViolations({
-    files: ["docs/DEVELOPING.md", "integration/example.mjs", "console/scripts/example.mjs", "src-other/example.mjs", "compose.extra.yaml"],
+    files: ["console/scripts/example.mjs", "src-other/example.mjs", "compose.extra.yaml"],
     read: () => { throw new Error("out-of-scope files must not be read"); },
   }), { violations: [], scanned: 0 });
 });
@@ -115,4 +115,20 @@ test("requires a valid allowlist array with reasons", () => {
   for (const allowlist of [{}, [null], [{ path: "src/a.mjs", term: "patient", reason: " " }]]) {
     assert.throws(() => scan({}, allowlist), /allowlist must be an array of entries with non-empty path, term and reason strings/u);
   }
+});
+
+test("blocks sector vocabulary in public documents and finds Vietnamese words at Unicode boundaries", () => {
+  const { violations } = scan({
+    "README.md": "Cần cấp cứu.",
+    "docs/example.md": "Khám và điều trị",
+    "console/src/view.ts": "điểm khám sát",
+  });
+  assert.deepEqual(violations.map(({ term }) => term), ["cấp cứu", "khám", "khám", "điều trị"]);
+});
+
+test("allows only the neutral phrase and still flags other occurrences on the same line", () => {
+  assert.deepEqual(scan({ "README.md": "KHÁM phá.\nHãy khám\tphá!\nKhám phá và đi khám.\nKhám phápl." }).violations, [
+    { path: "README.md", line: 3, term: "khám" },
+    { path: "README.md", line: 4, term: "khám" },
+  ]);
 });

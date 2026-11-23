@@ -33,7 +33,8 @@ function secretPath(config, identity, name) {
   return `${mount}/data/tenants/${encodeURIComponent(identity.tenantId)}/apps/${encodeURIComponent(identity.appId)}/${encodeURIComponent(name)}`;
 }
 
-async function bao(config, method, path, body) {
+export async function bao(config, method, path, body) {
+  if (!config.secretsUrl) throw new HttpError(503, "secrets_unavailable");
   const token = secretsToken(config);
   let response;
   try {

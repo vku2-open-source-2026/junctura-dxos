@@ -44,6 +44,7 @@ export function loadConfig(env = process.env) {
     legacyResourceClients: (env.LEGACY_RESOURCE_CLIENTS ?? "").split(",").filter(Boolean),
     strictRecords: env.STRICT_RECORD_WRITES === "true",
     dataUrl: env.DATA_URL,
+    enforceAppAccess: Boolean(env.DATA_URL),
     dataSecret: env.DATA_JWT_SECRET,
     objectsUrl: env.OBJECTS_URL,
     objectsMasterUrl: env.OBJECTS_MASTER_URL,
@@ -62,6 +63,8 @@ export function loadConfig(env = process.env) {
     // serves read-only traffic; configuring the secret enables the provider.
     directorySyncClientId: env.DIRECTORY_SYNC_CLIENT_SECRET ? (env.DIRECTORY_SYNC_CLIENT_ID || undefined) : undefined,
     directorySyncSecret: env.DIRECTORY_SYNC_CLIENT_SECRET || undefined,
+    appSyncClientId: env.APP_SYNC_CLIENT_SECRET ? (env.APP_SYNC_CLIENT_ID || "junctura-app-sync") : undefined,
+    appSyncSecret: env.APP_SYNC_CLIENT_SECRET || undefined,
   });
   const origins = name => {
     let value;

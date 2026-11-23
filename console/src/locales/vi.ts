@@ -166,7 +166,7 @@ const docsSectionsVi: Record<DocsSectionId, DocSection> = {
         "items": [
           "Duyệt hoặc từ chối yêu cầu đăng ký ứng dụng, công bố năng lực và cấp quyền.",
           "Quản lý người dùng, vai trò, đơn vị và tổ chức.",
-          "Hậu kiểm truy cập khẩn cấp và xử lý tệp bị chặn.",
+          "Hậu kiểm truy cập ngoại lệ và xử lý tệp bị chặn.",
           "Theo dõi nhật ký kiểm toán, cấu hình hệ thống, bí mật và sao lưu."
         ]
       },
@@ -247,7 +247,7 @@ const docsSectionsVi: Record<DocsSectionId, DocSection> = {
   },
   "roleAuditor": {
     "title": "Kiểm toán viên",
-    "intro": "Bạn đọc nhật ký, kiểm tra toàn vẹn và xem lại đồng ý cùng truy cập khẩn cấp. Bạn không thay đổi dữ liệu nghiệp vụ.",
+    "intro": "Bạn đọc nhật ký, kiểm tra toàn vẹn và xem lại đồng ý cùng truy cập ngoại lệ. Bạn không thay đổi dữ liệu nghiệp vụ.",
     "blocks": [
       {
         "kind": "list",
@@ -255,7 +255,7 @@ const docsSectionsVi: Record<DocsSectionId, DocSection> = {
           "Tra cứu sự kiện theo người, hành động, đối tượng, kết quả và thời gian.",
           "Xuất CSV để lưu trữ hoặc đối chiếu với báo cáo khác.",
           "Xem ai đã truy cập dữ liệu của một người dùng.",
-          "Theo dõi các lượt truy cập khẩn cấp và kết quả hậu kiểm."
+          "Theo dõi các lượt truy cập ngoại lệ và kết quả hậu kiểm."
         ]
       },
       {
@@ -378,12 +378,12 @@ const docsSectionsVi: Record<DocsSectionId, DocSection> = {
     ]
   },
   "conceptEmergency": {
-    "title": "Truy cập khẩn cấp",
+    "title": "Truy cập ngoại lệ (break-glass)",
     "intro": "Trong tình huống khẩn cấp, ứng dụng có thể truy cập khi chưa có đồng ý nếu khai báo lý do.",
     "blocks": [
       {
         "kind": "paragraph",
-        "text": "Lượt truy cập khẩn cấp được niêm phong, người liên quan được báo và phải được hậu kiểm bởi quản trị viên có quyền phù hợp."
+        "text": "Lượt truy cập ngoại lệ được niêm phong, người liên quan được báo và phải được hậu kiểm bởi quản trị viên có quyền phù hợp."
       },
       {
         "kind": "list",
@@ -487,8 +487,8 @@ const docsSectionsVi: Record<DocsSectionId, DocSection> = {
             "answer": "Mở Nhật ký kiểm toán và bấm Kiểm tra toàn vẹn. Kết quả cho biết chuỗi còn nguyên vẹn hoặc chỉ ra vị trí bắt đầu bị can thiệp."
           },
           {
-            "question": "Truy cập khẩn cấp khác đồng ý ở chỗ nào?",
-            "answer": "Truy cập khẩn cấp không cần đồng ý trước nhưng phải khai báo lý do, được niêm phong và bắt buộc hậu kiểm. Đồng ý là sự cho phép chủ động của người dùng và có thể rút lại."
+            "question": "Truy cập ngoại lệ (break-glass) khác đồng ý ở chỗ nào?",
+            "answer": "Truy cập ngoại lệ (break-glass) không cần đồng ý trước nhưng phải khai báo lý do, được niêm phong và bắt buộc hậu kiểm. Đồng ý là sự cho phép chủ động của người dùng và có thể rút lại."
           },
           {
             "question": "Tôi nên bắt đầu với bí mật ứng dụng ở đâu?",
@@ -577,7 +577,7 @@ export const vi = {
       "description": "Người đề xuất và người duyệt phải khác nhau để tránh tự quyết một mình."
     },
     "emergency": {
-      "label": "Truy cập khẩn cấp",
+      "label": "Truy cập ngoại lệ (break-glass)",
       "description": "Xem dữ liệu khi không kịp xin đồng ý; lượt xem vẫn phải được người khác hậu kiểm."
     },
     "hashChain": {
@@ -696,7 +696,7 @@ export const vi = {
       "desc": "Đăng ký, duyệt, tạm ngưng ứng dụng của các đơn vị."
     },
     "connect-map": {
-      "label": "Sơ đồ kết nối",
+      "label": "Kết nối giữa ứng dụng",
       "desc": "Ai đang dùng năng lực của ai, theo trạng thái và hạn dùng."
     },
     "caps": {
@@ -752,7 +752,7 @@ export const vi = {
       "desc": "Ai đồng ý cho ứng dụng nào dùng dữ liệu của mình."
     },
     "emergency": {
-      "label": "Truy cập khẩn cấp",
+      "label": "Truy cập ngoại lệ (break-glass)",
       "desc": "Lượt xem dữ liệu không có đồng ý, cần hậu kiểm."
     },
     "quarantine": {
@@ -1193,7 +1193,7 @@ export const vi = {
     "colTime": "Thời gian",
     "colPath": "Đường dẫn",
     "colStatus": "Mã",
-    "explorerTitle": "Trình khám phá lệnh gọi",
+    "explorerTitle": "Trình tra cứu lệnh gọi",
     "explorerDesc": "Nhật ký lệnh gọi chi tiết, lọc theo các bộ lọc phía trên.",
     "explorerTableCaption": "Bảng nhật ký lệnh gọi",
     "explorerColTask": "Việc",
@@ -1252,13 +1252,13 @@ export const vi = {
     "pendingAttentionDesc": "Yêu cầu đang chờ người có quyền quyết định.",
     "pendingAppRequest": "Yêu cầu duyệt ứng dụng",
     "pendingGrantRequest": "Yêu cầu cấp quyền",
-    "emergencyAttention": "Truy cập khẩn cấp chưa hậu kiểm",
+    "emergencyAttention": "Truy cập ngoại lệ (break-glass) chưa hậu kiểm",
     "emergencyAttentionDesc": "Lượt xem dữ liệu không có đồng ý cần được xác nhận.",
     "blockedFiles": "Tệp bị chặn mới",
     "blockedFilesDesc": "Tệp bị từ chối vì chứa mã độc.",
     "blockedFileDetail": "bị chặn lúc",
     "openQueue": "Mở việc cần duyệt",
-    "openEmergency": "Mở truy cập khẩn cấp",
+    "openEmergency": "Mở truy cập ngoại lệ",
     "openQuarantine": "Mở tệp bị chặn",
     "attentionEmpty": "Không có việc nào cần chú ý.",
     "platformTitle": "Tình trạng nền tảng",
@@ -1278,7 +1278,7 @@ export const vi = {
     "shortcutPending": "Duyệt yêu cầu đang chờ",
     "shortcutRegisterApp": "Đăng ký ứng dụng",
     "shortcutProposeGrant": "Đề xuất quyền truy cập",
-    "shortcutEmergency": "Hậu kiểm truy cập khẩn cấp",
+    "shortcutEmergency": "Hậu kiểm truy cập ngoại lệ",
     "shortcutUsers": "Quản lý người dùng",
     "shortcutAudit": "Xem nhật ký kiểm toán",
     "shortcutSettings": "Cấu hình hệ thống",
@@ -2151,7 +2151,7 @@ export const vi = {
     }
   },
   "apiExplorer": {
-    "title": "Trình khám phá Foundation OpenAPI 3.1",
+    "title": "Trình tra cứu Foundation OpenAPI 3.1",
     "subtitle": "Tài liệu tương tác, lược đồ yêu cầu/phản hồi, định danh lỗi và ví dụ mã lệnh cURL/TypeScript cho 44 thao tác đã triển khai.",
     "tagFilter": "Lọc theo nhóm chức năng",
     "allTags": "Tất cả nhóm",
@@ -2165,7 +2165,7 @@ export const vi = {
     "codeExample": "Ví dụ mã lệnh",
     "copyCurl": "Sao chép cURL",
     "copyFetch": "Sao chép Fetch (TS)",
-    "capabilityNotice": "Lưu ý: Trình khám phá này chỉ liệt kê các chức năng của API nền tảng đã chạy thật. Bản nháp API năng lực v1 nằm riêng ở mục Năng lực mở rộng."
+    "capabilityNotice": "Lưu ý: Trình tra cứu này chỉ liệt kê các chức năng của API nền tảng đã chạy thật. Bản nháp API năng lực v1 nằm riêng ở mục Năng lực mở rộng."
   },
   "audit": {
     "title": "Nhật ký kiểm toán",
@@ -2254,9 +2254,9 @@ export const vi = {
     "permissionHint": "Cần quyền audit.read để xem đồng ý của người dùng."
   },
   "emergency": {
-    "title": "Truy cập khẩn cấp",
-    "subtitle": "Số liệu tổng hợp và trạng thái hậu kiểm các lượt truy cập khẩn cấp.",
-    "readOnlyNote": "Quản trị viên chỉ xem; việc xử lý truy cập khẩn cấp do ứng dụng/đơn vị thực hiện.",
+    "title": "Truy cập ngoại lệ (break-glass)",
+    "subtitle": "Số liệu tổng hợp và trạng thái hậu kiểm các lượt truy cập ngoại lệ.",
+    "readOnlyNote": "Quản trị viên chỉ xem; việc xử lý truy cập ngoại lệ do ứng dụng/đơn vị thực hiện.",
     "listTitle": "Danh sách lượt truy cập",
     "searchPlaceholder": "Tìm theo ứng dụng, người dùng hoặc nội dung…",
     "pendingCount": "Chờ hậu kiểm",
@@ -2273,7 +2273,7 @@ export const vi = {
     "stateValid": "Hợp lệ",
     "stateViolation": "Vi phạm",
     "review": "Hậu kiểm",
-    "reviewTitle": "Hậu kiểm truy cập khẩn cấp",
+    "reviewTitle": "Hậu kiểm truy cập ngoại lệ",
     "reviewDesc": "Đọc lý do khai báo và chọn kết luận cho lượt truy cập của {app}.",
     "conclusionLabel": "Kết luận",
     "accept": "Chấp nhận — lý do hợp lệ",
@@ -2289,11 +2289,11 @@ export const vi = {
     "reviewError": "Không lưu được kết luận",
     "reviewedBy": "Người hậu kiểm",
     "reviewedAt": "Hậu kiểm lúc",
-    "emptyTitle": "Không có lượt truy cập khẩn cấp",
-    "emptyDesc": "Truy cập khẩn cấp là các lượt xem dữ liệu được thực hiện khi chưa có đồng ý và cần được hậu kiểm. Hiện chưa có lượt nào; khi hệ thống ghi nhận một lượt khẩn cấp, lượt đó sẽ xuất hiện ở đây để người có quyền xem lại.",
+    "emptyTitle": "Không có lượt truy cập ngoại lệ",
+    "emptyDesc": "Truy cập ngoại lệ (break-glass) là các lượt xem dữ liệu được thực hiện khi chưa có đồng ý và cần được hậu kiểm. Hiện chưa có lượt nào; khi hệ thống ghi nhận một lượt khẩn cấp, lượt đó sẽ xuất hiện ở đây để người có quyền xem lại.",
     "noMatches": "Không có lượt nào khớp bộ lọc.",
-    "permissionHint": "Cần quyền trust.approve để hậu kiểm truy cập khẩn cấp.",
-    "tableCaption": "Danh sách lượt truy cập khẩn cấp"
+    "permissionHint": "Cần quyền trust.approve để hậu kiểm truy cập ngoại lệ.",
+    "tableCaption": "Danh sách lượt truy cập ngoại lệ"
   },
   "security": {
     "title": "Bảo mật & Giám sát hoạt động",
@@ -2307,7 +2307,7 @@ export const vi = {
     "auditTitle": "Nhật ký kiểm toán & Giám sát (Audit Events)",
     "auditExplanation": "Mọi thao tác quan trọng (đăng ký, phê duyệt, cấp và thu hồi quyền, thực thi năng lực) được ghi vào bảng `app_private.audit` trong cùng giao dịch với thao tác đó. Ứng dụng không có quyền đọc, sửa hay xóa bảng này; chỉ người quản lý có quyền audit.read mới tra cứu và kiểm tra được.",
     "sessionActivityTitle": "Nhật ký hoạt động trong phiên thao tác",
-    "sessionDiagnosticsNotice": "Đây là nhật ký chẩn đoán do trình duyệt tạo trong phiên hiện tại, không phải nhật ký kiểm toán máy chủ có thẩm quyền.",
+    "sessionDiagnosticsNotice": "Đây là nhật ký kiểm tra do trình duyệt tạo trong phiên hiện tại, không phải nhật ký kiểm toán máy chủ có thẩm quyền.",
     "sessionEventsSuffix": "sự kiện trong phiên",
     "chainTitle": "Kiểm tra toàn vẹn nhật ký (chuỗi băm SHA-256)",
     "chainExplanation": "Mỗi sự kiện được niêm phong vào một chuỗi mã kiểm tra riêng cho từng tổ chức: mã băm của sự kiện bao gồm nội dung của nó và mã băm của sự kiện trước. Chỉ cần sửa, xóa hay đổi thứ tự một sự kiện đã niêm phong là chuỗi bị đứt và bị phát hiện ngay. Lần kiểm tra cũng niêm phong các sự kiện mới.",
@@ -2467,7 +2467,7 @@ export const vi = {
       "applications.write": "Đề xuất và sửa ứng dụng",
       "applications.approve": "Duyệt và thu hồi ứng dụng",
       "trust.write": "Công bố năng lực và đề xuất quyền",
-      "trust.approve": "Duyệt quyền và hậu kiểm khẩn cấp",
+      "trust.approve": "Duyệt quyền và hậu kiểm truy cập ngoại lệ",
       "audit.read": "Đọc nhật ký kiểm toán",
       "core-reader": "Đọc dữ liệu và tệp",
       "core-writer": "Ghi dữ liệu và tệp",
@@ -2577,6 +2577,50 @@ export const vi = {
     "nameRequired": "Hãy nhập tên vai trò.",
     "createdToast": "Đã tạo vai trò {name}.",
     "selectRoleHint": "Chọn tên vai trò ở cột để xem người đang giữ."
+  },
+  "appAccess": {
+    "title": "Ai được dùng",
+    "signInDenied": "Tài khoản của bạn chưa được cấp quyền vào ứng dụng này.",
+    "unit": "Đơn vị",
+    "target": "Đối tượng",
+    "targetId": "Mã đối tượng",
+    "role": "Vai trò",
+    "status": "Trạng thái",
+    "targets": {
+      "unit": "Đơn vị",
+      "group": "Nhóm",
+      "subject": "Người"
+    },
+    "roles": {
+      "viewer": "Người xem",
+      "editor": "Người chỉnh sửa",
+      "manager": "Người quản lý"
+    },
+    "waiting": "Đang chờ đồng bộ",
+    "synchronized": "Đã đồng bộ",
+    "empty": "Chưa có lượt cấp quyền.",
+    "loading": "Đang tải…",
+    "failed": "Không thể hoàn thành yêu cầu. Vui lòng thử lại.",
+    "assign": "Cấp quyền",
+    "revoke": "Thu hồi quyền",
+    "firstPage": "Trang đầu",
+    "nextPage": "Trang tiếp theo",
+    "configuration": "Thông tin triển khai",
+    "displayName": "Tên ứng dụng",
+    "ownerUnit": "Đơn vị chủ quản",
+    "deploymentUnits": "Các mã đơn vị triển khai (phân cách bằng dấu phẩy)",
+    "save": "Lưu thay đổi",
+    "keyHistory": "Lịch sử cấp lại khóa OIDC",
+    "noRotations": "Chưa có lần cấp lại khóa.",
+    "rotate": "Cấp lại khóa OIDC",
+    "rotationConfirm": "Cấp lại khóa OIDC và vô hiệu hóa khóa trước đó?",
+    "orgSubtitle": "Xem đơn vị, thành viên và các ứng dụng đang triển khai.",
+    "unitTree": "Cây đơn vị",
+    "members": "Thành viên",
+    "unitApps": "Ứng dụng đơn vị dùng",
+    "noUnits": "Chưa có đơn vị.",
+    "noMembers": "Chưa có thành viên.",
+    "noUnitApps": "Chưa có ứng dụng triển khai."
   },
   "orgs": {
     "title": "Tổ chức",
@@ -2888,7 +2932,7 @@ export const vi = {
     "never": "—"
   },
   "connect": {
-    "title": "Sơ đồ kết nối",
+    "title": "Kết nối giữa ứng dụng",
     "subtitle": "Ứng dụng cung cấp ở bên trái, ứng dụng được dùng ở bên phải. Mỗi đường nối là một năng lực được chia sẻ, kèm trạng thái và hạn dùng.",
     "mapTitle": "Ai đang dùng năng lực của ai",
     "mapHint": "Rê hoặc dùng bàn phím tới một đường để xem chi tiết. Bấm một ứng dụng để làm nổi các kết nối của nó.",
@@ -3019,7 +3063,7 @@ export const vi = {
     "capabilitiesTitle": "Những nhóm chức năng chính",
     "capabilitiesLead": "Mỗi nhóm là một mảng việc quen thuộc trong vận hành nền tảng của tổ chức.",
     "ctaTitle": "Sẵn sàng xem thử?",
-    "ctaLead": "Đăng nhập để khám phá bảng điều khiển bằng tài khoản của tổ chức.",
+    "ctaLead": "Đăng nhập để tra cứu bảng điều khiển bằng tài khoản của tổ chức.",
     "footerNote": "Dự án nguồn mở cho các tổ chức Việt Nam"
   },
   "login": {
@@ -3068,7 +3112,7 @@ export const vi = {
       },
       "auditor": {
         "name": "Kiểm toán viên",
-        "desc": "Đọc nhật ký, đồng ý và truy cập khẩn cấp; không thay đổi gì."
+        "desc": "Đọc nhật ký, đồng ý và truy cập ngoại lệ; không thay đổi gì."
       },
       "viewer": {
         "name": "Chỉ đọc",
@@ -3079,7 +3123,7 @@ export const vi = {
       "applications.write": "Đề xuất và sửa ứng dụng",
       "applications.approve": "Duyệt và thu hồi ứng dụng",
       "trust.write": "Công bố năng lực và đề xuất quyền",
-      "trust.approve": "Duyệt quyền và hậu kiểm khẩn cấp",
+      "trust.approve": "Duyệt quyền và hậu kiểm truy cập ngoại lệ",
       "audit.read": "Đọc nhật ký kiểm toán",
       "core-reader": "Đọc dữ liệu và tệp",
       "core-writer": "Ghi dữ liệu và tệp",

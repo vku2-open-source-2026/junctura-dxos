@@ -95,7 +95,7 @@ export function buildAppDetailModel(
   );
 
   return {
-    ownerUnit: ownerPrincipal?.organization ?? null,
+    ownerUnit: application.ownerUnit ?? null,
     registrant: personName(application.ownerSubject, sources.principals),
     approver: approval
       ? personName(approval.subject, sources.principals)

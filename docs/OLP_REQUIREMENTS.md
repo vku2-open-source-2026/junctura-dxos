@@ -17,7 +17,7 @@ Competition requirements, current Junctura coverage and submission checklist.
 | Headless, không giao diện người dùng | Core chỉ cung cấp API; Console là công cụ quản trị tách riêng |
 | Zero-Trust, an toàn thông tin | Xác thực tại cổng, cô lập tenant/ứng dụng, OpenBao, audit được bảo vệ |
 | Sao lưu và khôi phục | Kiểm thử `pg_dump`/`pg_restore` cô lập, kiểm tra lại RLS và audit |
-| Ít nhất một ứng dụng Tầng 2 trong H-P-D-I | [junctura-workspace](https://github.com/vku2-open-source-2026/junctura-workspace) (repo riêng): không gian làm việc dùng chung, trung lập ngành, có giao diện người dùng cuối, thư viện `@junctura/ui`, gói mẫu Giáo dục; giao diện end-to-end đang dựng. Gói ngành Y tế và ứng dụng Tầng 3 ở [junctura-health](https://github.com/vku2-open-source-2026/junctura-health), Clinic, Hospital, Pharmacy, Insurance, MyHealth |
+| Ít nhất một ứng dụng Tầng 2 trong H-P-D-I | [junctura-workspace](https://github.com/vku2-open-source-2026/junctura-workspace) (repo riêng): không gian làm việc dùng chung, trung lập ngành, có giao diện người dùng cuối, thư viện `@junctura/ui`; giao diện end-to-end đang dựng. Các gói ngành và ứng dụng ở repo riêng |
 | Tầng trên đổi nghiệp vụ không ảnh hưởng tầng nền | Lõi trung lập miền: quy trình nghiệp vụ do ứng dụng cấp khi triển khai, Console không ghi cứng tên nghiệp vụ, `npm run check:neutral` chặn từ vựng nghiệp vụ trong CI |
 
 ## Official references
@@ -34,7 +34,7 @@ Verify the latest organizer announcements before submission. The references, not
 - Open-core means independently reusable services, not simply a single application's backend split into folders.
 - Technology examples in the problem are **references, not required brands**.
 
-Layer 2/3 apps are built in separate repositories. Layer 2 is `junctura-workspace`, the domain-neutral shared workspace with an end-user GUI, `@junctura/ui` and the Education sample pack; the workspace is under construction. Layer 3 is the health pack `junctura-health` (versioned capability contracts, medical BPMN workflows, units, data schemas, shared catalogues, seed data and `@junctura/health-ui`) plus the Clinic, Hospital, Pharmacy, Insurance and MyHealth applications. Layer 3 apps use Layer 2 APIs and a limited part of Layer 1 with their own identity; see [TIER_MODEL.md](TIER_MODEL.md). Applications are migrating their data to Layer 1. When complete, Layer 2 and Layer 3 applications must store business state through the Core API. The end-to-end GUI experience is being completed for the submission round; the operator Console does not satisfy Layer 2.
+Layer 2 is `junctura-workspace`, the shared workspace with an end-user GUI and `@junctura/ui`. Sector packs and applications live in separate repositories. Layer 3 apps use Layer 2 APIs and a limited part of Layer 1 with their own identity; see [TIER_MODEL.md](TIER_MODEL.md). Applications are migrating their data to Layer 1. When complete, Layer 2 and Layer 3 applications must store business state through the Core API. The end-to-end GUI experience is being completed for the submission round; the operator Console does not satisfy Layer 2.
 
 See [architecture](ARCHITECTURE.md), [Core API](CORE_API.md), [capabilities](CAPABILITIES.md) and [Console](CONSOLE.md).
 

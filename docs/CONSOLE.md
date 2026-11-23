@@ -5,9 +5,9 @@ SPDX-License-Identifier: Apache-2.0
 
 # Junctura Console — Layer-1 Operator Tool
 
-> The Console is the Core's Layer-1 operator tool (like Supabase Studio): it views platform state and decides **platform access** only (application registration and state, sharing grants; capabilities, consents and emergency accesses are shown read-only, and their decisions use the Core API). It never starts, completes, cancels or approves **business work**: Layer 2 handles shared administrative processes and Layer 3 makes sector business decisions. It is domain-neutral and shows workflow, owner, step and collection names exactly as applications supply them. Core runs fully without the Console.
+> The Console is the Core's Layer-1 operator tool (like Supabase Studio): it views platform state and decides **platform access** only (application registration, deployment, access assignments, OIDC key rotation and sharing grants; capabilities, consents and break-glass accesses are shown read-only, and their decisions use the Core API). It never starts, completes, cancels or approves **business work**: Layer 2 handles shared administrative processes and Layer 3 makes sector business decisions. It is domain-neutral and shows workflow, owner, step and collection names exactly as applications supply them. Core runs fully without the Console.
 
-In the current screens, the decisions an operator can take are application registration (approve/reject/revoke) and sharing grants (approve/reject/revoke); capabilities and emergency accesses are shown read-only (see [Limitations](#limitations)).
+In the current screens, operators manage application access, configuration, key rotation and sharing grants; capabilities and break-glass accesses are shown read-only (see [Limitations](#limitations)).
 
 The shared design system supports light/dark themes, text sizing and bilingual text: Vietnamese (`vi`) by default, English (`en`) selectable.
 
@@ -73,18 +73,18 @@ Reads below are `GET` unless stated otherwise; paths are Gateway paths before th
 | Traffic (`traffic`, Lưu lượng) | `/v1/metrics/features?minutes=60` | Refresh; inspect requests, errors and latency by feature, sorted by request count; refreshes every 30 seconds. |
 | Requests (`requests`, Nhật ký request) | `/v1/metrics/requests?limit=100` | Refresh; filter by status and method; refreshes every 30 seconds. |
 | Approval queue (`queue`) | `/v1/trust/graph`; application/grant lookup when deciding | Approve/reject pending application registrations and sharing grants; reject requires a reason. Own proposals are blocked. The queue refreshes every 15 seconds. |
-| Applications (`apps`) | `/v1/trust/graph`, `/v1/applications/{id}`; detail also reads capabilities, storage summary and, with `audit.read`, `/v1/applications/stats`, audit events and directory principals | Search/filter; inspect owner, capabilities, sharing, storage, activity and approval metadata. Approve/reject only pending registrations; revoke an existing application with a reason. Applications register through the API; no registration form. Technical identifiers are collapsed. |
+| Applications (`apps`) | `/v1/applications`, `/v1/applications/{id}`, `/{id}/assignments` and `/{id}/oidc-keys`. Overview also reads capabilities, sharing and activity. | Search, filter and page. View configuration and access assignments. Authorized operators can update deployment, grant and revoke access, rotate keys and decide on pending registrations. |
 | Capabilities (`caps`) | `/v1/capabilities?limit=100` | Search/filter the catalogue by state; refresh. Read-only; no publication or invocation controls. |
-| Connection map (`connect-map`, Sơ đồ kết nối) | `/v1/trust/graph` | Inspect/filter relations; revoke with a reason when permitted (`trust.write` or `trust.approve`). |
+| Application connections (`connect-map`, Kết nối giữa ứng dụng) | `/v1/trust/graph` | Inspect/filter relations; revoke with a reason when permitted (`trust.write` or `trust.approve`). |
 | Sharing grants (`grants`, Quyền truy cập) | `/v1/trust/graph`; optional `/v1/audit-events?limit=100` and `/v1/directory/principals` with `audit.read` | Search/filter pending, active, rejected, revoked and expired relations; inspect proposer/decision metadata. Approve/reject pending proposals or revoke effective grants (`trust.approve`); reject/revoke require a reason. No create, propose or extend action. |
 | Data (`records`, Dữ liệu) | `/v1/storage/summary`, `/v1/storage/collections?application={id}` | Read-only aggregates and collection structure: field names/types, fill rates, counts and update times. No record values, sample rows or mutation forms. |
 | Files (`files`, Tệp) | `/v1/storage/summary`, `/v1/storage/files?application={id}&path={folder}` | Browse one directory level, sort, switch table/grid. Masked names appear exactly as returned, alongside size/type/scan status. No download, preview, upload or delete. |
 | Workflows (`workflows`, Quy trình) | `/v1/workflows/summary`, `/v1/workflows/executions?limit=100` | Read-only definition/owner/ordered-step summaries and execution IDs, workflow, owning application, status, start/end times. Filter running/completed/cancelled and paginate locally. No per-case content, assignee or detailed progress; no start, complete, approve or cancel. |
 | Users (`users`) | `/v1/directory/principals` | Search name/organization/job title; filter organization/kind; inspect enabled state and grouped translated permissions. Current operator has a “Bạn” badge. No user/role editing. |
-| Organizations (`orgs`) | `/v1/directory/organizations` | Select platform/unit cards to inspect capability counts and incoming/outgoing relations. Read-only tenant/application tree; retry permission/session/load errors. |
+| Organizations (`orgs`) | `/v1/directory/units`, `/v1/directory/units/{unit}/members`, `/v1/applications?unit={unit}` | Browse the tenant's unit tree and select a unit to see members and deployed apps. Open an app to manage its access. |
 | Audit (`audit`) | `/v1/audit-events?limit=100` | Search/filter loaded events; export filtered CSV; `POST /v1/audit-events/verify` checks chain integrity. No event editing. |
 | Consents (`consents`, Đồng ý của người dùng) | `/v1/me/consents` | Read-only counts and searchable status list for the current subject; no withdrawal or acting for another user. |
-| Emergency (`emergency`, Truy cập khẩn cấp) | `/v1/emergency-accesses` | Read-only review counts/list, search and state filters; no emergency-access request or review decision controls. |
+| Emergency (`emergency`, Truy cập ngoại lệ (break-glass)) | `/v1/emergency-accesses` | Read-only review counts/list, search and state filters; no break-glass request or review decision controls. |
 | Functions (`platform`) | `/health`, `/ready` | Inspect function descriptions, refresh aggregate service status, open related screens/docs; explanatory simulations do not call business APIs. |
 | Docs (`docs`) | Bundled guides and generated API metadata | Search grouped API reference, expand parameters/responses, copy base URL/cURL; no interactive API execution. |
 | Settings (`settings`) | Connection test: `/health` | Save an approved Gateway URL locally; choose language, theme and text size. No server configuration writes. |
@@ -155,7 +155,7 @@ The table mirrors every API location in [default.conf](../console/nginx/default.
 | `/v1/metrics/requests` | GET |
 | `/v1/metrics/features` | GET |
 | `/v1/directory/principals` | GET |
-| `/v1/directory/organizations` | GET |
+| `/v1/directory/units`, `/v1/directory/units/{unit}/members` | GET |
 | `/v1/trust/graph` | GET |
 | `/v1/trust/grants/{id}` | GET |
 | `/v1/trust/grants/{id}/activate`, `/v1/trust/grants/{id}/revoke` | POST |

@@ -387,6 +387,24 @@ test("a newer render or a lost lease stops the superseded cleanup", async t => {
   assert.deepEqual(purged, [], "a superseded render never deletes documents");
 });
 
+test("a rebuild yields when outstanding jobs are waiting for retry", async t => {
+  const operations = [];
+  t.mock.method(globalThis, "fetch", respond);
+  routes = [dataRoute(async ({ operation }) => {
+    operations.push(operation);
+    if (operation === "acquire") return data({ generation: null, building_generation: generation });
+    if (operation === "jobs") {
+      assert.equal(operations.filter(name => name === "jobs").length, 1);
+      return data([]);
+    }
+    if (operation === "finish") return data(null);
+    assert.equal(operation, "release");
+    return data(true);
+  })];
+  assert.equal(await drainTenant(config, createMeilisearch(config), "tenant-a"), true);
+  assert.deepEqual(operations, ["acquire", "jobs", "finish", "release"]);
+});
+
 test("an unusable adapter configuration fails closed", async t => {
   assert.throws(() => createMeilisearch({ searchUrl: "http://meili.invalid" }), HttpError);
   assert.equal(startSearchIndexer({ ...config, searchUrl: undefined }), undefined);

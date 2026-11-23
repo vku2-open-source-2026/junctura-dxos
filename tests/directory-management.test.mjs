@@ -504,9 +504,9 @@ test("disabled sync preserves confirmed views and a blank GET cannot confirm a d
   const type = "/v1/directory/unit-types/office";
   const unit = "/v1/directory/units/unit-a";
   const body = { unitType: "office", name: "Unit A" };
-  await call(type, "PUT", { name: "Office" });
   syncEnabled = false;
   try {
+    assert.equal((await call(type, "PUT", { name: "Office" })).status, 201);
     assert.equal((await call(unit, "PUT", body)).status, 503);
     assert.ok(store.units.get("unit-a")?.pending_delete);
   } finally { syncEnabled = true; }

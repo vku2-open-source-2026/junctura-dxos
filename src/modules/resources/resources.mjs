@@ -1,8 +1,8 @@
 // SPDX-FileCopyrightText: 2026 Junctura Contributors
 // SPDX-License-Identifier: Apache-2.0
 import { applicationToken } from "../applications/applications.mjs";
-import { createHash, randomUUID } from "node:crypto";
-import { HttpError, json, readFlatJsonObject, requireWriter, uuidPattern } from "../../platform/http/http.mjs";
+import { createHash } from "node:crypto";
+import { HttpError, json, requestIdFor, readFlatJsonObject, requireWriter, uuidPattern } from "../../platform/http/http.mjs";
 
 function canonicalJson(value) {
   if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`;
@@ -75,7 +75,7 @@ async function shareCommand(config, identity, operation, payload) {
 }
 
 export async function handleShares(request, response, identity, config, url) {
-  const requestId = randomUUID();
+  const requestId = requestIdFor(request);
   response.setHeader("X-Request-Id", requestId);
   try {
     return await shareRequest(request, response, identity, config, url);

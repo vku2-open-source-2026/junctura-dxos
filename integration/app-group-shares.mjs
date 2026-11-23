@@ -185,7 +185,8 @@ test("reusing a share idempotency key with a changed body returns 422 with reque
   assert.equal(changed.status, 422);
   const value = await changed.json();
   assert.equal(value.error, "idempotency_key_reused");
-  assert.match(value.requestId, /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+  assert.match(value.requestId, /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/);
+  assert.equal(value.requestId, changed.headers.get("x-request-id"));
 });
 
 test("implemented operations match the observed HTTP contract", async () => {

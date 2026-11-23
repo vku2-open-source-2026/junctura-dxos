@@ -120,7 +120,7 @@ Migration 020 adds `execution_private.execution_contexts`, the
 and installs a wrapper under the original name and grant. See
 [CAPABILITY_EXECUTION](CAPABILITY_EXECUTION.md#purpose-and-data-subject).
 
-## Consent and emergency access (021)
+## Consent and break-glass access (021)
 
 Migration 021 adds `execution_private.subject_consents` and
 `execution_private.emergency_reviews` (forced tenant RLS), emergency columns on

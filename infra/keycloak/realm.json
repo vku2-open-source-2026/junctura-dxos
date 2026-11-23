@@ -20,7 +20,7 @@
         "subComponents": {},
         "config": {
           "kc.user.profile.config": [
-            "{\"attributes\":[{\"name\":\"username\",\"displayName\":\"Username\",\"permissions\":{\"view\":[\"admin\",\"user\"],\"edit\":[\"admin\",\"user\"]},\"validations\":{\"length\":{\"min\":3,\"max\":255},\"username-prohibited-characters\":{},\"up-username-not-idn-homograph\":{}}},{\"name\":\"email\",\"displayName\":\"Email\",\"required\":{\"roles\":[\"user\"]},\"permissions\":{\"view\":[\"admin\",\"user\"],\"edit\":[\"admin\",\"user\"]},\"validations\":{\"email\":{},\"length\":{\"max\":255}}},{\"name\":\"firstName\",\"displayName\":\"First name\",\"required\":{\"roles\":[\"user\"]},\"permissions\":{\"view\":[\"admin\",\"user\"],\"edit\":[\"admin\",\"user\"]},\"validations\":{\"length\":{\"max\":255},\"person-name-prohibited-characters\":{}}},{\"name\":\"lastName\",\"displayName\":\"Last name\",\"required\":{\"roles\":[\"user\"]},\"permissions\":{\"view\":[\"admin\",\"user\"],\"edit\":[\"admin\",\"user\"]},\"validations\":{\"length\":{\"max\":255},\"person-name-prohibited-characters\":{}}},{\"name\":\"tenant_id\",\"displayName\":\"Tenant ID\",\"permissions\":{\"view\":[\"admin\"],\"edit\":[\"admin\"]}},{\"name\":\"subject_id\",\"displayName\":\"Verified subject ID\",\"permissions\":{\"view\":[\"admin\"],\"edit\":[\"admin\"]}}],\"groups\":[{\"name\":\"user-metadata\",\"displayHeader\":\"User metadata\",\"displayDescription\":\"Attributes, which refer to user metadata\"}]}"
+            "{\"attributes\":[{\"name\":\"username\",\"displayName\":\"Username\",\"permissions\":{\"view\":[\"admin\",\"user\"],\"edit\":[\"admin\",\"user\"]},\"validations\":{\"length\":{\"min\":3,\"max\":255},\"username-prohibited-characters\":{},\"up-username-not-idn-homograph\":{}}},{\"name\":\"email\",\"displayName\":\"Email\",\"required\":{\"roles\":[\"user\"]},\"permissions\":{\"view\":[\"admin\",\"user\"],\"edit\":[\"admin\",\"user\"]},\"validations\":{\"email\":{},\"length\":{\"max\":255}}},{\"name\":\"firstName\",\"displayName\":\"First name\",\"required\":{\"roles\":[\"user\"]},\"permissions\":{\"view\":[\"admin\",\"user\"],\"edit\":[\"admin\",\"user\"]},\"validations\":{\"length\":{\"max\":255},\"person-name-prohibited-characters\":{}}},{\"name\":\"lastName\",\"displayName\":\"Last name\",\"required\":{\"roles\":[\"user\"]},\"permissions\":{\"view\":[\"admin\",\"user\"],\"edit\":[\"admin\",\"user\"]},\"validations\":{\"length\":{\"max\":255},\"person-name-prohibited-characters\":{}}},{\"name\":\"tenant_id\",\"displayName\":\"Tenant ID\",\"permissions\":{\"view\":[\"admin\"],\"edit\":[\"admin\"]}},{\"name\":\"subject_id\",\"displayName\":\"Verified subject ID\",\"permissions\":{\"view\":[\"admin\"],\"edit\":[\"admin\"]}},{\"name\":\"junctura_unit\",\"displayName\":\"Application unit\",\"permissions\":{\"view\":[\"admin\"],\"edit\":[\"admin\"]}}],\"groups\":[{\"name\":\"user-metadata\",\"displayHeader\":\"User metadata\",\"displayDescription\":\"Attributes, which refer to user metadata\"}]}"
           ]
         }
       }
@@ -34,7 +34,47 @@
       {
         "name": "core-writer"
       }
-    ]
+    ],
+    "client": {
+      "junctura-console": [
+        {
+          "name": "junctura-access"
+        },
+        {
+          "name": "console-admin",
+          "composite": true,
+          "composites": {
+            "client": {
+              "junctura-console": [
+                "junctura-access"
+              ]
+            }
+          }
+        },
+        {
+          "name": "console-manager",
+          "composite": true,
+          "composites": {
+            "client": {
+              "junctura-console": [
+                "junctura-access"
+              ]
+            }
+          }
+        },
+        {
+          "name": "console-viewer",
+          "composite": true,
+          "composites": {
+            "client": {
+              "junctura-console": [
+                "junctura-access"
+              ]
+            }
+          }
+        }
+      ]
+    }
   },
   "clients": [
     {
@@ -326,7 +366,8 @@
       ],
       "attributes": {
         "pkce.code.challenge.method": "S256",
-        "post.logout.redirect.uris": "http://127.0.0.1:3000/*##http://localhost:3000/*##http://127.0.0.1:3002/*##http://localhost:3002/*##http://127.0.0.1:8080/*##http://localhost:8080/*"
+        "post.logout.redirect.uris": "http://127.0.0.1:3000/*##http://localhost:3000/*##http://127.0.0.1:3002/*##http://localhost:3002/*##http://127.0.0.1:8080/*##http://localhost:8080/*",
+        "use.refresh.tokens": "false"
       },
       "protocolMappers": [
         {
@@ -394,6 +435,15 @@
         "http://localhost:3002",
         "http://127.0.0.1:8080",
         "http://localhost:8080"
+      ],
+      "authenticationFlowBindingOverrides": {
+        "browser": "c4cfd46b-dd47-30e6-3ae4-58332b553fa3",
+        "direct_grant": "0687a97e-b3e5-685c-d23a-b858e471ac58"
+      },
+      "optionalClientScopes": [
+        "address",
+        "phone",
+        "microprofile-jwt"
       ]
     },
     {
@@ -401,6 +451,16 @@
       "enabled": false,
       "protocol": "openid-connect",
       "publicClient": false,
+      "serviceAccountsEnabled": true,
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": false
+    },
+    {
+      "clientId": "junctura-app-sync",
+      "enabled": "${APP_SYNC_CLIENT_ENABLED:false}",
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "secret": "${APP_SYNC_CLIENT_SECRET:}",
       "serviceAccountsEnabled": true,
       "standardFlowEnabled": false,
       "directAccessGrantsEnabled": false
@@ -467,7 +527,12 @@
       ],
       "groups": [
         "tenant-a"
-      ]
+      ],
+      "clientRoles": {
+        "junctura-console": [
+          "console-admin"
+        ]
+      }
     },
     {
       "username": "service-account-junctura-directory-sync",
@@ -479,6 +544,21 @@
           "query-users",
           "query-groups",
           "manage-users"
+        ]
+      }
+    },
+    {
+      "username": "service-account-junctura-app-sync",
+      "enabled": true,
+      "serviceAccountClientId": "junctura-app-sync",
+      "clientRoles": {
+        "realm-management": [
+          "view-realm",
+          "query-users",
+          "query-groups",
+          "manage-users",
+          "manage-clients",
+          "manage-realm"
         ]
       }
     }
@@ -496,5 +576,230 @@
     {
       "name": "production"
     }
+  ],
+  "authenticationFlows": [
+    {
+      "id": "c4cfd46b-dd47-30e6-3ae4-58332b553fa3",
+      "alias": "junctura-junctura-console-browser",
+      "description": "junctura-junctura-console-browser",
+      "providerId": "basic-flow",
+      "topLevel": true,
+      "builtIn": false,
+      "authenticationExecutions": [
+        {
+          "requirement": "REQUIRED",
+          "priority": 0,
+          "authenticatorFlow": true,
+          "flowAlias": "junctura-junctura-console-sign-in"
+        },
+        {
+          "requirement": "CONDITIONAL",
+          "priority": 10,
+          "authenticatorFlow": true,
+          "flowAlias": "junctura-junctura-console-browser-denied"
+        }
+      ]
+    },
+    {
+      "id": "634c2dca-047f-a224-b61a-0f17a3fae105",
+      "alias": "junctura-junctura-console-sign-in",
+      "description": "junctura-junctura-console-sign-in",
+      "providerId": "basic-flow",
+      "topLevel": false,
+      "builtIn": false,
+      "authenticationExecutions": [
+        {
+          "requirement": "ALTERNATIVE",
+          "priority": 0,
+          "authenticatorFlow": false,
+          "authenticator": "auth-cookie"
+        },
+        {
+          "requirement": "ALTERNATIVE",
+          "priority": 10,
+          "authenticatorFlow": true,
+          "flowAlias": "junctura-junctura-console-forms"
+        }
+      ]
+    },
+    {
+      "id": "067ec4ed-8266-e053-85f9-4f64170d37cb",
+      "alias": "junctura-junctura-console-forms",
+      "description": "junctura-junctura-console-forms",
+      "providerId": "basic-flow",
+      "topLevel": false,
+      "builtIn": false,
+      "authenticationExecutions": [
+        {
+          "requirement": "REQUIRED",
+          "priority": 0,
+          "authenticatorFlow": false,
+          "authenticator": "auth-username-password-form"
+        },
+        {
+          "requirement": "CONDITIONAL",
+          "priority": 10,
+          "authenticatorFlow": true,
+          "flowAlias": "junctura-junctura-console-otp"
+        }
+      ]
+    },
+    {
+      "id": "b601d152-6d9f-6b5b-b501-83d1efb006dd",
+      "alias": "junctura-junctura-console-otp",
+      "description": "junctura-junctura-console-otp",
+      "providerId": "basic-flow",
+      "topLevel": false,
+      "builtIn": false,
+      "authenticationExecutions": [
+        {
+          "requirement": "REQUIRED",
+          "priority": 0,
+          "authenticatorFlow": false,
+          "authenticator": "conditional-user-configured"
+        },
+        {
+          "requirement": "REQUIRED",
+          "priority": 10,
+          "authenticatorFlow": false,
+          "authenticator": "auth-otp-form"
+        }
+      ]
+    },
+    {
+      "id": "01ae37f0-2150-fad4-50ba-7942e6f7054d",
+      "alias": "junctura-junctura-console-browser-denied",
+      "description": "junctura-junctura-console-browser-denied",
+      "providerId": "basic-flow",
+      "topLevel": false,
+      "builtIn": false,
+      "authenticationExecutions": [
+        {
+          "requirement": "REQUIRED",
+          "priority": 0,
+          "authenticatorFlow": false,
+          "authenticator": "conditional-user-role",
+          "authenticatorConfig": "junctura-junctura-console-browser-denied-conditional-user-role"
+        },
+        {
+          "requirement": "REQUIRED",
+          "priority": 10,
+          "authenticatorFlow": false,
+          "authenticator": "deny-access-authenticator",
+          "authenticatorConfig": "junctura-junctura-console-browser-denied-deny-access-authenticator"
+        }
+      ]
+    },
+    {
+      "id": "0687a97e-b3e5-685c-d23a-b858e471ac58",
+      "alias": "junctura-junctura-console-direct",
+      "description": "junctura-junctura-console-direct",
+      "providerId": "basic-flow",
+      "topLevel": true,
+      "builtIn": false,
+      "authenticationExecutions": [
+        {
+          "requirement": "REQUIRED",
+          "priority": 0,
+          "authenticatorFlow": false,
+          "authenticator": "direct-grant-validate-username"
+        },
+        {
+          "requirement": "REQUIRED",
+          "priority": 10,
+          "authenticatorFlow": false,
+          "authenticator": "direct-grant-validate-password"
+        },
+        {
+          "requirement": "CONDITIONAL",
+          "priority": 20,
+          "authenticatorFlow": true,
+          "flowAlias": "junctura-junctura-console-direct-otp"
+        },
+        {
+          "requirement": "CONDITIONAL",
+          "priority": 30,
+          "authenticatorFlow": true,
+          "flowAlias": "junctura-junctura-console-direct-denied"
+        }
+      ]
+    },
+    {
+      "id": "36e2f041-2452-dbe4-ee73-288b65fd5f07",
+      "alias": "junctura-junctura-console-direct-otp",
+      "description": "junctura-junctura-console-direct-otp",
+      "providerId": "basic-flow",
+      "topLevel": false,
+      "builtIn": false,
+      "authenticationExecutions": [
+        {
+          "requirement": "REQUIRED",
+          "priority": 0,
+          "authenticatorFlow": false,
+          "authenticator": "conditional-user-configured"
+        },
+        {
+          "requirement": "REQUIRED",
+          "priority": 10,
+          "authenticatorFlow": false,
+          "authenticator": "direct-grant-validate-otp"
+        }
+      ]
+    },
+    {
+      "id": "109d9c7c-00fb-2522-d51e-a76e1b09a15e",
+      "alias": "junctura-junctura-console-direct-denied",
+      "description": "junctura-junctura-console-direct-denied",
+      "providerId": "basic-flow",
+      "topLevel": false,
+      "builtIn": false,
+      "authenticationExecutions": [
+        {
+          "requirement": "REQUIRED",
+          "priority": 0,
+          "authenticatorFlow": false,
+          "authenticator": "conditional-user-role",
+          "authenticatorConfig": "junctura-junctura-console-direct-denied-conditional-user-role"
+        },
+        {
+          "requirement": "REQUIRED",
+          "priority": 10,
+          "authenticatorFlow": false,
+          "authenticator": "deny-access-authenticator",
+          "authenticatorConfig": "junctura-junctura-console-direct-denied-deny-access-authenticator"
+        }
+      ]
+    }
+  ],
+  "authenticatorConfig": [
+    {
+      "alias": "junctura-junctura-console-browser-denied-conditional-user-role",
+      "config": {
+        "condUserRole": "junctura-console.junctura-access",
+        "negate": "true"
+      }
+    },
+    {
+      "alias": "junctura-junctura-console-browser-denied-deny-access-authenticator",
+      "config": {
+        "denyErrorMessage": "not_assigned_to_app"
+      }
+    },
+    {
+      "alias": "junctura-junctura-console-direct-denied-conditional-user-role",
+      "config": {
+        "condUserRole": "junctura-console.junctura-access",
+        "negate": "true"
+      }
+    },
+    {
+      "alias": "junctura-junctura-console-direct-denied-deny-access-authenticator",
+      "config": {
+        "denyErrorMessage": "not_assigned_to_app"
+      }
+    }
+  ],
+  "eventsListeners": [
+    "jboss-logging"
   ]
 }

@@ -3,6 +3,7 @@
 // Composition root: builds adapters and modules once, then exposes the router
 // and a single close hook. No global mutable container and no constructor magic.
 import { readFileSync } from "node:fs";
+import { startApplicationReconciler } from "../modules/applications/applications.mjs";
 import { createApi } from "../api.mjs";
 import { createCapabilityRuntime } from "../modules/capability/execution/runtime.mjs";
 import { startDirectoryReconciler } from "../modules/directory/directory.mjs";
@@ -32,12 +33,13 @@ export function createApplication(config, execution, composition) {
   }
   const eventsRuntime = createEventStreams(config);
   const route = createApi({ ...config, eventsRuntime });
+  const stopApplications = startApplicationReconciler(config);
   const stopDirectory = startDirectoryReconciler(config);
   const stopWorkflow = startWorkflowReconciler(config);
   const stopObjects = startObjectReconciler(config);
   const stopSearch = startSearchIndexer(config);
   return {
     route,
-    close() { eventsRuntime.close(); stopDirectory?.(); stopWorkflow?.(); stopObjects?.(); stopSearch?.(); executionRuntime?.close(); compositionRuntime?.close(); },
+    close() { eventsRuntime.close(); stopApplications?.(); stopDirectory?.(); stopWorkflow?.(); stopObjects?.(); stopSearch?.(); executionRuntime?.close(); compositionRuntime?.close(); },
   };
 }

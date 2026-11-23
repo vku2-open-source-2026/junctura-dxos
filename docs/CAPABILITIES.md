@@ -40,7 +40,7 @@ enabled `app_private.principals`; none of the following permissions is assigned 
 | `capabilities.publish` | Tenant capability administrator: management visibility and mutation authority; required to publish. |
 | `capabilities.approve` | Independent enrolled human: decide capability publication. |
 | `trust.write` | Enrolled human provider owner: propose/read/revoke its direct grants. |
-| `trust.approve` | Independent human administrator: decide/activate grants, read/revoke tenant grants, view tenant trust graph and review emergency access. |
+| `trust.approve` | Independent human administrator: decide/activate grants, read/revoke tenant grants, view tenant trust graph and review break-glass access. |
 | `compositions.write` | Explicitly enrolled consumer backend: create plans; authorized owners/writers manage drafts and lifecycle. |
 | `compositions.publish` | Tenant composition administrator: management reads and publication. |
 | `compositions.approve` | Independent enrolled approver: decide composition publication. |
@@ -279,7 +279,7 @@ Context binds the request digest and is stored privately/returned on redemption;
 | POST `/v1/emergency-accesses/{executionId}/review` | `trust.approve` plus `core-writer`: `{decision: "justified" or "unjustified", note}`; 200. |
 
 Naming a subject requires consent for that consumer/capability/purpose, otherwise 403
-`subject_consent_required`. Consent allows 1–8 purposes, future expiry within 366 days and 200 active
+`consent_required`, `consent_revoked` or `consent_expired`. Consent allows 1–8 purposes, future expiry within 366 days and 200 active
 consents per subject (429 `consent_limit_reached`), rechecked at redemption. Consent/review bodies: 16 KiB.
 Emergency context adds `emergency: true`, `dataSubject` and 10–500-character `justification`: it bypasses
 consent, retains Trust checks, audits `execution.emergency_access` (sealed at the next chain verification), flags provider/subject views and queues

@@ -33,6 +33,7 @@ for (const root of ["src", "scripts", "tests", "integration", "examples", "sdk",
 const tracked = spawnSync("git", ["ls-files", "-z"], { encoding: "utf8" });
 if (tracked.status === 0) {
   for (const file of tracked.stdout.split("\0").filter(Boolean)) {
+    if (!existsSync(file)) continue;
     if (/\.(ts|tsx|css|js|md|html|svg)$/.test(file) || ["console/tsconfig.json", "console/tsconfig.node.json", ".gitignore", ".gitattributes", ".dockerignore"].includes(file)) checkFile(file);
   }
 }

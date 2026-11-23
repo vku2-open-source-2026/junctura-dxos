@@ -57,7 +57,7 @@ async function workerRpc(config, tenantId, operation, payload) {
 function fingerprint(query, identity, scope) {
   return createHash("sha256").update(JSON.stringify({
     q: query, tenant: identity.tenantId, iss: identity.issuer,
-    sub: identity.subject, client: identity.clientId,
+    sub: identity.subject, client: identity.clientId, unit: identity.resourceUnit,
     scope: { management: scope?.management ?? [], shares: scope?.shares ?? [] },
   })).digest("base64url");
 }
@@ -360,7 +360,8 @@ export async function drainTenant(config, meili, tenantId) {
       if (!Array.isArray(jobs) || !jobs.length) {
         if (!building) break;
         const finished = await fenced("finish");
-        if (!finished || typeof finished !== "object") continue;
+        // Pending jobs can be waiting for their retry time. Yield until the next sweep.
+        if (!finished || typeof finished !== "object") break;
         building = null;
         if (uuidPattern.test(finished.retired_generation ?? "")) {
           await meili.dropIndex(searchIndexUid(tenantId, finished.retired_generation));

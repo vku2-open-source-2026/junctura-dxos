@@ -103,3 +103,13 @@ Full contract: [OpenAPI](https://github.com/vku2-open-source-2026/junctura-dxos/
 ## License
 
 Apache-2.0. See `LICENSE` and `NOTICE`.
+
+
+### Application access
+
+Use a management `userToken` with `listApplications`, `getApplication`, `updateApplication`,
+`listApplicationAssignments`, `assignApplicationAccess` and `revokeApplicationAccess`.
+Pass the ETag from `getApplication` as `ifMatch` when updating metadata.
+Use `listApplicationOidcKeys` for rotation history and `rotateApplicationOidcKey` to rotate.
+Pass the original `idempotencyKey` to retry a rotation. Rotation responses contain receipts,
+and the replacement secret is stored in OpenBao.

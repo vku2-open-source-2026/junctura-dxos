@@ -1,6 +1,6 @@
 // SPDX-FileCopyrightText: 2026 Junctura Contributors
 // SPDX-License-Identifier: Apache-2.0
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 
 export class HttpError extends Error {
   constructor(status, code, details) {
@@ -8,6 +8,22 @@ export class HttpError extends Error {
     this.status = status;
     if (details) this.details = details;
   }
+}
+
+const requestIds = new WeakMap();
+export const accessDenialCodes = new Set([
+  "not_assigned_to_app", "capability_not_granted", "consent_required",
+  "consent_revoked", "consent_expired", "unit_mismatch",
+]);
+
+export function requestIdFor(request) {
+  if (!requestIds.has(request)) {
+    const gatewayId = request.headers["x-junctura-request-id"];
+    requestIds.set(request, typeof gatewayId === "string" && /^[0-9a-f]{32}$/.test(gatewayId)
+      ? gatewayId.replace(/^(........)(....)(....)(....)(............)$/, "$1-$2-$3-$4-$5")
+      : randomUUID());
+  }
+  return requestIds.get(request);
 }
 
 export function json(response, status, payload, method = "GET") {

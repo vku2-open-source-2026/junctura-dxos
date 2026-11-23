@@ -178,6 +178,7 @@ function fakeStack({ tenant = "demo", users = [], memberships = {} } = {}) {
   const statements = [];
   const records = new Map(users.map(user => [user.id, structuredClone(user)]));
   const groups = structuredClone(memberships);
+  const consoleRoles = ["console-admin", "console-viewer"].map(name => ({ id: `${name}-role`, name }));
   const response = (value, status = 200, headers) => new Response(value === undefined ? null : JSON.stringify(value), { status, headers });
   const stack = {
     calls, statements, records,
@@ -187,6 +188,8 @@ function fakeStack({ tenant = "demo", users = [], memberships = {} } = {}) {
     sql: async statement => { statements.push(statement); return ""; },
     admin: async (path, body, method = body === undefined ? "GET" : "POST") => {
       calls.push({ path, body: structuredClone(body), method });
+      if (path === "clients?clientId=junctura-console") return response([{ id: "console-id", clientId: "junctura-console" }]);
+      if (path === "clients/console-id/roles") return response(consoleRoles);
       if (path.startsWith("users?")) {
         const username = new URLSearchParams(path.split("?")[1]).get("username");
         return response([...records.values()].filter(user => user.username === username));
@@ -209,6 +212,7 @@ function fakeStack({ tenant = "demo", users = [], memberships = {} } = {}) {
         if (method === "DELETE") groups[id] = (groups[id] ?? []).filter(group => group.id !== groupId);
         return response(undefined, 204);
       }
+      if (action === "role-mappings" && groupId === "clients" && method === "GET") return response([]);
       if (["reset-password", "role-mappings", "logout"].includes(action)) return response(undefined, 204);
       throw new Error(`Unexpected simulated request: ${method} ${path}`);
     },
@@ -228,6 +232,8 @@ test("existing admins migrate attributes and environment membership without chan
   assert.ok(stack.calls.some(call => call.path === "users/admin-id/groups/production-group" && call.method === "PUT"));
   assert.ok(!stack.calls.some(call => call.path.endsWith("reset-password")));
   assert.deepEqual(stack.calls.find(call => call.path.endsWith("role-mappings/realm")).body, stack.roles);
+  assert.deepEqual(stack.calls.find(call => call.path.endsWith("role-mappings/clients/console-id") && call.method === "POST").body,
+    [{ id: "console-admin-role", name: "console-admin" }]);
   assert.equal(stack.statements.length, 1);
   assert.ok(stack.statements[0].includes("VALUES ('production',"));
   assert.ok(!stack.statements[0].includes("tenant-a"));
@@ -242,6 +248,8 @@ test("read-only accounts receive only core-reader and have writer roles removed"
     assert.deepEqual(result, { created: [profile.username], reset: [] });
     const roleCalls = stack.calls.filter(call => call.path.endsWith("role-mappings/realm"));
     assert.deepEqual(roleCalls.map(call => [call.method, call.body.map(role => role.name)]), [["POST", ["core-reader"]], ["DELETE", ["core-writer"]]]);
+    assert.deepEqual(stack.calls.find(call => call.path.endsWith("role-mappings/clients/console-id") && call.method === "POST").body,
+      [{ id: "console-viewer-role", name: "console-viewer" }]);
     const user = stack.records.get(`${profile.username}-id`);
     assert.deepEqual(user.attributes.tenant_id, [profile.tenant]);
     if (profile === JUDGE_ACCOUNT) assert.deepEqual(user.attributes.access_expires_at, ["2026-12-15"]);

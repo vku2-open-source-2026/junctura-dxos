@@ -56,6 +56,10 @@ function defaultResponse(url: string): Response {
       applications: [],
     });
   }
+  if (url.includes("/v1/applications?") || /\/v1\/directory\/units(?:\/([^/?]+)\/members)?\?/.test(url)) {
+    return json(200, { items: [], nextCursor: null });
+  }
+  if (/\/v1\/applications\/[^/]+\/(assignments|oidc-keys)$/.test(url)) return json(200, { items: [] });
   if (url.includes("/v1/trust/graph")) return json(200, EMPTY_GRAPH);
   if (url.includes("/v1/metrics/traffic")) {
     return json(200, {

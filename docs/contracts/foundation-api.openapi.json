@@ -7,7 +7,7 @@
       "name": "Apache License 2.0",
       "identifier": "Apache-2.0"
     },
-    "description": "Machine-readable contract for implemented Core routes and planned additions. Planned operations carry x-junctura-status: planned. An x-junctura-planned-operation contains the full future Operation Object at the same path and method as its implemented parent. Mock consumers can replace each parent with its planned operation to build a planned view. The following authority rules apply to implemented routes. Capability Registry, Resolver, Composition, delegation and provider dispatch remain separate design drafts. Reader/writer roles are not OAuth scopes. Tenant/app IDs in caller headers or JSON never supply authority. V2 is backend-only: bind an active registered app to verified tenant/issuer/client_id and operator-enrolled service-account subject. Layer 2 and Layer 3 application backends enforce human/domain decisions; no on-behalf-of delegation exists. Owner writes and exact expiring read shares are enforced at SQL/storage boundaries. App/owner suspension blocks subsequent v2 access, not already-authorized in-flight work. Workflow and explicitly allowlisted v1 resources remain tenant-scoped. See RESOURCE_AUTHORIZATION.md for migration, logical deletion and retained bytes."
+    "description": "Machine-readable contract for implemented Core routes and planned additions. Planned operations carry x-junctura-status: planned. An x-junctura-planned-operation contains the full future Operation Object at the same path and method as its implemented parent. Mock consumers can replace each parent with its planned operation to build a planned view. The following authority rules apply to implemented routes. Capability Registry, Resolver, Composition, delegation and provider dispatch remain separate design drafts. Reader/writer roles are not OAuth scopes. Tenant/app IDs in caller headers or JSON never supply authority. V2 binds active registered apps to verified tenant, issuer and client. Core checks the enrolled service account or the current user assignment. Records and objects of a deployed app are isolated by the verified unit. Application backends enforce their own domain decisions. Owner writes and exact expiring read shares are enforced at SQL/storage boundaries. App/owner suspension blocks subsequent v2 access, not already-authorized in-flight work. Workflow and explicitly allowlisted v1 resources remain tenant-scoped. See RESOURCE_AUTHORIZATION.md for migration, logical deletion and retained bytes."
   },
   "jsonSchemaDialect": "https://json-schema.org/draft/2020-12/schema",
   "servers": [
@@ -5205,7 +5205,7 @@
       "post": {
         "operationId": "createApplication",
         "summary": "Create application",
-        "description": "Live operator-enrolled human principal, exact issuer/subject/management-client/tenant binding. Baseline core-reader suffices; core-writer is not administrative authority. Core errors include requestId; Gateway auth errors may be HTML or JSON without requestId. Exact owner/client/origin enrollment required; duplicate client binding conflicts even after revocation. No POST retry guarantee.",
+        "description": "Live operator-enrolled human principal, exact issuer/subject/management-client/tenant binding. Baseline core-reader suffices; core-writer is not administrative authority. Core errors include requestId; Application access refusals include a reason and request ID. Exact owner/client/origin enrollment required; duplicate client binding conflicts even after revocation. No POST retry guarantee.",
         "tags": [
           "application-admin"
         ],
@@ -5297,6 +5297,145 @@
           "applications.register"
         ],
         "x-junctura-test-suite": "applications"
+      },
+      "get": {
+        "operationId": "listApplications",
+        "summary": "List applications",
+        "description": "List visible applications in ascending ID order. Pass nextCursor as cursor with the same filters.",
+        "tags": [
+          "application-admin"
+        ],
+        "security": [
+          {
+            "coreBearer": []
+          }
+        ],
+        "x-junctura-query-policy": "declared",
+        "x-junctura-core-roles": [
+          "core-reader"
+        ],
+        "x-junctura-source": "src/modules/applications/management.mjs",
+        "x-junctura-test-suite": "app-access",
+        "responses": {
+          "200": {
+            "description": "List applications",
+            "headers": {
+              "Cache-Control": {
+                "$ref": "#/components/headers/CacheControl"
+              },
+              "X-Content-Type-Options": {
+                "$ref": "#/components/headers/NoSniff"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AppList"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "405": {
+            "$ref": "#/components/responses/MethodNotAllowed"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "412": {
+            "$ref": "#/components/responses/PreconditionFailed"
+          },
+          "413": {
+            "$ref": "#/components/responses/TooLarge"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMedia"
+          },
+          "428": {
+            "$ref": "#/components/responses/PreconditionRequired"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          },
+          "502": {
+            "$ref": "#/components/responses/BadGateway"
+          },
+          "504": {
+            "$ref": "#/components/responses/GatewayTimeout"
+          }
+        },
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "description": "Case-insensitive display name substring.",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 120
+            }
+          },
+          {
+            "name": "state",
+            "in": "query",
+            "description": "Application state.",
+            "required": false,
+            "schema": {
+              "enum": [
+                "pending",
+                "active",
+                "suspended",
+                "revoked"
+              ]
+            }
+          },
+          {
+            "name": "unit",
+            "in": "query",
+            "description": "Deployment unit.",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9-]{1,63}$"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Page size.",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 50
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "description": "Cursor returned on the previous page.",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/Uuid"
+            }
+          }
+        ]
       }
     },
     "/v1/applications/stats": {
@@ -5439,7 +5578,7 @@
       "get": {
         "operationId": "getApplication",
         "summary": "Get application",
-        "description": "Live operator-enrolled human principal, exact issuer/subject/management-client/tenant binding. Baseline core-reader suffices; core-writer is not administrative authority. Core errors include requestId; Gateway auth errors may be HTML or JSON without requestId. Owner or independent administrator; foreign/unauthorized IDs hidden.",
+        "description": "Live operator-enrolled human principal, exact issuer/subject/management-client/tenant binding. Baseline core-reader suffices; core-writer is not administrative authority. Core errors include requestId; Application access refusals include a reason and request ID. Owner or independent administrator; foreign/unauthorized IDs hidden.",
         "tags": [
           "application-admin"
         ],
@@ -5511,6 +5650,128 @@
         ],
         "x-junctura-required-permissions": [],
         "x-junctura-test-suite": "applications"
+      },
+      "patch": {
+        "operationId": "updateApplication",
+        "summary": "Update application metadata",
+        "description": "Apply supplied fields against the current ETag. Use confirmed directory units. The owning unit is required before partitioning an app. Revoke active assignments for a unit before removing it.",
+        "tags": [
+          "application-admin"
+        ],
+        "security": [
+          {
+            "coreBearer": []
+          }
+        ],
+        "x-junctura-query-policy": "closed",
+        "x-junctura-core-roles": [
+          "core-reader"
+        ],
+        "x-junctura-source": "src/modules/applications/management.mjs",
+        "x-junctura-test-suite": "app-access",
+        "responses": {
+          "200": {
+            "description": "Update application metadata",
+            "headers": {
+              "Cache-Control": {
+                "$ref": "#/components/headers/CacheControl"
+              },
+              "X-Content-Type-Options": {
+                "$ref": "#/components/headers/NoSniff"
+              },
+              "ETag": {
+                "$ref": "#/components/headers/ETag"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Application"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "405": {
+            "$ref": "#/components/responses/MethodNotAllowed"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "412": {
+            "$ref": "#/components/responses/PreconditionFailed"
+          },
+          "413": {
+            "$ref": "#/components/responses/TooLarge"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMedia"
+          },
+          "428": {
+            "$ref": "#/components/responses/PreconditionRequired"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          },
+          "502": {
+            "$ref": "#/components/responses/BadGateway"
+          },
+          "504": {
+            "$ref": "#/components/responses/GatewayTimeout"
+          }
+        },
+        "parameters": [
+          {
+            "name": "appId",
+            "in": "path",
+            "description": "Application ID.",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/Uuid"
+            }
+          },
+          {
+            "name": "If-Match",
+            "in": "header",
+            "description": "Current strong application ETag.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AppMetadataPatch"
+              },
+              "example": {
+                "displayName": "App X",
+                "ownerUnit": "unit-a",
+                "deploymentUnits": [
+                  "unit-a",
+                  "unit-b"
+                ]
+              }
+            }
+          }
+        }
       }
     },
     "/v1/applications/{appId}/approve": {
@@ -7333,6 +7594,513 @@
         ],
         "x-junctura-test-suite": "core"
       }
+    },
+    "/v1/applications/{appId}/assignments": {
+      "get": {
+        "operationId": "listApplicationAssignments",
+        "summary": "Read application assignments",
+        "description": "List effective and pending assignments for this app.",
+        "tags": [
+          "application-admin"
+        ],
+        "security": [
+          {
+            "coreBearer": []
+          }
+        ],
+        "x-junctura-query-policy": "closed",
+        "x-junctura-core-roles": [
+          "core-reader"
+        ],
+        "x-junctura-source": "src/modules/applications/management.mjs",
+        "x-junctura-test-suite": "app-access",
+        "responses": {
+          "200": {
+            "description": "Read application assignments",
+            "headers": {
+              "Cache-Control": {
+                "$ref": "#/components/headers/CacheControl"
+              },
+              "X-Content-Type-Options": {
+                "$ref": "#/components/headers/NoSniff"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AppAssignments"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "405": {
+            "$ref": "#/components/responses/MethodNotAllowed"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "412": {
+            "$ref": "#/components/responses/PreconditionFailed"
+          },
+          "413": {
+            "$ref": "#/components/responses/TooLarge"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMedia"
+          },
+          "428": {
+            "$ref": "#/components/responses/PreconditionRequired"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          },
+          "502": {
+            "$ref": "#/components/responses/BadGateway"
+          },
+          "504": {
+            "$ref": "#/components/responses/GatewayTimeout"
+          }
+        },
+        "parameters": [
+          {
+            "name": "appId",
+            "in": "path",
+            "description": "Application ID.",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/Uuid"
+            }
+          }
+        ]
+      },
+      "post": {
+        "operationId": "assignApplicationAccess",
+        "summary": "Grant application access",
+        "description": "Assign an application role to a directory unit, group or member in a deployment unit. The same grant is safe to retry. Success confirms the Keycloak mapping.",
+        "tags": [
+          "application-admin"
+        ],
+        "security": [
+          {
+            "coreBearer": []
+          }
+        ],
+        "x-junctura-query-policy": "closed",
+        "x-junctura-core-roles": [
+          "core-reader"
+        ],
+        "x-junctura-source": "src/modules/applications/management.mjs",
+        "x-junctura-test-suite": "app-access",
+        "responses": {
+          "200": {
+            "description": "Grant application access",
+            "headers": {
+              "Cache-Control": {
+                "$ref": "#/components/headers/CacheControl"
+              },
+              "X-Content-Type-Options": {
+                "$ref": "#/components/headers/NoSniff"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AppAssignment"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "405": {
+            "$ref": "#/components/responses/MethodNotAllowed"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "412": {
+            "$ref": "#/components/responses/PreconditionFailed"
+          },
+          "413": {
+            "$ref": "#/components/responses/TooLarge"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMedia"
+          },
+          "428": {
+            "$ref": "#/components/responses/PreconditionRequired"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          },
+          "502": {
+            "$ref": "#/components/responses/BadGateway"
+          },
+          "504": {
+            "$ref": "#/components/responses/GatewayTimeout"
+          }
+        },
+        "parameters": [
+          {
+            "name": "appId",
+            "in": "path",
+            "description": "Application ID.",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/Uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AppAssignmentInput"
+              },
+              "example": {
+                "unit": "unit-a",
+                "targetType": "group",
+                "target": "reviewers",
+                "role": "viewer"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/applications/{appId}/assignments/{assignmentId}": {
+      "delete": {
+        "operationId": "revokeApplicationAccess",
+        "summary": "Revoke application access",
+        "description": "Remove access in Core and remove the matching role in Keycloak. Retrying the same ID reconciles a pending removal.",
+        "tags": [
+          "application-admin"
+        ],
+        "security": [
+          {
+            "coreBearer": []
+          }
+        ],
+        "x-junctura-query-policy": "closed",
+        "x-junctura-core-roles": [
+          "core-reader"
+        ],
+        "x-junctura-source": "src/modules/applications/management.mjs",
+        "x-junctura-test-suite": "app-access",
+        "responses": {
+          "204": {
+            "description": "Revoke application access",
+            "headers": {
+              "Cache-Control": {
+                "$ref": "#/components/headers/CacheControl"
+              },
+              "X-Content-Type-Options": {
+                "$ref": "#/components/headers/NoSniff"
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "405": {
+            "$ref": "#/components/responses/MethodNotAllowed"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "412": {
+            "$ref": "#/components/responses/PreconditionFailed"
+          },
+          "413": {
+            "$ref": "#/components/responses/TooLarge"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMedia"
+          },
+          "428": {
+            "$ref": "#/components/responses/PreconditionRequired"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          },
+          "502": {
+            "$ref": "#/components/responses/BadGateway"
+          },
+          "504": {
+            "$ref": "#/components/responses/GatewayTimeout"
+          }
+        },
+        "parameters": [
+          {
+            "name": "appId",
+            "in": "path",
+            "description": "Application ID.",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/Uuid"
+            }
+          },
+          {
+            "name": "assignmentId",
+            "in": "path",
+            "description": "Assignment ID.",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/Uuid"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/applications/{appId}/oidc-keys": {
+      "get": {
+        "operationId": "listApplicationOidcKeys",
+        "summary": "Read OIDC key rotation history",
+        "description": "List the latest 100 rotation receipts for this app, newest first. Pending receipts have a null appliedAt.",
+        "tags": [
+          "application-admin"
+        ],
+        "security": [
+          {
+            "coreBearer": []
+          }
+        ],
+        "x-junctura-query-policy": "closed",
+        "x-junctura-core-roles": [
+          "core-reader"
+        ],
+        "x-junctura-source": "src/modules/applications/management.mjs",
+        "x-junctura-test-suite": "app-access",
+        "responses": {
+          "200": {
+            "description": "Read OIDC key rotation history",
+            "headers": {
+              "Cache-Control": {
+                "$ref": "#/components/headers/CacheControl"
+              },
+              "X-Content-Type-Options": {
+                "$ref": "#/components/headers/NoSniff"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AppKeyRotations"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "405": {
+            "$ref": "#/components/responses/MethodNotAllowed"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "412": {
+            "$ref": "#/components/responses/PreconditionFailed"
+          },
+          "413": {
+            "$ref": "#/components/responses/TooLarge"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMedia"
+          },
+          "428": {
+            "$ref": "#/components/responses/PreconditionRequired"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          },
+          "502": {
+            "$ref": "#/components/responses/BadGateway"
+          },
+          "504": {
+            "$ref": "#/components/responses/GatewayTimeout"
+          }
+        },
+        "parameters": [
+          {
+            "name": "appId",
+            "in": "path",
+            "description": "Application ID.",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/Uuid"
+            }
+          }
+        ]
+      },
+      "post": {
+        "operationId": "rotateApplicationOidcKey",
+        "summary": "Rotate the OIDC client secret",
+        "description": "Stage a new confidential client secret in OpenBao, apply it in Keycloak, and return rotation metadata. Retry an incomplete rotation with the same Idempotency-Key.",
+        "tags": [
+          "application-admin"
+        ],
+        "security": [
+          {
+            "coreBearer": []
+          }
+        ],
+        "x-junctura-query-policy": "closed",
+        "x-junctura-core-roles": [
+          "core-reader"
+        ],
+        "x-junctura-source": "src/modules/applications/management.mjs",
+        "x-junctura-test-suite": "app-access",
+        "responses": {
+          "200": {
+            "description": "Rotate the OIDC client secret",
+            "headers": {
+              "Cache-Control": {
+                "$ref": "#/components/headers/CacheControl"
+              },
+              "X-Content-Type-Options": {
+                "$ref": "#/components/headers/NoSniff"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AppKeyRotations"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "405": {
+            "$ref": "#/components/responses/MethodNotAllowed"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "412": {
+            "$ref": "#/components/responses/PreconditionFailed"
+          },
+          "413": {
+            "$ref": "#/components/responses/TooLarge"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMedia"
+          },
+          "428": {
+            "$ref": "#/components/responses/PreconditionRequired"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          },
+          "502": {
+            "$ref": "#/components/responses/BadGateway"
+          },
+          "504": {
+            "$ref": "#/components/responses/GatewayTimeout"
+          }
+        },
+        "parameters": [
+          {
+            "name": "appId",
+            "in": "path",
+            "description": "Application ID.",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/Uuid"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "description": "Client-generated UUID for the rotation.",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/Uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {},
+                "required": [],
+                "additionalProperties": false
+              },
+              "example": {}
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -8224,16 +8992,23 @@
         }
       },
       "Forbidden": {
-        "description": "Insufficient role/permission, missing legacy allowance, or missing/inactive backend binding.",
+        "description": "Insufficient role/permission, missing legacy allowance, or missing/inactive backend binding. Application access decisions use the documented denial codes and a request ID.",
         "content": {
           "application/json": {
             "schema": {
-              "oneOf": [
+              "anyOf": [
                 {
-                  "$ref": "#/components/schemas/Error"
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/Error"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ApplicationError"
+                    }
+                  ]
                 },
                 {
-                  "$ref": "#/components/schemas/ApplicationError"
+                  "$ref": "#/components/schemas/AppAccessDenial"
                 }
               ]
             }
@@ -10206,6 +10981,25 @@
               "$ref": "#/components/schemas/DirectoryGroupPath"
             },
             "uniqueItems": true
+          },
+          "consoleRole": {
+            "enum": [
+              "admin",
+              "manager",
+              "viewer"
+            ]
+          },
+          "appRoles": {
+            "type": "array",
+            "items": {
+              "enum": [
+                "viewer",
+                "editor",
+                "manager"
+              ]
+            },
+            "uniqueItems": true,
+            "minItems": 1
           }
         },
         "required": [
@@ -10685,7 +11479,10 @@
         "properties": {
           "error": {
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "not": {
+              "$ref": "#/components/schemas/AppAccessDenialCode"
+            }
           }
         },
         "required": [
@@ -10765,6 +11562,25 @@
             "minLength": 1,
             "maxLength": 255,
             "description": "Optional display name from the caller's own token; never looked up through the identity provider's admin API."
+          },
+          "consoleRole": {
+            "enum": [
+              "admin",
+              "manager",
+              "viewer"
+            ]
+          },
+          "appRoles": {
+            "type": "array",
+            "items": {
+              "enum": [
+                "viewer",
+                "editor",
+                "manager"
+              ]
+            },
+            "uniqueItems": true,
+            "minItems": 1
           }
         },
         "required": [
@@ -10924,6 +11740,26 @@
           "digest": {
             "type": "string",
             "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "ownerUnit": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9-]{1,63}$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "deploymentUnits": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9-]{1,63}$"
+            },
+            "uniqueItems": true,
+            "maxItems": 100
           }
         },
         "required": [
@@ -10935,7 +11771,9 @@
           "state",
           "ownerSubject",
           "revision",
-          "digest"
+          "digest",
+          "ownerUnit",
+          "deploymentUnits"
         ],
         "additionalProperties": false
       },
@@ -11853,6 +12691,224 @@
           "taskId",
           "claimedBy",
           "claimedUntil"
+        ],
+        "additionalProperties": false
+      },
+      "AppAccessDenialCode": {
+        "type": "string",
+        "enum": [
+          "not_assigned_to_app",
+          "capability_not_granted",
+          "consent_required",
+          "consent_revoked",
+          "consent_expired",
+          "unit_mismatch"
+        ]
+      },
+      "AppAccessDenial": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "$ref": "#/components/schemas/AppAccessDenialCode"
+          },
+          "requestId": {
+            "$ref": "#/components/schemas/Uuid"
+          }
+        },
+        "required": [
+          "error",
+          "requestId"
+        ],
+        "additionalProperties": false
+      },
+      "AppMetadataPatch": {
+        "type": "object",
+        "properties": {
+          "displayName": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120
+          },
+          "ownerUnit": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9-]{1,63}$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "deploymentUnits": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9-]{1,63}$"
+            },
+            "uniqueItems": true,
+            "maxItems": 100
+          }
+        },
+        "required": [],
+        "additionalProperties": false,
+        "minProperties": 1
+      },
+      "AppList": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Application"
+            }
+          },
+          "nextCursor": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Uuid"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "items",
+          "nextCursor"
+        ],
+        "additionalProperties": false
+      },
+      "AppAssignmentInput": {
+        "type": "object",
+        "properties": {
+          "unit": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9-]{1,63}$"
+          },
+          "targetType": {
+            "enum": [
+              "unit",
+              "group",
+              "subject"
+            ]
+          },
+          "target": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9:_-]{1,128}$"
+          },
+          "role": {
+            "enum": [
+              "viewer",
+              "editor",
+              "manager"
+            ]
+          }
+        },
+        "required": [
+          "unit",
+          "targetType",
+          "target",
+          "role"
+        ],
+        "additionalProperties": false
+      },
+      "AppAssignment": {
+        "type": "object",
+        "properties": {
+          "unit": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9-]{1,63}$"
+          },
+          "targetType": {
+            "enum": [
+              "unit",
+              "group",
+              "subject"
+            ]
+          },
+          "target": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9:_-]{1,128}$"
+          },
+          "role": {
+            "enum": [
+              "viewer",
+              "editor",
+              "manager"
+            ]
+          },
+          "assignmentId": {
+            "$ref": "#/components/schemas/Uuid"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "synchronized": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "unit",
+          "targetType",
+          "target",
+          "role",
+          "assignmentId",
+          "enabled",
+          "synchronized"
+        ],
+        "additionalProperties": false
+      },
+      "AppAssignments": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AppAssignment"
+            }
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "additionalProperties": false
+      },
+      "AppKeyRotations": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "rotationId": {
+                  "$ref": "#/components/schemas/Uuid"
+                },
+                "createdAt": {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                "appliedAt": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "format": "date-time"
+                }
+              },
+              "required": [
+                "rotationId",
+                "createdAt",
+                "appliedAt"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "items"
         ],
         "additionalProperties": false
       }

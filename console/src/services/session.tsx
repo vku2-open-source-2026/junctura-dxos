@@ -70,13 +70,13 @@ export const SessionProvider: React.FC<SessionProviderProps> = ({
       id: identity.subject,
       name: identity.preferredUsername || identity.subject,
       tenantId: identity.tenantId,
-      roles: identity.roles,
+      roles: identity.consoleRole ? [...identity.roles, `console-${identity.consoleRole}`] : identity.roles,
       roleName: identity.roles.join(", "),
     };
   }, [identity]);
 
   const permissions = useMemo<PermId[]>(
-    () => permissionsFromRoles(identity?.roles ?? []),
+    () => permissionsFromRoles(identity?.consoleRole === "viewer" ? ["core-reader"] : identity?.roles ?? []),
     [identity]
   );
 

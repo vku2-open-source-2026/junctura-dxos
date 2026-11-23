@@ -1,9 +1,8 @@
 // SPDX-FileCopyrightText: 2026 Junctura Contributors
 // SPDX-License-Identifier: Apache-2.0
-import React, { useMemo, useState } from "react";
+import React from "react";
 import { ArrowRight, Info } from "lucide-react";
-import type { ApplicationState } from "../../../types";
-import type { TrustGraphNode } from "../../../types";
+import type { Application, ApplicationState } from "../../../types";
 import { useI18n } from "../../../locales/i18n";
 import { PageHeader } from "../../layout/PageHeader";
 import { Card, CardContent, CardHeader } from "../../common/Card";
@@ -15,7 +14,13 @@ import { SearchFilterBar } from "../../common/SearchFilterBar";
 import { AppStateBadge } from "./AppStateBadge";
 
 interface AppListProps {
-  applications: TrustGraphNode[];
+  applications: (Application & { owned: boolean })[];
+  query: string;
+  stateFilter: ApplicationState | "all";
+  onSearchChange: (query: string) => void;
+  onStateChange: (state: ApplicationState | "all") => void;
+  onNext?: () => void;
+  onFirst?: () => void;
   isLoading: boolean;
   error: string | null;
   onOpen: (appId: string) => void;
@@ -29,24 +34,10 @@ export const AppList: React.FC<AppListProps> = ({
   isLoading,
   error,
   onOpen,
-  onRetry,
+  onRetry, query, stateFilter, onStateChange, onSearchChange, onNext, onFirst,
 }) => {
   const { t } = useI18n();
   const a = t.applications;
-  const [query, setQuery] = useState("");
-  const [stateFilter, setStateFilter] = useState<ApplicationState | "all">(
-    "all"
-  );
-
-  const filtered = useMemo(() => {
-    const needle = query.trim().toLowerCase();
-    return applications.filter((app) => {
-      if (stateFilter !== "all" && app.state !== stateFilter) return false;
-      if (!needle) return true;
-      return app.displayName.toLowerCase().includes(needle);
-    });
-  }, [applications, query, stateFilter]);
-
   const renderBody = () => {
     if (isLoading) {
       return (
@@ -64,19 +55,11 @@ export const AppList: React.FC<AppListProps> = ({
       );
     }
     if (applications.length === 0) {
+      const filtered = query.trim() || stateFilter !== "all";
       return (
         <CardContent>
-          <EmptyState
-            title={a.listEmptyTitle}
-            description={a.listEmptyDesc}
-          />
-        </CardContent>
-      );
-    }
-    if (filtered.length === 0) {
-      return (
-        <CardContent>
-          <EmptyState title={a.noMatchTitle} description={a.noMatchDesc} />
+          <EmptyState title={filtered ? a.noMatchTitle : a.listEmptyTitle}
+            description={filtered ? a.noMatchDesc : a.listEmptyDesc} />
         </CardContent>
       );
     }
@@ -91,7 +74,7 @@ export const AppList: React.FC<AppListProps> = ({
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100 dark:divide-[#243843]/70">
-            {filtered.map((app) => (
+            {applications.map((app) => (
               <tr
                 key={app.appId}
                 className="transition-colors hover:bg-slate-50/80 dark:hover:bg-[#1B303B]/30"
@@ -145,13 +128,13 @@ export const AppList: React.FC<AppListProps> = ({
           <div className="w-full">
             <SearchFilterBar
               searchQuery={query}
-              onSearchChange={setQuery}
+              onSearchChange={onSearchChange}
               placeholder={a.listSearchPlaceholder}
               filterComponent={
                 <select
                   value={stateFilter}
                   onChange={(event) =>
-                    setStateFilter(
+                    onStateChange(
                       event.target.value as ApplicationState | "all"
                     )
                   }
@@ -176,6 +159,12 @@ export const AppList: React.FC<AppListProps> = ({
           </div>
         </CardHeader>
         {renderBody()}
+        {!isLoading && (onFirst || onNext) && (
+          <CardContent className="flex gap-2">
+            {onFirst && <Button size="sm" variant="outline" onClick={onFirst}>{t.appAccess.firstPage}</Button>}
+            {onNext && <Button size="sm" variant="outline" onClick={onNext}>{t.appAccess.nextPage}</Button>}
+          </CardContent>
+        )}
       </Card>
     </div>
   );

@@ -1,6 +1,6 @@
 // SPDX-FileCopyrightText: 2026 Junctura Contributors
 // SPDX-License-Identifier: Apache-2.0
-import { randomUUID } from "node:crypto";
+import { createApplicationProvider } from "./modules/applications/keycloak.mjs";
 import { handleApplications } from "./modules/applications/applications.mjs";
 import { APPLICATION_STATS_PATH, handleApplicationStats } from "./modules/applications/stats.mjs";
 import { AUDIT_EVENTS_PATH, AUDIT_EXPORT_PATH, AUDIT_VERIFY_PATH, handleAudit, handleAuditEvents } from "./modules/audit/audit.mjs";
@@ -8,11 +8,11 @@ import { DIRECTORY_MANAGEMENT_PATH, DIRECTORY_ORGANIZATIONS_PATH, DIRECTORY_PRIN
 import { createEventStreams, EVENTS_PATH } from "./modules/events/events.mjs";
 import { handleIdentity, verifiedSubjectBinding } from "./modules/identity/identity.mjs";
 import { handleConsent, isConsentPath } from "./modules/consent/consent.mjs";
-import { createAuthorizer } from "./platform/auth/auth.mjs";
+import { createAuthorizer, logAccessDenial } from "./platform/auth/auth.mjs";
 import { handleApprovals, handleCapabilities } from "./modules/capability/registry/capabilities.mjs";
 import { handleCompositions } from "./modules/capability/composition/registry.mjs";
 import { readExecutionJson } from "./modules/capability/execution/runtime.mjs";
-import { HttpError, json } from "./platform/http/http.mjs";
+import { accessDenialCodes, HttpError, json, requestIdFor } from "./platform/http/http.mjs";
 import { handleAppRecords, handleData, handleRecordArchive, handleRecordQuery, presentRecordRequest } from "./modules/data/data.mjs";
 import { handleObjects } from "./modules/objects/objects.mjs";
 import { checkReadiness } from "./bootstrap/readiness.mjs";
@@ -28,14 +28,15 @@ import { handleMetrics, isMetricsPath, recordRequest } from "./modules/metrics/m
 const tenantOf = new WeakMap();
 
 export function createApi(config) {
-  const authorizer = createAuthorizer(config);
+  const applicationProvider = createApplicationProvider(config);
+  const authorizer = createAuthorizer({ ...config, currentConsoleRoles: applicationProvider?.consoleRoles });
   const events = config.eventsRuntime ?? createEventStreams(config);
   const authorize = async (request, withContext = false) => {
     const identity = await authorizer(request, withContext);
     tenantOf.set(request, identity.tenantId);
     return identity;
   };
-  return async (request, response) => {
+  const route = async (request, response) => {
     const startedAt = performance.now();
     if (typeof response.once === "function") response.once("finish", () => {
       try {
@@ -57,10 +58,11 @@ export function createApi(config) {
     }
     if ((config.executionRuntime || config.compositionRuntime) &&
       (path === "/v1/capability-executions" || path?.startsWith("/v1/capability-executions/") || path === "/v1/capability-authorizations/introspect")) {
-      const requestId = randomUUID();
+      const requestId = requestIdFor(request);
       response.setHeader("X-Request-Id", requestId);
+      let identity;
       try {
-        const identity = await authorize(request, true);
+        identity = await authorize(request, true);
         const url = new URL(request.url, "http://core");
         if (path === "/v1/capability-executions" && request.method === "POST") {
           const body = await readExecutionJson(request);
@@ -90,13 +92,22 @@ export function createApi(config) {
         if (!config.executionRuntime) throw new HttpError(404, "not_found");
         return await config.executionRuntime.handle(request, response, identity, url);
       } catch (error) {
+        const code = error instanceof HttpError && error.status === 403 &&
+          ["invoke_not_authorized", "consumer_binding_required", "write_forbidden"].includes(error.message)
+          ? "capability_not_granted" : error.message;
+        // Authorization failures before identity resolution were audited by app_access_check.
+        if (error instanceof HttpError && accessDenialCodes.has(code)) {
+          try { await logAccessDenial(config, identity, requestId, code); }
+          catch { return json(response, 503, { error: "app_access_unavailable", requestId }); }
+          return json(response, 403, { error: code, requestId });
+        }
         if (error.status === 413) response.setHeader("Connection", "close");
         return json(response, error instanceof HttpError ? error.status : 503,
           { error: error instanceof HttpError ? error.message : "executions_unavailable", requestId,
             ...(error instanceof HttpError && error.details ? error.details : {}) });
       }
     }    if (config.compositionRuntime && (path === "/v1/compositions" || path?.startsWith("/v1/compositions/"))) {
-      const requestId = randomUUID();
+      const requestId = requestIdFor(request);
       response.setHeader("X-Request-Id", requestId);
       try {
         const identity = await authorize(request, true);
@@ -110,7 +121,7 @@ export function createApi(config) {
     }
 
     if (path === APPLICATION_STATS_PATH) {
-      const requestId = randomUUID();
+      const requestId = requestIdFor(request);
       response.setHeader("X-Request-Id", requestId);
       try {
         const identity = await authorize(request, true);
@@ -121,7 +132,7 @@ export function createApi(config) {
       }
     }
     if (path === "/v1/applications" || path?.startsWith("/v1/applications/")) {
-      const requestId = randomUUID();
+      const requestId = requestIdFor(request);
       response.setHeader("X-Request-Id", requestId);
       try {
         const identity = await authorize(request, true);
@@ -133,7 +144,7 @@ export function createApi(config) {
       }
     }
     if (path === "/v1/approvals" || path?.startsWith("/v1/approvals/")) {
-      const requestId = randomUUID();
+      const requestId = requestIdFor(request);
       response.setHeader("X-Request-Id", requestId);
       try {
         const identity = await authorize(request, true);
@@ -145,7 +156,7 @@ export function createApi(config) {
       }
     }
     if (path === "/v1/capabilities" || path?.startsWith("/v1/capabilities/")) {
-      const requestId = randomUUID();
+      const requestId = requestIdFor(request);
       response.setHeader("X-Request-Id", requestId);
       try {
         const identity = await authorize(request, true);
@@ -157,7 +168,7 @@ export function createApi(config) {
       }
     }
     if (isConsentPath(path)) {
-      const requestId = randomUUID();
+      const requestId = requestIdFor(request);
       response.setHeader("X-Request-Id", requestId);
       try {
         const identity = await authorize(request, true);
@@ -169,7 +180,7 @@ export function createApi(config) {
       }
     }
     if (path === SUBJECT_ACCESS_EVENTS_PATH || /^\/v1\/me\/(?:data-access\/[^/]+\/flag|emergency-accesses\/[^/]+\/feedback)$/.test(path)) {
-      const requestId = randomUUID();
+      const requestId = requestIdFor(request);
       response.setHeader("X-Request-Id", requestId);
       try {
         const identity = await authorize(request, true);
@@ -185,7 +196,7 @@ export function createApi(config) {
       }
     }
     if (path === AUDIT_EVENTS_PATH || path === AUDIT_EXPORT_PATH) {
-      const requestId = randomUUID();
+      const requestId = requestIdFor(request);
       response.setHeader("X-Request-Id", requestId);
       try {
         return await handleAuditEvents(request, response, await authorize(request, true), config, new URL(request.url, "http://core"));
@@ -196,7 +207,7 @@ export function createApi(config) {
       }
     }
     if (path === EVENTS_PATH) {
-      const requestId = randomUUID();
+      const requestId = requestIdFor(request);
       response.setHeader("X-Request-Id", requestId);
       try {
         return await events.handle(request, response, await authorize(request, true), () => authorize(request, true),
@@ -207,7 +218,7 @@ export function createApi(config) {
       }
     }
     if (path === AUDIT_VERIFY_PATH) {
-      const requestId = randomUUID();
+      const requestId = requestIdFor(request);
       response.setHeader("X-Request-Id", requestId);
       try {
         return await handleAudit(request, response, await authorize(request, true), config, new URL(request.url, "http://core"));
@@ -218,8 +229,8 @@ export function createApi(config) {
       }
     }
     if (path === DIRECTORY_PRINCIPALS_PATH || path === DIRECTORY_ORGANIZATIONS_PATH ||
-        path.startsWith(DIRECTORY_MANAGEMENT_PATH)) {
-      const requestId = randomUUID();
+        path?.startsWith(DIRECTORY_MANAGEMENT_PATH)) {
+      const requestId = requestIdFor(request);
       response.setHeader("X-Request-Id", requestId);
       try {
         return await handleDirectory(request, response, await authorize(request, true), config, new URL(request.url, "http://core"));
@@ -229,7 +240,7 @@ export function createApi(config) {
       }
     }
     if (isMetricsPath(path)) {
-      const requestId = randomUUID();
+      const requestId = requestIdFor(request);
       response.setHeader("X-Request-Id", requestId);
       try {
         return await handleMetrics(request, response, await authorize(request, true), config, new URL(request.url, "http://core"));
@@ -239,7 +250,7 @@ export function createApi(config) {
       }
     }
     if (path === TRUST_GRAPH_PATH) {
-      const requestId = randomUUID();
+      const requestId = requestIdFor(request);
       response.setHeader("X-Request-Id", requestId);
       try {
         return await handleTrustGraph(request, response, await authorize(request, true), config, new URL(request.url, "http://core"));
@@ -249,7 +260,7 @@ export function createApi(config) {
       }
     }
     if (path === "/v1/trust/grants" || path?.startsWith("/v1/trust/grants/")) {
-      const requestId = randomUUID();
+      const requestId = requestIdFor(request);
       response.setHeader("X-Request-Id", requestId);
       try {
         return await handleTrust(request, response, await authorize(request, true), config, new URL(request.url, "http://core"));
@@ -260,7 +271,7 @@ export function createApi(config) {
       }
     }
     if (isStoragePath(path)) {
-      const requestId = randomUUID();
+      const requestId = requestIdFor(request);
       response.setHeader("X-Request-Id", requestId);
       try {
         return await handleStorage(request, response, await authorize(request, true), config, new URL(request.url, "http://core"));
@@ -270,7 +281,7 @@ export function createApi(config) {
       }
     }
     if (path === SEARCH_PATH) {
-      const requestId = randomUUID();
+      const requestId = requestIdFor(request);
       response.setHeader("X-Request-Id", requestId);
       try {
         return await handleSearch(request, response, await authorize(request, true), config, new URL(request.url, "http://core"));
@@ -341,5 +352,14 @@ export function createApi(config) {
       return handleIdentity(request, response, identity, config);
     }
     throw new HttpError(404, "not_found");
+  };
+  return async (request, response) => {
+    try { return await route(request, response); }
+    catch (error) {
+      if (!(error instanceof HttpError) || !accessDenialCodes.has(error.message) || response.headersSent) throw error;
+      const requestId = requestIdFor(request);
+      response.setHeader("X-Request-Id", requestId);
+      return json(response, 403, { error: error.message, requestId }, request.method);
+    }
   };
 }

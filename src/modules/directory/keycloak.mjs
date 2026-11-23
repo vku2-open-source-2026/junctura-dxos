@@ -53,7 +53,10 @@ export function createDirectorySync(config, fetcher = fetch, beforeWrite = async
       });
     } catch { throw new SyncFailure("unavailable"); }
     if (response.status === 404) { await response.body?.cancel(); return undefined; }
-    if (!response.ok) { await response.body?.cancel(); throw new SyncFailure("unavailable"); }
+    if (!response.ok) {
+      await response.body?.cancel();
+      throw Object.assign(new SyncFailure("unavailable"), { method, providerStatus: response.status });
+    }
     if (method !== "GET") { await response.body?.cancel(); return; }
     const value = await response.json().catch(() => { throw new SyncFailure("unavailable"); });
     if (response.status !== 200 || !expect(value)) throw new SyncFailure("unavailable");
@@ -138,6 +141,11 @@ export function createDirectorySync(config, fetcher = fetch, beforeWrite = async
     membership.path?.startsWith(`${unitGroup.path}/`);
 
   return {
+    call,
+    async groupForAssignment(tenant, unit, group) {
+      const unitGroup = await requireChild(await findNamespace(tenant), unit);
+      return group ? requireChild(unitGroup, group) : unitGroup;
+    },
     // The named login subject must already belong to this tenant: provisioning
     // marks that with membership in the exact tenant root group.
     async verifySubject(tenant, subject) {

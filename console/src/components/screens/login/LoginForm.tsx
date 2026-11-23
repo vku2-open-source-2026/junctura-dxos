@@ -73,10 +73,11 @@ export const LoginForm: React.FC<LoginFormProps> = ({
       await signInWithPassword(trimmedUsername, password);
     } catch (error) {
       setLoginError(
-        error instanceof PasswordSignInError &&
-          error.code === "invalid_credentials"
-          ? t.login.invalidCredentials
-          : t.login.loginFailed
+        error instanceof PasswordSignInError && error.code === "not_assigned_to_app"
+          ? t.appAccess.signInDenied
+          : error instanceof PasswordSignInError && error.code === "invalid_credentials"
+            ? t.login.invalidCredentials
+            : t.login.loginFailed
       );
     } finally {
       setBusy(null);

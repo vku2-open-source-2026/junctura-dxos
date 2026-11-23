@@ -31,15 +31,11 @@ Trong một tổ chức, mỗi phòng ban thường vận hành phần mềm ri�
 
 > *Junctura* — tiếng Latin nghĩa là “mối nối”: nơi các ứng dụng độc lập gặp nhau.
 
-### Ví dụ áp dụng
+### Ví dụ
 
-| Bối cảnh | Các ứng dụng độc lập | Junctura giúp gì |
-| --- | --- | --- |
-| **Trường đại học** | Đào tạo, Công tác sinh viên, Tài chính, Văn bản | Ứng dụng xét học bổng đọc bảng điểm, điểm rèn luyện, học phí từ ba phòng ban — mỗi lần đọc đều được cấp quyền và ghi vết — rồi gọi chức năng cấp giấy xác nhận của phòng Văn bản. |
-| **Y tế** | Phòng khám, Xét nghiệm, Nhà thuốc | Bệnh nhân cấp quyền xem hồ sơ cho từng cơ sở, có hạn dùng, thu hồi được và biết ai đã truy cập. |
-| **Đô thị** | Phòng cháy, Chiếu sáng, Thoát nước | Ứng dụng phản ánh hiện trường quét mã độc ảnh người dân gửi, rồi gọi chức năng “tạo phiếu sửa chữa” của đúng đơn vị. |
+Đơn vị A dùng App X và Đơn vị B dùng App Y. App X công bố năng lực `view-record`. App Y gọi năng lực sau khi được cấp quyền, mỗi lượt gọi đều có nhật ký. Hai đơn vị cũng có thể dùng chung App X, với dữ liệu tách theo đơn vị trong token.
 
-Mỗi ứng dụng vẫn do đơn vị của mình phát triển và sở hữu; Junctura chỉ là mối nối dùng chung, không thay thế nghiệp vụ.
+Các gói ngành và ứng dụng ở repo riêng.
 
 ## Tính năng nổi bật
 
@@ -72,8 +68,8 @@ Sơ đồ dưới đây là kiến trúc đích.
 ```mermaid
 flowchart TB
   subgraph L3["Tầng 3 · gói ngành và ứng dụng nghiệp vụ (cắm-rút)"]
-    HEALTH_PACK["junctura-health · gói ngành Y tế<br/>hợp đồng năng lực · BPMN · @junctura/health-ui"]
-    HEALTH_APPS["Clinic · Hospital · Pharmacy<br/>Insurance · MyHealth"]
+    SECTOR_PACK["Các gói ngành"]
+    SECTOR_APPS["Các ứng dụng ở repo riêng"]
   end
 
   subgraph L2["Tầng 2 · không gian năng lực số dùng chung"]
@@ -101,10 +97,10 @@ flowchart TB
     end
   end
 
-  HEALTH_APPS --> WORKSPACE
-  HEALTH_APPS -->|"giới hạn"| GW
+  SECTOR_APPS --> WORKSPACE
+  SECTOR_APPS -->|"giới hạn"| GW
   WORKSPACE --> GW
-  HEALTH_PACK -.->|"đọc khi triển khai"| WORKSPACE
+  SECTOR_PACK -.->|"đọc khi triển khai"| WORKSPACE
   OPS --> GW
   GW --> CAP --> FND
 ```
@@ -113,9 +109,9 @@ Chỉ cổng API mở ra ngoài; mọi dịch vụ khác nằm trong mạng nộ
 
 **Tầng 1 không chứa nghiệp vụ.** Lõi chỉ cung cấp năng lực dùng chung qua API. Quy trình, tên đơn vị, tên bộ dữ liệu và chức năng nghiệp vụ do gói ngành và ứng dụng Tầng 3 cung cấp khi chạy, nên tầng trên đổi nghiệp vụ mà không phải sửa lõi; `npm run check:neutral` chặn từ vựng nghiệp vụ lọt vào lõi.
 
-Tầng 2 là [junctura-workspace](https://github.com/vku2-open-source-2026/junctura-workspace) — không gian năng lực số dùng chung, trung lập ngành: giao diện người dùng cuối, quản lý hồ sơ, công việc, bảng tin, danh bạ, thư viện `@junctura/ui` và đọc gói ngành. `junctura-workspace` đang được xây dựng. API hồ sơ, công việc, bảng tin và danh bạ cho Tầng 3 thuộc thiết kế đích. Tầng 3 gồm [junctura-health](https://github.com/vku2-open-source-2026/junctura-health) — gói ngành Y tế với hợp đồng năng lực, quy trình BPMN, đơn vị, lược đồ dữ liệu, danh mục dùng chung, dữ liệu mẫu và `@junctura/health-ui` — cùng năm ứng dụng Clinic, Hospital, Pharmacy, Insurance, MyHealth. Ứng dụng Tầng 3 dùng Tầng 2 qua API của Workspace, dùng Tầng 1 trong giới hạn cho phép, và trao đổi với nhau chỉ qua vé dùng một lần của Tầng 1. Demo mức 2 và 3 là dự kiến. Chi tiết: [Mô hình ba tầng](docs/TIER_MODEL.md).
+Tầng 2 là [junctura-workspace](https://github.com/vku2-open-source-2026/junctura-workspace) — không gian năng lực số dùng chung, trung lập ngành: giao diện người dùng cuối, quản lý hồ sơ, công việc, bảng tin, danh bạ, thư viện `@junctura/ui` và đọc gói ngành. `junctura-workspace` đang được xây dựng. API hồ sơ, công việc, bảng tin và danh bạ cho Tầng 3 thuộc thiết kế đích. Các gói ngành và ứng dụng ở repo riêng. Ứng dụng Tầng 3 dùng Tầng 2 qua API của Workspace, dùng Tầng 1 trong giới hạn cho phép, và trao đổi với nhau chỉ qua vé dùng một lần của Tầng 1. Demo mức 2 và 3 là dự kiến. Chi tiết: [Mô hình ba tầng](docs/TIER_MODEL.md).
 
-**Console là trang quản trị của lõi**, giống Supabase Studio hay Directus Data Studio: xem trạng thái nền tảng và duyệt **quyền truy cập**: duyệt hoặc thu hồi đăng ký ứng dụng, duyệt hoặc thu hồi quyền chia sẻ chức năng giữa các ứng dụng. Chức năng đã công bố, đồng ý của người dùng và truy cập khẩn cấp chỉ hiển thị để theo dõi (duyệt công bố và hậu kiểm khẩn cấp làm qua API). Console không chạy, hoàn thành, hủy hay duyệt **nghiệp vụ**. Tầng 2 xử lý quy trình quản trị dùng chung. Tầng 3 quyết định nghiệp vụ chuyên ngành. Core cung cấp cơ chế thực thi và phân quyền. Lõi chạy đầy đủ khi tắt Console. Chi tiết: [Kiến trúc](docs/ARCHITECTURE.md).
+**Console là trang quản trị của lõi**, giống Supabase Studio hay Directus Data Studio: xem trạng thái nền tảng và duyệt **quyền truy cập**: duyệt hoặc thu hồi đăng ký ứng dụng, duyệt hoặc thu hồi quyền chia sẻ chức năng giữa các ứng dụng. Chức năng đã công bố, đồng ý của người dùng và truy cập ngoại lệ chỉ hiển thị để theo dõi (duyệt công bố và hậu kiểm truy cập ngoại lệ làm qua API). Console không chạy, hoàn thành, hủy hay duyệt **nghiệp vụ**. Tầng 2 xử lý quy trình quản trị dùng chung. Tầng 3 quyết định nghiệp vụ chuyên ngành. Core cung cấp cơ chế thực thi và phân quyền. Lõi chạy đầy đủ khi tắt Console. Chi tiết: [Kiến trúc](docs/ARCHITECTURE.md).
 
 ### Một lần chia sẻ năng lực diễn ra thế nào
 
@@ -161,7 +157,7 @@ npm run local:demo   # build, khởi động, tạo tài khoản và dữ liệu
 npm run healthcheck  # kiểm tra các dịch vụ đã sẵn sàng
 ```
 
-`local:demo` chạy `setup` khi thiếu `.env`, rồi `local:up`, `env:provision`, `demo:seed` và `demo:console`, và in địa chỉ Console. Login hints chỉ chứa tài khoản `demo` chỉ xem; mật khẩu của `production` nằm trong `.junctura/demo-accounts.json` (0600).
+`local:demo` chạy `setup` khi thiếu `.env`, rồi `local:up`, `directory:provision`, `env:provision`, `demo:seed` và `demo:console`, và in địa chỉ Console. Login hints chỉ chứa tài khoản `demo` chỉ xem; mật khẩu của `production` nằm trong `.junctura/demo-accounts.json` (0600).
 
 Hoặc dùng bản phát hành: tải `junctura-0.2.0.tar.gz` từ [Releases](https://github.com/vku2-open-source-2026/junctura-dxos/releases), kiểm tra bằng `sha256sum -c junctura-0.2.0.tar.gz.sha256`, giải nén (`tar -xzf junctura-0.2.0.tar.gz`), vào thư mục `junctura-0.2.0` rồi chạy ba lệnh trên từ `npm run setup`.
 
@@ -210,7 +206,7 @@ const same = await junctura.getRecord("contacts", record.id);
 | `npm run setup` | Tạo `.env` với mật khẩu ngẫu nhiên (chỉ chạy một lần) |
 | `npm run local:demo` | Chạy demo cục bộ: `setup` (nếu cần), `local:up`, `env:provision`, `demo:seed`, `demo:console` |
 | `npm run local:up` / `local:down` / `local:status` | Khởi động, dừng (giữ dữ liệu), xem trạng thái hệ thống |
-| `npm run healthcheck` · `npm run doctor` | Kiểm tra sẵn sàng · chẩn đoán lỗi cấu hình |
+| `npm run healthcheck` · `npm run doctor` | Kiểm tra sẵn sàng · kiểm tra lỗi cấu hình |
 | `npm run app:enroll -- <tên>` | Đăng ký và phê duyệt một ứng dụng mới |
 | `npm run trust:demo` · `-- token` | Tạo dữ liệu demo cho sơ đồ tin cậy (4 ứng dụng, 3 chức năng, 5 quyền) · in token người duyệt cho Console |
 | `npm run audit:demo` · `-- tamper` · `-- restore` | Demo kiểm tra toàn vẹn nhật ký: kiểm tra, sửa lén một sự kiện, khôi phục |
@@ -235,10 +231,10 @@ Mọi API đi qua cổng `http://127.0.0.1:8080` và yêu cầu `Authorization: 
 | Quy trình | `GET /v1/workflows/definitions` · `POST /v1/workflows/executions` | Khởi chạy, theo dõi, hoàn thành, hủy quy trình BPMN |
 | Ứng dụng | `POST /v1/applications` · `POST /v1/approvals` | Đăng ký ứng dụng và phê duyệt độc lập |
 | Thống kê | `GET /v1/applications/stats` | Số đếm và mốc thời gian theo tenant, chỉ cần `audit.read` |
-| Năng lực | `GET /v1/capabilities` · `POST /v1/capabilities/{id}/versions` | Công bố và khám phá năng lực có phiên bản |
+| Năng lực | `GET /v1/capabilities` · `POST /v1/capabilities/{id}/versions` | Công bố và tra cứu năng lực có phiên bản |
 | Cấp quyền | `POST /v1/trust/grants` · `POST /v1/trust/grants/{id}/revoke` | Cấp, kích hoạt và thu hồi quyền giữa ứng dụng |
 | Đồng ý của tôi | `GET`/`POST /v1/me/consents` · `POST /v1/me/consents/{id}/revoke` | Người dân cho phép ứng dụng nào được gọi chức năng nào về mình, vì mục đích gì, đến khi nào; thu hồi tức thì |
-| Truy cập khẩn cấp | `GET /v1/emergency-accesses` · `POST …/{id}/review` | Danh sách truy cập khẩn cấp không cần đồng ý và hậu kiểm (cần `trust.approve`) |
+| Truy cập ngoại lệ (break-glass) | `GET /v1/emergency-accesses` · `POST …/{id}/review` | Danh sách truy cập ngoại lệ không cần đồng ý và hậu kiểm (cần `trust.approve`) |
 | Ai đã xem dữ liệu của tôi | `GET /v1/me/data-access` | Các lần gọi năng lực có liên quan đến người đang đăng nhập: cơ sở nào, lúc nào, mục đích gì |
 | Sơ đồ tin cậy | `GET /v1/trust/graph` | Ứng dụng và quyền giữa chúng, kèm trạng thái và hạn dùng (cần `trust.write` hoặc `trust.approve`) |
 | Thực thi | `POST /v1/capability-executions` · `POST /v1/compositions` | Gọi một năng lực hoặc chạy quy trình ghép nhiều năng lực |
@@ -285,7 +281,7 @@ src/            Junctura Core: xác thực, dữ liệu, tệp, quy trình, ứn
 sdk/node/       Node SDK cho ứng dụng Tầng 2/3
 console/        Junctura Console (React, Vite, TypeScript)
 infra/          Cấu hình Keycloak, Nginx, PostgreSQL (migration), SeaweedFS, Flowable, OpenBao
-scripts/        Cài đặt, chẩn đoán, đăng ký ứng dụng, sao lưu, đóng gói phát hành
+scripts/        Cài đặt, kiểm tra, đăng ký ứng dụng, sao lưu, đóng gói phát hành
 tests/          Kiểm thử đơn vị và hợp đồng HTTP
 integration/    Kiểm thử tích hợp với dịch vụ thật
 examples/       Ví dụ tích hợp qua HTTP và SDK
@@ -307,8 +303,8 @@ npm run test:integration           # kiểm thử tích hợp
 - [x] Nhật ký kiểm toán niêm phong bằng chuỗi băm SHA-256, kiểm tra toàn vẹn ngay trên Console.
 - [x] Sơ đồ tin cậy (Trust Graph) giữa các ứng dụng trên Console, thu hồi quyền ngay trên sơ đồ.
 - [x] **v0.2.0 — Console quản trị:** Console đọc hoàn toàn từ API thật (nhật ký kiểm toán, lưu lượng, người dùng, tổ chức, dữ liệu, tệp, quy trình), đăng nhập qua Keycloak.
-- [ ] **v0.3.0 — Tầng 2 (junctura-workspace):** không gian năng lực số dùng chung — giao diện hồ sơ, công việc, bảng tin, danh bạ, thư viện `@junctura/ui` và gói mẫu Giáo dục, trung lập ngành.
-- [ ] **Tầng 3 (junctura-health và năm ứng dụng Y tế):** gói ngành Y tế với hợp đồng năng lực, quy trình BPMN, lược đồ dữ liệu, danh mục dùng chung; các ứng dụng Clinic, Hospital, Pharmacy, Insurance, MyHealth dùng Tầng 1 và Tầng 2 theo [mô hình ba tầng](docs/TIER_MODEL.md).
+- [ ] **v0.3.0 — Tầng 2 (junctura-workspace):** không gian năng lực số dùng chung — giao diện hồ sơ, công việc, bảng tin, danh bạ, thư viện `@junctura/ui`, trung lập ngành.
+- [ ] **Tầng 3:** các gói ngành và ứng dụng ở repo riêng theo [mô hình ba tầng](docs/TIER_MODEL.md).
 - [ ] Giám sát hệ thống (Prometheus, Grafana) và triển khai thử nghiệm trên Internet.
 
 ## Đóng góp

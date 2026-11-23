@@ -65,7 +65,7 @@ DX-OS separates shared infrastructure, a shared digital workspace and sector bus
 | --- | --- | --- |
 | Layer 1 | Headless core services: identity, API gateway, structured data, objects, workflow, audit, backup. Target design: stores all application state. | `junctura-dxos` |
 | Layer 2 | Domain-neutral shared digital workspace with an end-user GUI; reads industry packs. | `junctura-workspace` (`@junctura/ui`, Education sample pack) |
-| Layer 3 | Sector packs and pluggable business applications. | `junctura-health` (health pack, `@junctura/health-ui`) and the Clinic, Hospital, Pharmacy, Insurance and MyHealth applications |
+| Layer 3 | Sector packs and pluggable applications. | Sector packs and applications live in separate repositories. |
 
 Layer 3 applications use Layer 2 APIs and a limited part of Layer 1; they exchange with each other only through one-time Layer 1 capability tickets. Applications are migrating their data to Layer 1. When complete, Layer 2 and Layer 3 applications must store business state through the Core API, so removing an application container then keeps its data. Data seeds are loaded into Layer 1 through the API when the environment is built. `junctura-workspace` is under construction; its records, tasks, bulletins and directory APIs for Layer 3 are target design. Demo levels 2 and 3 are planned; see [TIER_MODEL.md](TIER_MODEL.md) for the current status.
 

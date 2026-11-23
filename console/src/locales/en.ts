@@ -161,7 +161,7 @@ const enDocsSections: typeof vi.docs.sections = {
         "items": [
           "Approve or reject application registrations, capability publications and access grants.",
           "Manage users, roles, units and organisations.",
-          "Review emergency access and handle quarantined files.",
+          "Review break-glass access and handle quarantined files.",
           "Monitor the audit log, system settings, secrets and backups."
         ]
       },
@@ -242,7 +242,7 @@ const enDocsSections: typeof vi.docs.sections = {
   },
   "roleAuditor": {
     "title": "Auditor",
-    "intro": "You read the audit log, verify integrity, and review consents and emergency access. You do not change business data.",
+    "intro": "You read the audit log, verify integrity, and review consents and break-glass access. You do not change business data.",
     "blocks": [
       {
         "kind": "list",
@@ -250,7 +250,7 @@ const enDocsSections: typeof vi.docs.sections = {
           "Search events by person, action, target, result and time.",
           "Export CSV for archival or reconciliation.",
           "See who accessed a person's data.",
-          "Track emergency accesses and their review outcomes."
+          "Track break-glass accesses and their review outcomes."
         ]
       },
       {
@@ -373,19 +373,19 @@ const enDocsSections: typeof vi.docs.sections = {
     ]
   },
   "conceptEmergency": {
-    "title": "Emergency access",
+    "title": "Break-glass access",
     "intro": "In an emergency, an application may access data without prior consent if it declares a reason.",
     "blocks": [
       {
         "kind": "paragraph",
-        "text": "Emergency access is sealed, the affected person is notified, and an administrator with the right permission must review it."
+        "text": "Break-glass access is sealed, the affected person is notified, and an administrator with the right permission must review it."
       },
       {
         "kind": "list",
         "items": [
           "The application must give a reason and emergency basis.",
-          "Each application may have at most 5 emergency accesses awaiting review.",
-          "The person who used emergency access cannot review their own case.",
+          "Each application may have at most 5 break-glass accesses awaiting review.",
+          "The person who used break-glass access cannot review their own case.",
           "The review outcome is either justified or a violation, and is recorded."
         ]
       }
@@ -482,8 +482,8 @@ const enDocsSections: typeof vi.docs.sections = {
             "answer": "Open the audit log and choose Verify integrity. The result says whether the chain is intact or shows the first tampered position."
           },
           {
-            "question": "How is emergency access different from consent?",
-            "answer": "Emergency access does not need prior consent, but it must declare a reason, is sealed and must be reviewed. Consent is an active permission from the person and can be withdrawn."
+            "question": "How is break-glass access different from consent?",
+            "answer": "Break-glass access does not need prior consent, but it must declare a reason, is sealed and must be reviewed. Consent is an active permission from the person and can be withdrawn."
           },
           {
             "question": "Where should application secrets live?",
@@ -572,7 +572,7 @@ export const en: typeof vi = {
       "description": "The requester and the approver must be different people so no one approves alone."
     },
     "emergency": {
-      "label": "Emergency access",
+      "label": "Break-glass access",
       "description": "Viewing data when consent cannot be obtained first; another person must still review it."
     },
     "hashChain": {
@@ -691,7 +691,7 @@ export const en: typeof vi = {
       "desc": "Register, approve and suspend applications across units."
     },
     "connect-map": {
-      "label": "Connection map",
+      "label": "Connections between applications",
       "desc": "Who is using whose capabilities, by status and expiry."
     },
     "caps": {
@@ -747,7 +747,7 @@ export const en: typeof vi = {
       "desc": "Who allows which application to use their data."
     },
     "emergency": {
-      "label": "Emergency access",
+      "label": "Break-glass access",
       "desc": "Data views without consent that need review."
     },
     "quarantine": {
@@ -1247,13 +1247,13 @@ export const en: typeof vi = {
     "pendingAttentionDesc": "Requests waiting for someone with decision rights.",
     "pendingAppRequest": "Application approval request",
     "pendingGrantRequest": "Access grant request",
-    "emergencyAttention": "Emergency access not yet reviewed",
+    "emergencyAttention": "Break-glass access not yet reviewed",
     "emergencyAttentionDesc": "Data views without consent that need confirmation.",
     "blockedFiles": "Newly blocked files",
     "blockedFilesDesc": "Files rejected because they contain malware.",
     "blockedFileDetail": "blocked at",
     "openQueue": "Open review queue",
-    "openEmergency": "Open emergency access",
+    "openEmergency": "Open break-glass access",
     "openQuarantine": "Open blocked files",
     "attentionEmpty": "Nothing needs attention right now.",
     "platformTitle": "Platform health",
@@ -1273,7 +1273,7 @@ export const en: typeof vi = {
     "shortcutPending": "Review pending requests",
     "shortcutRegisterApp": "Register an application",
     "shortcutProposeGrant": "Propose an access grant",
-    "shortcutEmergency": "Review emergency access",
+    "shortcutEmergency": "Review break-glass access",
     "shortcutUsers": "Manage users",
     "shortcutAudit": "Read the audit log",
     "shortcutSettings": "Configure the platform",
@@ -2249,9 +2249,9 @@ export const en: typeof vi = {
     "permissionHint": "The audit.read permission is required to view user consents."
   },
   "emergency": {
-    "title": "Emergency access",
-    "subtitle": "Aggregate figures and review states for emergency access that bypasses consent.",
-    "readOnlyNote": "Administrators can only view; emergency access handling is done by the application/unit.",
+    "title": "Break-glass access",
+    "subtitle": "Aggregate figures and review states for break-glass access that bypasses consent.",
+    "readOnlyNote": "Administrators can only view; break-glass access handling is done by the application/unit.",
     "listTitle": "Access list",
     "searchPlaceholder": "Search by application, user or content…",
     "pendingCount": "Awaiting review",
@@ -2268,7 +2268,7 @@ export const en: typeof vi = {
     "stateValid": "Valid",
     "stateViolation": "Violation",
     "review": "Review",
-    "reviewTitle": "Emergency access review",
+    "reviewTitle": "Break-glass access review",
     "reviewDesc": "Read the declared reason and choose a conclusion for the access by {app}.",
     "conclusionLabel": "Conclusion",
     "accept": "Accept — the reason is valid",
@@ -2278,17 +2278,17 @@ export const en: typeof vi = {
     "reviewConfirm": "Save conclusion",
     "reviewedToast": "The review conclusion was saved.",
     "alreadyReviewed": "This access has already been reviewed.",
-    "selfReviewBlocked": "You used emergency access for this entry, so you cannot review it yourself.",
+    "selfReviewBlocked": "You used break-glass access for this entry, so you cannot review it yourself.",
     "selfReviewTitle": "Self-review is not allowed",
     "conclusionRequired": "Choose a conclusion before saving.",
     "reviewError": "Could not save the conclusion",
     "reviewedBy": "Reviewed by",
     "reviewedAt": "Reviewed at",
-    "emptyTitle": "No emergency access",
-    "emptyDesc": "Emergency access entries are data views performed without prior consent that need post-review. There are none yet; when the system records one it will appear here for review.",
+    "emptyTitle": "No break-glass access",
+    "emptyDesc": "Break-glass access entries are data views performed without prior consent that need post-review. There are none yet; when the system records one it will appear here for review.",
     "noMatches": "No entries match the filters.",
-    "permissionHint": "The trust.approve permission is required to review emergency access.",
-    "tableCaption": "Emergency access list"
+    "permissionHint": "The trust.approve permission is required to review break-glass access.",
+    "tableCaption": "Break-glass access list"
   },
   "security": {
     "title": "Security & Observability",
@@ -2462,7 +2462,7 @@ export const en: typeof vi = {
       "applications.write": "Propose and edit applications",
       "applications.approve": "Approve and revoke applications",
       "trust.write": "Publish capabilities and propose grants",
-      "trust.approve": "Approve grants and review emergency access",
+      "trust.approve": "Approve grants and review break-glass access",
       "audit.read": "Read the audit log",
       "core-reader": "Read data and files",
       "core-writer": "Write data and files",
@@ -2572,6 +2572,50 @@ export const en: typeof vi = {
     "nameRequired": "Enter a role name.",
     "createdToast": "Role {name} created.",
     "selectRoleHint": "Select a role name in the header to see who holds it."
+  },
+  "appAccess": {
+    "title": "Who can use this app",
+    "signInDenied": "Your account has not been assigned access to this application.",
+    "unit": "Unit",
+    "target": "Assignee",
+    "targetId": "Assignee ID",
+    "role": "Role",
+    "status": "Status",
+    "targets": {
+      "unit": "Unit",
+      "group": "Group",
+      "subject": "Person"
+    },
+    "roles": {
+      "viewer": "Viewer",
+      "editor": "Editor",
+      "manager": "Manager"
+    },
+    "waiting": "Awaiting synchronization",
+    "synchronized": "Synchronized",
+    "empty": "No access assignments yet.",
+    "loading": "Loading…",
+    "failed": "The request could not be completed. Try again.",
+    "assign": "Grant access",
+    "revoke": "Revoke access",
+    "firstPage": "First page",
+    "nextPage": "Next page",
+    "configuration": "Deployment details",
+    "displayName": "Application name",
+    "ownerUnit": "Owning unit",
+    "deploymentUnits": "Deployment unit IDs (comma-separated)",
+    "save": "Save changes",
+    "keyHistory": "OIDC key rotation history",
+    "noRotations": "No key rotations yet.",
+    "rotate": "Rotate OIDC key",
+    "rotationConfirm": "Rotate the OIDC key and invalidate the previous key?",
+    "orgSubtitle": "View units, members, and the applications deployed to each unit.",
+    "unitTree": "Unit tree",
+    "members": "Members",
+    "unitApps": "Applications in this unit",
+    "noUnits": "No units yet.",
+    "noMembers": "No members yet.",
+    "noUnitApps": "No applications deployed."
   },
   "orgs": {
     "title": "Organisations",
@@ -2883,7 +2927,7 @@ export const en: typeof vi = {
     "never": "—"
   },
   "connect": {
-    "title": "Connection map",
+    "title": "Connections between applications",
     "subtitle": "Providing applications on the left, calling applications on the right. Each line is a shared capability with its status and expiry.",
     "mapTitle": "Who is using whose capabilities",
     "mapHint": "Hover or tab to a line to see details. Click an application to highlight its connections.",
@@ -3063,7 +3107,7 @@ export const en: typeof vi = {
       },
       "auditor": {
         "name": "Auditor",
-        "desc": "Reads logs, consents and emergency access; changes nothing."
+        "desc": "Reads logs, consents and break-glass access; changes nothing."
       },
       "viewer": {
         "name": "Read only",
@@ -3074,7 +3118,7 @@ export const en: typeof vi = {
       "applications.write": "Propose and edit applications",
       "applications.approve": "Approve and revoke applications",
       "trust.write": "Publish capabilities and propose grants",
-      "trust.approve": "Approve grants and review emergency access",
+      "trust.approve": "Approve grants and review break-glass access",
       "audit.read": "Read the audit log",
       "core-reader": "Read data and files",
       "core-writer": "Write data and files",

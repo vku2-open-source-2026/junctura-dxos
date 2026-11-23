@@ -74,7 +74,10 @@ def composition_inventory(spec, source=None):
 # When handlers change, review this inventory and add an observed positive case.
 EXPECTED = {
     '/health': {'get', 'head'}, '/ready': {'get'}, '/v1/identity': {'get'}, '/v1/events': {'get'},
-    '/v1/applications': {'post'}, '/v1/applications/stats': {'get'}, '/v1/applications/{appId}': {'get'},
+    '/v1/applications': {'get', 'post'}, '/v1/applications/stats': {'get'}, '/v1/applications/{appId}': {'get', 'patch'},
+    '/v1/applications/{appId}/assignments': {'get', 'post'},
+    '/v1/applications/{appId}/assignments/{assignmentId}': {'delete'},
+    '/v1/applications/{appId}/oidc-keys': {'get', 'post'},
     '/v1/applications/{appId}/approve': {'post'}, '/v1/applications/{appId}/state': {'post'},
     '/v1/approvals': {'post'}, '/v1/approvals/{approvalId}': {'get'},
     '/v1/approvals/{approvalId}/revoke': {'post'},
@@ -231,7 +234,7 @@ def validate_paths(spec, dereference, *, foundation=False):
             return
         if not planned:
             require((ROOT / operation['x-junctura-source']).is_file(), oid + ': source missing')
-            require(operation['x-junctura-test-suite'] in ('core', 'applications', 'records', 'record-queries', 'record-archives', 'app-group-shares', 'directory', 'workflow-tasks', 'events', 'object-metadata', 'search', 'subject-access'), oid + ': coverage suite missing')
+            require(operation['x-junctura-test-suite'] in ('core', 'applications', 'records', 'record-queries', 'record-archives', 'app-group-shares', 'directory', 'workflow-tasks', 'events', 'object-metadata', 'search', 'subject-access', 'app-access'), oid + ': coverage suite missing')
         parameters = [dereference(p) for p in operation.get('parameters', [])]
         require(len({(p['in'], p['name']) for p in parameters}) == len(parameters), oid + ': duplicate parameter')
         require({p['name'] for p in parameters if p['in'] == 'path'} == set(re.findall(r'{([^}]+)}', path)), oid + ': path parameters differ')

@@ -13,3 +13,7 @@ path "secret/metadata/tenants/+/apps/+/+" {
 path "sys/health" {
   capabilities = ["read"]
 }
+
+path "secret/data/tenants/+/oidc-clients/+/+" {
+  capabilities = ["create", "read"]
+}
