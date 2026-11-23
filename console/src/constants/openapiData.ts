@@ -50,6 +50,7 @@ const DIGEST = `sha256:${"0".repeat(64)}`;
 interface RequestExample {
   contentType?: string;
   json?: unknown;
+  ndjson?: string;
   form?: Record<string, string>;
   binary?: boolean;
   query?: Record<string, string>;
@@ -86,6 +87,10 @@ function requestExample(endpoint: ApiEndpointDef): RequestExample {
     return { contentType, binary: true };
   }
 
+  if (contentType === "application/x-ndjson") {
+    return { contentType, ndjson: JSON.stringify({ collection: "widgets", id: UUID, data: { code: "example" } }) + "\n" };
+  }
+
   if (contentType === "application/x-www-form-urlencoded") {
     if (endpoint.operationId === "issueOidcToken") {
       return {
@@ -118,7 +123,21 @@ function requestExample(endpoint: ApiEndpointDef): RequestExample {
       case "v1ReplaceRecordData":
       case "v2ReplaceRecordData":
         return { contentType, json: { data: { name: "example", status: "active" } } };
+      case "registerCollectionSchema":
+        return { contentType, json: {
+          schema: { type: "object", required: ["code"], properties: { code: { type: "string" } } },
+          indexed: ["code"], uniqueKey: "code", searchable: [], sensitive: [],
+        } };
+      case "createVersionedRecord":
+      case "replaceVersionedRecord":
+      case "upsertRecordByKey":
+        return { contentType, json: { data: { code: "example", status: "active" } } };
+      case "lockRecord":
+        return { contentType, json: { ttlSeconds: 300 } };
+      case "writeRecordBatch":
+        return { contentType, json: { operations: [{ op: "create", collection: "widgets", data: { code: "example" } }] } };
       case "createReadShare":
+      case "shareResourceWithAppOrGroup":
         return {
           contentType,
           json: {
@@ -172,6 +191,8 @@ function requestExample(endpoint: ApiEndpointDef): RequestExample {
         return { contentType, json: {} };
     }
   }
+
+  if (endpoint.operationId === "aggregateRecords") return { query: { count: "true" } };
 
   if (endpoint.operationId === "authorizeOidc") {
     return {
@@ -251,7 +272,7 @@ export function generateCurlExample(
     variables.push(`TOKEN="${BEARER_TOKEN}"`);
   }
   for (const header of endpoint.headerParameters) {
-    if (header.name === "If-Match") variables.push(`ETAG="${ETAG}"`);
+    if (header.name === "If-Match") variables.push(`ETAG='${ETAG}'`);
     else if (header.name === "Idempotency-Key") {
       variables.push(`IDEMPOTENCY_KEY="$(node -e 'console.log(crypto.randomUUID())')"`);
     } else variables.push(`${headerVariable(header)}="<value>"`);
@@ -279,6 +300,8 @@ export function generateCurlExample(
   if (request.contentType === "application/json") {
     command.push('-H "Content-Type: application/json"');
     command.push(`-d '${JSON.stringify(request.json, null, 2)}'`);
+  } else if (request.contentType === "application/x-ndjson") {
+    command.push('-H "Content-Type: application/x-ndjson"', `--data-binary '${request.ndjson}'`);
   } else if (request.contentType === "application/x-www-form-urlencoded") {
     command.push('-H "Content-Type: application/x-www-form-urlencoded"');
     for (const [key, value] of Object.entries(request.form ?? {})) {
@@ -310,7 +333,7 @@ export function generateFetchExample(
 
   if (usesBearer(endpoint)) lines.push(`const token = "${BEARER_TOKEN}";`);
   for (const header of endpoint.headerParameters) {
-    if (header.name === "If-Match") lines.push(`const etag = "${ETAG}";`);
+    if (header.name === "If-Match") lines.push(`const etag = '${ETAG}';`);
     else if (header.name === "Idempotency-Key") {
       lines.push("const idempotencyKey = crypto.randomUUID();");
     } else {
@@ -338,6 +361,8 @@ export function generateFetchExample(
   }
   if (request.contentType === "application/json") {
     fetchLines.push(`  body: JSON.stringify(${JSON.stringify(request.json, null, 2)}),`);
+  } else if (request.contentType === "application/x-ndjson") {
+    fetchLines.push(`  body: ${JSON.stringify(request.ndjson)},`);
   } else if (request.contentType === "application/x-www-form-urlencoded") {
     fetchLines.push(`  body: new URLSearchParams(${JSON.stringify(request.form ?? {}, null, 2)}),`);
   } else if (request.contentType === "application/octet-stream" && endpoint.method !== "GET") {
@@ -365,7 +390,9 @@ export function generateFetchExample(
       "if (!response.ok) {",
       "  throw new Error(`HTTP ${response.status}: ${await response.text()}`);",
       "}",
-      "const result = await response.json();",
+      endpoint.successContentType === "application/x-ndjson"
+        ? "const result = await response.text();"
+        : "const result = await response.json();",
     );
   }
 

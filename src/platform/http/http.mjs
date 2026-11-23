@@ -1,5 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Junctura Contributors
 // SPDX-License-Identifier: Apache-2.0
+import { createHash } from "node:crypto";
+
 export class HttpError extends Error {
   constructor(status, code, details) {
     super(code);
@@ -72,3 +74,72 @@ export function requireWriter(identity) {
 }
 
 export const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+
+export const jsonObject = value => value !== null && typeof value === "object" && !Array.isArray(value);
+
+export function canonicalJson(value) {
+  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`;
+  if (jsonObject(value)) {
+    return `{${Object.keys(value).sort().map(key => `${JSON.stringify(key)}:${canonicalJson(value[key])}`).join(",")}}`;
+  }
+  return JSON.stringify(value);
+}
+
+export function logicalRequestDigest({ body, ifMatch }) {
+  return createHash("sha256").update(canonicalJson({ body: body ?? null, ifMatch: ifMatch ?? null })).digest("hex");
+}
+
+export function parseRecordJson(text) {
+  if (!text.isWellFormed()) throw new SyntaxError("invalid_unicode");
+  const value = JSON.parse(text, (key, item, context) => {
+    if (key.includes("\0") || !key.isWellFormed() ||
+        (typeof item === "string" && (item.includes("\0") || !item.isWellFormed()))) {
+      throw new SyntaxError("invalid_unicode");
+    }
+    if (typeof item === "number" &&
+        (Math.abs(item) > 2 ** 53 || !Number.isFinite(item) ||
+          decimalValue(context.source) !== decimalValue(String(item)))) {
+      throw new SyntaxError("invalid_number");
+    }
+    return item;
+  });
+  const containers = [];
+  for (const [token, keyToken] of text.matchAll(/("(?:[^"\\]|\\.)*"(?=[ \r\n\t]*:))|"(?:[^"\\]|\\.)*"|[{}\[\]]/gs)) {
+    if (token === "{" || token === "[") {
+      containers.push(token === "{" ? new Set() : null);
+      if (containers.length > 256) throw new SyntaxError("document_too_deep");
+    } else if (token === "}" || token === "]") {
+      containers.pop();
+    } else if (keyToken) {
+      const keys = containers.at(-1);
+      const key = JSON.parse(keyToken);
+      if (keys.has(key)) throw new SyntaxError("duplicate_key");
+      keys.add(key);
+    }
+  }
+  return value;
+}
+
+function decimalValue(source) {
+  const [mantissa, exponent = "0"] = source.toLowerCase().split("e");
+  const sign = mantissa.startsWith("-") ? "-" : "";
+  const [whole, fraction = ""] = mantissa.replace("-", "").split(".");
+  const digits = (whole + fraction).replace(/^0+/, "");
+  if (!digits) return "0";
+  const significant = digits.replace(/0+$/, "");
+  return sign + significant + "e" + (Number(exponent) - fraction.length + digits.length - significant.length);
+}
+
+export async function readRecordJson(request, limit = 65536) {
+  if (request.headers["content-type"]?.split(";", 1)[0].trim() !== "application/json") {
+    throw new HttpError(415, "json_required");
+  }
+  const bytes = await readBody(request, limit);
+  try { return parseRecordJson(new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(bytes)); }
+  catch (error) {
+    if (error instanceof SyntaxError || error instanceof TypeError || error instanceof RangeError) {
+      throw new HttpError(400, "invalid_request");
+    }
+    throw error;
+  }
+}

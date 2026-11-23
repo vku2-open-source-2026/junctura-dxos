@@ -1,10 +1,11 @@
 // SPDX-FileCopyrightText: 2026 Junctura Contributors
 // SPDX-License-Identifier: Apache-2.0
 import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
 import { createServer } from "node:http";
 import { after, before, beforeEach, test } from "node:test";
-import { handleData } from "../src/modules/data/data.mjs";
-import { HttpError, json } from "../src/platform/http/http.mjs";
+import { handleAppRecords, handleData, presentRecordRequest } from "../src/modules/data/data.mjs";
+import { HttpError, json, readJson } from "../src/platform/http/http.mjs";
 
 const identity = { tenantId: "tenant-a", subject: "backend", issuer: "https://issuer.example", clientId: "example", roles: ["core-reader", "core-writer"] };
 const listen = server => new Promise((resolve, reject) => {
@@ -31,12 +32,38 @@ before(async () => {
   upstream = createServer(async (request, response) => {
     try {
       const url = new URL(request.url, "http://data");
+      const claims = JSON.parse(Buffer.from(request.headers.authorization.split(".")[1], "base64url"));
+      assert.equal(claims.tenant_id, identity.tenantId);
+      if (url.pathname === "/rpc/record_command") {
+        assert.equal(claims.role, "junctura_record_api");
+        assert.equal(request.method, "POST");
+        const { operation, payload } = await readJson(request);
+        requests.push({ path: url.pathname, operation, payload });
+        assert.equal(payload.collection, "entries");
+        if (operation !== "get") assert.equal(claims.resource_writer, true);
+        let row = records.find(item => item.id === payload.id);
+        if (operation === "create") {
+          row = { id: randomUUID(), collection: payload.collection, data: payload.body.data,
+            created_at: "2026-01-02T00:00:00.123456+00:00", version: 1 };
+          records.push(row);
+        } else if (!row) return json(response, 200, { status: 404, error: "not_found" });
+        if (operation === "delete") {
+          records = records.filter(item => item !== row);
+          return json(response, 200, { status: 204 });
+        }
+        if (operation === "replace") {
+          row.data = payload.body.data;
+          row.version = (row.version ?? 1) + 1;
+        }
+        const value = { ...row, version: row.version ?? 1 };
+        if (payload.legacyBody && operation !== "get") delete value.version;
+        return json(response, 200, { status: operation === "create" ? 201 : 200, value,
+          headers: { ETag: `"record-${"a".repeat(64)}-${row.version ?? 1}"` } });
+      }
       assert.ok(["/records", "/app_records"].includes(url.pathname));
       const query = url.searchParams;
       assert.equal(query.get("select"), "id,collection,data,created_at");
-      const claims = JSON.parse(Buffer.from(request.headers.authorization.split(".")[1], "base64url"));
       assert.equal(claims.role, url.pathname === "/records" ? "junctura_api" : "junctura_resource_api");
-      assert.equal(claims.tenant_id, identity.tenantId);
       requests.push({ path: url.pathname, query, raw: request.url, method: request.method });
       let rows = records.filter(row => `eq.${row.collection}` === query.get("collection") &&
         (!query.has("id") || `eq.${row.id}` === query.get("id")));
@@ -76,7 +103,12 @@ before(async () => {
   });
   config = { dataUrl: await listen(upstream), dataSecret: "synthetic-data-secret" };
   core = createServer(async (request, response) => {
-    try { await handleData(request, response, currentIdentity, config, new URL(request.url, "http://core")); }
+    const url = new URL(request.url, "http://core");
+    if (url.pathname.startsWith("/v2/") &&
+        (request.method !== "GET" || /^\/v2\/data\/[^/]+\/[^/]+$/.test(url.pathname))) {
+      return presentRecordRequest(request, response, () => handleAppRecords(request, response, currentIdentity, config, url), true);
+    }
+    try { await handleData(request, response, currentIdentity, config, url); }
     catch (error) { reply(response, error); }
   });
   base = await listen(core);
@@ -194,8 +226,14 @@ for (const version of ["v1", "v2"]) {
       const response = await fetch(`${item}${query}`);
       assert.equal(response.status, 200);
       assert.deepEqual(await response.json(), record);
-      assert.equal(requests.at(-1).query.get("limit"), "1");
-      assert.equal(requests.at(-1).query.has("or"), false);
+      if (version === "v1") {
+        assert.equal(requests.at(-1).query.get("limit"), "1");
+        assert.equal(requests.at(-1).query.has("or"), false);
+      } else {
+        assert.equal(requests.at(-1).operation, "get");
+        assert.equal(requests.at(-1).payload.id, record.id);
+        assert.ok(response.headers.get("etag"));
+      }
     }
     for (const query of ["?cursor=x", "?order=asc", "?limit=invalid&limit=2", "?limit=0", "?unknown=1"]) {
       const response = await fetch(`${item}${query}`);
@@ -238,8 +276,16 @@ for (const version of ["v1", "v2"]) {
     const deleted = await fetch(item, { method: "DELETE" });
     assert.equal(deleted.status, 204);
     assert.equal(await deleted.text(), "");
-    assert.ok(requests.every(request => request.path === resource && request.query.get("order") === "created_at.asc,id.asc" &&
-      !request.query.has("limit") && !request.query.has("or")));
+    if (version === "v1") {
+      assert.ok(requests.every(request => request.path === resource && request.query.get("order") === "created_at.asc,id.asc" &&
+        !request.query.has("limit") && !request.query.has("or")));
+    } else {
+      assert.deepEqual(requests.map(request => request.operation), ["create", "replace", "delete"]);
+      assert.ok(requests.every(request => request.path === "/rpc/record_command" && !request.payload.requireMatch));
+      assert.deepEqual(requests.slice(0, 2).map(request => request.payload.legacyBody), [true, true]);
+      assert.ok(created.headers.get("etag"));
+      assert.notEqual(updated.headers.get("etag"), created.headers.get("etag"));
+    }
     assert.equal((await fetch(item)).status, 404);
   });
 }

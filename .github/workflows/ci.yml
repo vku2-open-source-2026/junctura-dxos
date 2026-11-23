@@ -88,9 +88,15 @@ jobs:
           npm run healthcheck
           docker compose exec -T core node scripts/check-health.mjs
       - name: Run HTTP tests in the pinned container runtime
-        run: docker compose -f compose.yaml -f infra/testing/compose.unit.yaml run --rm --no-deps --volume "$PWD/tests:/app/tests:ro" --volume "$PWD/scripts:/app/scripts:ro" --volume "$PWD/.env.example:/app/.env.example:ro" --volume "$PWD/sdk:/app/sdk:ro" --volume "$PWD/docs/contracts/examples:/app/docs/contracts/examples:ro" --volume "$PWD/infra/postgres:/app/infra/postgres:ro" --volume "$PWD/infra/keycloak:/app/infra/keycloak:ro" --volume "$PWD/infra/flowable:/app/infra/flowable:ro" --volume "$PWD/examples:/app/examples:ro" --volume "$PWD/compose.yaml:/app/compose.yaml:ro" core node --test
+        run: docker compose -f compose.yaml -f infra/testing/compose.unit.yaml run --rm --no-deps --volume "$PWD/tests:/app/tests:ro" --volume "$PWD/scripts:/app/scripts:ro" --volume "$PWD/.env.example:/app/.env.example:ro" --volume "$PWD/sdk:/app/sdk:ro" --volume "$PWD/docs/contracts:/app/docs/contracts:ro" --volume "$PWD/infra/postgres:/app/infra/postgres:ro" --volume "$PWD/infra/keycloak:/app/infra/keycloak:ro" --volume "$PWD/infra/flowable:/app/infra/flowable:ro" --volume "$PWD/examples:/app/examples:ro" --volume "$PWD/compose.yaml:/app/compose.yaml:ro" core node --test
       - name: Verify real Core integrations
         run: npm run test:integration
+      - name: Verify record operations through the gateway
+        run: |
+          npm run test:records
+          npm run test:record-queries
+          npm run test:record-archives
+          npm run test:app-group-shares
       - name: Verify registration, guarded capability invocation, resource isolation and Flowable worker
         run: |
           npm run test:applications
@@ -101,6 +107,16 @@ jobs:
         run: npm run test:recovery
       - name: Verify protected audit boundary, redaction and persistence
         run: npm run test:audit
+      - name: Verify record operations through the gateway in strict mode
+        env:
+          STRICT_RECORD_WRITES: "true"
+        run: |
+          docker compose up --detach --no-deps --force-recreate --wait --wait-timeout 60 core
+          npm run healthcheck
+          npm run test:records
+          npm run test:record-queries
+          npm run test:record-archives
+          npm run test:app-group-shares
       - name: Collect container diagnostics on failure
         if: failure() && steps.compose-config.outcome == 'success'
         run: docker compose logs --no-color

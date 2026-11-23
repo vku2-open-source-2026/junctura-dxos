@@ -5,14 +5,18 @@ import { spawn } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 
 const spec = JSON.parse(readFileSync(new URL('../docs/contracts/foundation-api.openapi.json', import.meta.url)));
-const routes = Object.keys(spec.paths).map(path => ({ path, names: [...path.matchAll(/\{([^}]+)\}/g)].map(m => m[1]),
+const routes = Object.keys(spec.paths)
+  .sort((left, right) => right.replace(/\{[^}]+\}/g, "").length - left.replace(/\{[^}]+\}/g, "").length)
+  .map(path => ({ path, names: [...path.matchAll(/\{([^}]+)\}/g)].map(m => m[1]),
   regex: new RegExp('^' + path.replace(/[.*+?^$()|[\]\\]/g, '\\$&').replace(/\{[^}]+\}/g, '([^/]+)') + '$') }));
 const observations = [];
 const secretNames = new Set(['client_secret', 'access_token', 'refresh_token', 'id_token', 'id_token_hint', 'code', 'code_verifier']);
-function redact(value) {
-  if (Array.isArray(value)) return value.map(redact);
+// `details.code` carries a machine error code, not an OAuth code, so it stays visible to the validator.
+function redact(value, parent) {
+  if (Array.isArray(value)) return value.map(item => redact(item));
   if (!value || typeof value !== 'object') return value;
-  return Object.fromEntries(Object.entries(value).map(([key, v]) => [key, secretNames.has(key) && typeof v === 'string' ? '[redacted]' : redact(v)]));
+  return Object.fromEntries(Object.entries(value).map(([key, v]) => [key,
+    secretNames.has(key) && typeof v === 'string' && !(parent === 'details' && key === 'code') ? '[redacted]' : redact(v, key)]));
 }
 
 export async function contractFetch(input, options = {}) {
@@ -22,14 +26,15 @@ export async function contractFetch(input, options = {}) {
   // Dynamic Keycloak login/admin URLs and private provider interfaces are outside this contract.
   if (!route) return response;
   const match = url.pathname.match(route.regex);
-  const query = {};
-  for (const [key, value] of url.searchParams) if (!Object.hasOwn(query, key)) query[key] = value;
+  const query = Object.fromEntries([...new Set(url.searchParams.keys())].map(key => [key, url.searchParams.get(key)]));
+  const repeatedQuery = Object.fromEntries(Object.keys(query).map(key => [key, url.searchParams.getAll(key)])
+    .filter(([, values]) => values.length > 1));
   const headers = new Headers(options.headers);
   if (options.body instanceof URLSearchParams && !headers.has('content-type')) headers.set('content-type', 'application/x-www-form-urlencoded;charset=UTF-8');
   const requestBytes = options.body === undefined ? 0 : Buffer.byteLength(options.body instanceof URLSearchParams ? options.body.toString() : options.body);
-  const safeHeaders = ['content-type', 'if-match', 'idempotency-key'];
+  const safeHeaders = ['content-type', 'if-match', 'idempotency-key', 'lock-id'];
   const item = { path: route.path, method: options.method ?? 'GET', status: response.status, authorized: headers.has('authorization'),
-    pathParams: Object.fromEntries(route.names.map((name, i) => [name, decodeURIComponent(match[i + 1])])), query: redact(query),
+    pathParams: Object.fromEntries(route.names.map((name, i) => [name, decodeURIComponent(match[i + 1])])), query: redact(query), repeatedQuery: redact(repeatedQuery),
     requestHeaders: Object.fromEntries(safeHeaders.filter(name => headers.has(name)).map(name => [name, headers.get(name)])), requestBytes,
     responseHeaders: Object.fromEntries(['content-type', 'content-length', 'cache-control', 'x-content-type-options', 'etag', 'location', 'content-disposition', 'allow']
       .filter(name => response.headers.has(name)).map(name => [name, response.headers.get(name)])) };

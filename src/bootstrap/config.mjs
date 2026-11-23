@@ -12,6 +12,9 @@ export function loadConfig(env = process.env) {
   }
   if (env.C4A_ENABLED && !TRUE_OR_FALSE.has(env.C4A_ENABLED)) throw new Error("C4A_ENABLED must be true or false");
   if (env.C4B_ENABLED && !TRUE_OR_FALSE.has(env.C4B_ENABLED)) throw new Error("C4B_ENABLED must be true or false");
+  if (env.STRICT_RECORD_WRITES !== undefined && !TRUE_OR_FALSE.has(env.STRICT_RECORD_WRITES)) {
+    throw new Error("STRICT_RECORD_WRITES must be true or false");
+  }
   if ((env.C4A_ENABLED === "true" || env.C4B_ENABLED === "true") && !env.OIDC_ISSUER) throw new Error("Capability identity configuration is incomplete");
   if (!env.OIDC_ISSUER) return { port: Number(rawPort), host: env.HOST ?? "127.0.0.1" };
   if (!env.CORE_CLIENT_SECRET || !env.IDENTITY_URL) throw new Error("Identity configuration is incomplete");
@@ -35,6 +38,7 @@ export function loadConfig(env = process.env) {
     identityUrl: env.IDENTITY_URL,
     clientSecret: env.CORE_CLIENT_SECRET,
     legacyResourceClients: (env.LEGACY_RESOURCE_CLIENTS ?? "").split(",").filter(Boolean),
+    strictRecords: env.STRICT_RECORD_WRITES === "true",
     dataUrl: env.DATA_URL,
     dataSecret: env.DATA_JWT_SECRET,
     objectsUrl: env.OBJECTS_URL,

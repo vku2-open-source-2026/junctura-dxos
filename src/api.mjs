@@ -11,7 +11,7 @@ import { handleApprovals, handleCapabilities } from "./modules/capability/regist
 import { handleCompositions } from "./modules/capability/composition/registry.mjs";
 import { readExecutionJson } from "./modules/capability/execution/runtime.mjs";
 import { HttpError, json } from "./platform/http/http.mjs";
-import { handleData } from "./modules/data/data.mjs";
+import { handleAppRecords, handleData, handleRecordArchive, handleRecordQuery, presentRecordRequest } from "./modules/data/data.mjs";
 import { handleObjects } from "./modules/objects/objects.mjs";
 import { checkReadiness } from "./bootstrap/readiness.mjs";
 import { handleWorkflow } from "./modules/workflow/workflow.mjs";
@@ -244,11 +244,30 @@ export function createApi(config) {
           { error: error instanceof HttpError ? error.message : "storage_unavailable", requestId });
       }
     }
-    if (path?.startsWith("/v1/data/") || path?.startsWith("/v2/data/")) {
-      let identity = await authorize(request, true);
-      if (path.startsWith("/v2/")) identity = await resourceIdentity(config, identity);
-      else requireLegacyClient(identity, config);
+    if (path?.startsWith("/v1/data/")) {
+      const identity = await authorize(request, true);
+      requireLegacyClient(identity, config);
       return handleData(request, response, identity, config, new URL(request.url, "http://core"));
+    }
+    if (path === "/v2/data:export" || path === "/v2/data:import") {
+      return handleRecordArchive(request, response, await authorize(request, true), config, new URL(request.url, "http://core"));
+    }
+    if (path === "/v2/data:batch" || path?.startsWith("/v2/data/") || path?.startsWith("/v2/data-schemas/")) {
+      const url = new URL(request.url, "http://core");
+      const listing = request.method === "GET" && /^\/v2\/data\/[^/]+$/.test(path);
+      if (/^\/v2\/data\/[^/]+\/aggregate$/.test(path) || (listing && (config.strictRecords ||
+          url.searchParams.has("sort") || url.searchParams.has("ownerAppId") ||
+          [...url.searchParams.keys()].some(key => key.startsWith("where["))))) {
+        return handleRecordQuery(request, response, await authorize(request, true), config, url);
+      }
+      if (listing) {
+        const identity = await resourceIdentity(config, await authorize(request, true));
+        return handleData(request, response, identity, config, url);
+      }
+      const compatibility = path.startsWith("/v2/data/") && !path.endsWith(":lock") && !path.includes("/by-key/") &&
+        !config.strictRecords;
+      return presentRecordRequest(request, response, async () =>
+        handleAppRecords(request, response, await authorize(request, true), config, url), compatibility);
     }
     if (["/v1/objects", "/v2/objects"].some(prefix => path === prefix || path?.startsWith(`${prefix}/`))) {
       let identity = await authorize(request, true);

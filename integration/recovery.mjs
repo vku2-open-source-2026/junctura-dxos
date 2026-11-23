@@ -43,6 +43,8 @@ test("pg_dump/pg_restore preserves real data and tenant RLS in an isolated tempo
         VALUES('tenant-a','https://recovery.example.invalid','restore-${id}','restore-${id}','https://recovery.example.invalid','subject-${id}'),
         ('tenant-a','https://recovery.example.invalid','restore-${otherApp}','restore-${id}','https://recovery.example.invalid','subject-${otherApp}');
       INSERT INTO core.app_records(tenant_id,id,owner_app_id,collection,data) VALUES('tenant-a','${id}','${id}','recovery_fixture','{"private":true}');
+      INSERT INTO app_private.record_collections(tenant_id,owner_app_id,collection,record_count)
+        VALUES('tenant-a','${id}','recovery_fixture',1);
       INSERT INTO app_private.principals(tenant_id,issuer,subject,management_client,permissions)
         VALUES('tenant-a','https://recovery.example.invalid','recovery-${id}','restore-${id}',ARRAY['audit.read']::text[]);
       SET ROLE junctura_app_owner;
@@ -66,7 +68,7 @@ test("pg_dump/pg_restore preserves real data and tenant RLS in an isolated tempo
     }
     assert.ok(ready, "Isolated PostgreSQL completed initialization");
     await docker(["exec", target, "createdb", "-U", "junctura_admin", "recovered"]);
-    await docker(["exec", target, "psql", "-U", "junctura_admin", "-d", "recovered", "-v", "ON_ERROR_STOP=1", "-c", "CREATE ROLE junctura_api NOLOGIN NOBYPASSRLS; CREATE ROLE junctura_app_api NOLOGIN NOBYPASSRLS; CREATE ROLE junctura_app_owner NOLOGIN NOBYPASSRLS; CREATE ROLE junctura_resource_api NOLOGIN NOBYPASSRLS; CREATE ROLE junctura_audit_api NOLOGIN NOBYPASSRLS; CREATE ROLE junctura_capability_api NOLOGIN NOBYPASSRLS; CREATE ROLE junctura_trust_api NOLOGIN NOBYPASSRLS; CREATE ROLE junctura_execution_api NOLOGIN NOBYPASSRLS; CREATE ROLE junctura_composition_api NOLOGIN NOBYPASSRLS; CREATE ROLE junctura_subject_api NOLOGIN NOBYPASSRLS; CREATE ROLE junctura_directory_api NOLOGIN NOBYPASSRLS; CREATE ROLE junctura_storage_api NOLOGIN NOBYPASSRLS; CREATE ROLE junctura_storage_collections_api NOLOGIN NOBYPASSRLS; CREATE ROLE junctura_workflow_audit_api NOLOGIN NOBYPASSRLS; CREATE ROLE junctura_application_stats_api NOLOGIN NOBYPASSRLS;"]);
+    await docker(["exec", target, "psql", "-U", "junctura_admin", "-d", "recovered", "-v", "ON_ERROR_STOP=1", "-c", "CREATE ROLE junctura_api NOLOGIN NOBYPASSRLS; CREATE ROLE junctura_app_api NOLOGIN NOBYPASSRLS; CREATE ROLE junctura_app_owner NOLOGIN NOBYPASSRLS; CREATE ROLE junctura_resource_api NOLOGIN NOBYPASSRLS; CREATE ROLE junctura_record_api NOLOGIN NOBYPASSRLS; ALTER ROLE junctura_record_api SET statement_timeout='4s'; CREATE ROLE junctura_audit_api NOLOGIN NOBYPASSRLS; CREATE ROLE junctura_capability_api NOLOGIN NOBYPASSRLS; CREATE ROLE junctura_trust_api NOLOGIN NOBYPASSRLS; CREATE ROLE junctura_execution_api NOLOGIN NOBYPASSRLS; CREATE ROLE junctura_composition_api NOLOGIN NOBYPASSRLS; CREATE ROLE junctura_subject_api NOLOGIN NOBYPASSRLS; CREATE ROLE junctura_directory_api NOLOGIN NOBYPASSRLS; CREATE ROLE junctura_storage_api NOLOGIN NOBYPASSRLS; CREATE ROLE junctura_storage_collections_api NOLOGIN NOBYPASSRLS; CREATE ROLE junctura_workflow_audit_api NOLOGIN NOBYPASSRLS; CREATE ROLE junctura_application_stats_api NOLOGIN NOBYPASSRLS;"]);
     const dump = spawn("docker", ["compose", "exec", "-T", "database", "pg_dump", "-U", "junctura_admin", "--format=custom", "junctura_data"], { stdio: ["ignore", "pipe", "pipe"] });
     const restore = spawn("docker", ["exec", "-i", target, "pg_restore", "-U", "junctura_admin", "--exit-on-error", "--dbname=recovered"], { stdio: ["pipe", "ignore", "pipe"] });
     const dumpCode = closeCode(dump);
@@ -99,6 +101,21 @@ test("pg_dump/pg_restore preserves real data and tenant RLS in an isolated tempo
     const resourceAcl=await docker(['exec',target,'psql','-U','junctura_admin','-d','recovered','-Atc',
       "SELECT has_table_privilege('junctura_api','core.app_records','SELECT'),has_schema_privilege('junctura_resource_api','app_private','USAGE');"]);
     assert.equal(resourceAcl.stdout.trim(),'f|f','Restore preserves resource role separation');
+    const recordAcl = await docker(["exec", target, "psql", "-U", "junctura_admin", "-d", "recovered", "-Atc",
+      "SELECT has_function_privilege('junctura_record_api','core.record_command(text,jsonb)','EXECUTE'),has_table_privilege('junctura_record_api','core.app_records','SELECT'),has_table_privilege('junctura_record_api','app_private.record_collections','SELECT'),has_column_privilege('junctura_resource_api','core.app_records','data','UPDATE'),has_function_privilege('junctura_resource_api','core.record_command(text,jsonb)','EXECUTE');"]);
+    assert.equal(recordAcl.stdout.trim(), "t|f|f|f|f");
+    for (const [tenant, expected] of [["tenant-a", "1"], ["tenant-b", "0"]]) {
+      const guarded = await docker(["exec", target, "psql", "-U", "junctura_admin", "-d", "recovered", "-Atc",
+        `SET ROLE junctura_app_owner; SELECT set_config('request.jwt.claims','{"tenant_id":"${tenant}"}',false);
+          SELECT count(*) FROM app_private.record_collections WHERE owner_app_id='${id}';`]);
+      assert.equal(guarded.stdout.trim().split(/\r?\n/).at(-1), expected);
+    }
+    const recordClaims = JSON.stringify({ tenant_id: "tenant-a", iss: "https://recovery.example.invalid",
+      client_id: `restore-${id}`, sub: `subject-${id}` });
+    const restoredRecord = await docker(["exec", target, "psql", "-U", "junctura_admin", "-d", "recovered", "-Atc",
+      `SET ROLE junctura_record_api; SELECT set_config('request.jwt.claims','${recordClaims}',false);
+        SELECT core.record_command('get','{"collection":"recovery_fixture","id":"${id}"}')->'value'->>'version';`]);
+    assert.equal(restoredRecord.stdout.trim().split(/\r?\n/).at(-1), "1");
     const auditAcl=await docker(['exec',target,'psql','-U','junctura_admin','-d','recovered','-Atc',
       "SELECT has_function_privilege('junctura_audit_api','core.audit_query(jsonb)','EXECUTE'),has_table_privilege('junctura_audit_api','app_private.audit','INSERT'),has_table_privilege('junctura_app_api','app_private.audit','INSERT');"]);
     assert.equal(auditAcl.stdout.trim(),'t|f|f','Restore preserves audit role separation');

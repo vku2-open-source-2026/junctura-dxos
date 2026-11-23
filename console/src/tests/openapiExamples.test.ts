@@ -223,6 +223,11 @@ describe("Executable OpenAPI examples", () => {
         validate(fetchBody, request.schema);
         expect(curl, endpoint.operationId).toContain('-H "Content-Type: application/json"');
         expect(fetch, endpoint.operationId).toContain('"Content-Type": "application/json"');
+      } else if (request?.contentType === "application/x-ndjson") {
+        expect(curl, endpoint.operationId).toContain('-H "Content-Type: application/x-ndjson"');
+        expect(curl).toContain("--data-binary");
+        expect(fetch, endpoint.operationId).toContain('"Content-Type": "application/x-ndjson"');
+        expect(fetch).toContain("\\n");
       } else if (request?.contentType === "application/x-www-form-urlencoded") {
         expect(curl, endpoint.operationId).toContain(
           '-H "Content-Type: application/x-www-form-urlencoded"',

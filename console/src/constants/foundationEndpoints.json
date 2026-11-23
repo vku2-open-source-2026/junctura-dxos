@@ -1,5 +1,384 @@
 [
   {
+    "path": "/v2/data-schemas/{collection}",
+    "method": "PUT",
+    "operationId": "registerCollectionSchema",
+    "summary": "Register a collection schema",
+    "description": "Create or replace the calling app's schema and index configuration. All configured fields are declared top-level properties; uniqueKey, when set, is a required indexed string matching ^[A-Za-z0-9_-]{1,128}$ on every record. Core validates writes to registered collections and maintains typed field values in shared expression indexes. Existing incompatible records or duplicate values return 409 before activation. An omitted auditActions retains the app-wide catalog; a supplied array replaces it and action names must be unique. The response includes the effective catalog. Unregistered collections retain schemaless writes.",
+    "tags": [
+      "app-resource"
+    ],
+    "security": [
+      {
+        "coreBearer": []
+      }
+    ],
+    "responses": [
+      "200",
+      "400",
+      "401",
+      "403",
+      "404",
+      "405",
+      "409",
+      "413",
+      "415",
+      "429",
+      "502",
+      "503",
+      "504"
+    ],
+    "hasRequestBody": true,
+    "requestContentTypes": [
+      "application/json"
+    ],
+    "pathParameters": [
+      {
+        "name": "collection",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_-]{0,62}$"
+        },
+        "description": ""
+      }
+    ],
+    "queryParameters": [],
+    "headerParameters": [],
+    "successStatus": "200",
+    "successContentType": "application/json",
+    "successHasBody": true
+  },
+  {
+    "path": "/v2/data/{collection}/aggregate",
+    "method": "GET",
+    "operationId": "aggregateRecords",
+    "summary": "Count or group records",
+    "description": "Count all readable matching records in the selected owner scope. groups is empty for count-only requests. Group keys follow the requested dimension order and missing values group as null. Queries that would return more than 1,000 groups return 400 invalid_query. Management viewers may not filter or group on sensitive fields.",
+    "tags": [
+      "app-resource"
+    ],
+    "security": [
+      {
+        "coreBearer": []
+      }
+    ],
+    "responses": [
+      "200",
+      "400",
+      "401",
+      "403",
+      "404",
+      "429",
+      "502",
+      "503",
+      "504"
+    ],
+    "hasRequestBody": false,
+    "requestContentTypes": [],
+    "pathParameters": [
+      {
+        "name": "collection",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_-]{0,62}$"
+        },
+        "description": ""
+      }
+    ],
+    "queryParameters": [
+      {
+        "name": "count",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "enum": [
+            "",
+            "true"
+          ]
+        },
+        "description": ""
+      },
+      {
+        "name": "groupBy",
+        "required": false,
+        "schema": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^(?:[A-Za-z_][A-Za-z0-9_]{0,63}|day\\([A-Za-z_][A-Za-z0-9_]{0,63}\\))$"
+          },
+          "minItems": 1,
+          "maxItems": 2,
+          "uniqueItems": true
+        },
+        "description": "Repeat groupBy once per dimension. day(field) buckets an indexed date or date-time by UTC day."
+      },
+      {
+        "name": "where",
+        "required": false,
+        "schema": {
+          "type": "object",
+          "propertyNames": {
+            "type": "string",
+            "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,63}$",
+            "description": "Case-sensitive top-level field in data."
+          },
+          "additionalProperties": {
+            "type": "string",
+            "pattern": "^(eq|in|gte|lte|prefix):.+$"
+          }
+        },
+        "description": "One condition per indexed top-level field, combined with AND. Operands are JSON scalars (eq), nonempty JSON arrays of scalars (in), ordered JSON numbers/strings (gte/lte) or JSON strings (prefix). Field types must match the schema. Percent-encode query values."
+      },
+      {
+        "name": "ownerAppId",
+        "required": false,
+        "schema": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        },
+        "description": "Defaults to the calling app. Another app's collection yields only records explicitly shared with the caller, including live app-group shares with current membership."
+      }
+    ],
+    "headerParameters": [],
+    "successStatus": "200",
+    "successContentType": "application/json",
+    "successHasBody": true
+  },
+  {
+    "path": "/v2/data/{collection}/by-key/{key}",
+    "method": "PUT",
+    "operationId": "upsertRecordByKey",
+    "summary": "Upsert a record by its unique key",
+    "description": "The collection must declare a uniqueKey and data must contain the exact case-sensitive path value. Creating a record returns 201 and may omit If-Match. Replacing an existing record returns 200 and requires If-Match, including while holding its lock. An If-Match for a key with no matching record version returns 412. A lock held by a different caller prevents replacement. Replay the same key, body and precondition to recover the original result.",
+    "tags": [
+      "app-resource"
+    ],
+    "security": [
+      {
+        "coreBearer": []
+      }
+    ],
+    "responses": [
+      "200",
+      "201",
+      "400",
+      "401",
+      "403",
+      "404",
+      "405",
+      "409",
+      "412",
+      "413",
+      "415",
+      "422",
+      "423",
+      "428",
+      "429",
+      "502",
+      "503",
+      "504"
+    ],
+    "hasRequestBody": true,
+    "requestContentTypes": [
+      "application/json"
+    ],
+    "pathParameters": [
+      {
+        "name": "collection",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_-]{0,62}$"
+        },
+        "description": ""
+      },
+      {
+        "name": "key",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]{1,128}$"
+        },
+        "description": ""
+      }
+    ],
+    "queryParameters": [],
+    "headerParameters": [
+      {
+        "name": "Idempotency-Key",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        },
+        "description": "Required UUID for this write. A missing or malformed key returns 400 invalid_request. Core retains the first recorded result for 24 hours, scoped to the verified tenant and caller, HTTP method and concrete request path. Within that window, the same key and logical request replay the first status, body and resource headers without another write. A changed body or write precondition for the same key returns 422 idempotency_key_reused. Concurrent identical requests share one result; every replay requires current authorization."
+      },
+      {
+        "name": "If-Match",
+        "required": false,
+        "schema": {
+          "type": "string",
+          "pattern": "^\"record-[a-f0-9]{64}-[1-9][0-9]{0,15}\"$"
+        },
+        "description": "Send the exact strong ETag from the record response. Required when the request replaces existing data. Atomic increments and creation by unique key may omit it. If supplied, a missing or stale record version returns 412."
+      }
+    ],
+    "successStatus": "200",
+    "successContentType": "application/json",
+    "successHasBody": true
+  },
+  {
+    "path": "/v2/data:batch",
+    "method": "POST",
+    "operationId": "writeRecordBatch",
+    "summary": "Write a record batch atomically",
+    "description": "Apply 1–50 creates, replacements, deletions or atomic increment operations in request order in one transaction for the calling app. Every replace and delete requires ifMatch with the current record ETag, even for a schemaless collection or its lock holder. Each increment item applies one or more increments to one record using the atomic PATCH rules and may omit ifMatch. The batch key covers all items. Locks held by other callers block edits and deletes, including increments. Each result matches its input position. Deletes have version null. A failure rolls back the entire batch. Schema violation paths identify record data at /operations/N/data, including the resulting data of increments.",
+    "tags": [
+      "app-resource"
+    ],
+    "security": [
+      {
+        "coreBearer": []
+      }
+    ],
+    "responses": [
+      "200",
+      "400",
+      "401",
+      "403",
+      "404",
+      "405",
+      "409",
+      "412",
+      "413",
+      "415",
+      "422",
+      "423",
+      "428",
+      "429",
+      "502",
+      "503",
+      "504"
+    ],
+    "hasRequestBody": true,
+    "requestContentTypes": [
+      "application/json"
+    ],
+    "pathParameters": [],
+    "queryParameters": [],
+    "headerParameters": [
+      {
+        "name": "Idempotency-Key",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        },
+        "description": "Required UUID for this write. A missing or malformed key returns 400 invalid_request. Core retains the first recorded result for 24 hours, scoped to the verified tenant and caller, HTTP method and concrete request path. Within that window, the same key and logical request replay the first status, body and resource headers without another write. A changed body or write precondition for the same key returns 422 idempotency_key_reused. Concurrent identical requests share one result; every replay requires current authorization."
+      }
+    ],
+    "successStatus": "200",
+    "successContentType": "application/json",
+    "successHasBody": true
+  },
+  {
+    "path": "/v2/data:export",
+    "method": "GET",
+    "operationId": "exportAppRecords",
+    "summary": "Export records owned by the calling app",
+    "description": "Active app owner only. The export covers record IDs and data across its collections. Collection definitions, record revisions, shares, file bytes and audit rows are outside this format.",
+    "tags": [
+      "app-resource"
+    ],
+    "security": [
+      {
+        "coreBearer": []
+      }
+    ],
+    "responses": [
+      "200",
+      "400",
+      "401",
+      "403",
+      "404",
+      "429",
+      "502",
+      "503",
+      "504"
+    ],
+    "hasRequestBody": false,
+    "requestContentTypes": [],
+    "pathParameters": [],
+    "queryParameters": [
+      {
+        "name": "collection",
+        "required": false,
+        "schema": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_-]{0,62}$"
+        },
+        "description": ""
+      }
+    ],
+    "headerParameters": [],
+    "successStatus": "200",
+    "successContentType": "application/x-ndjson",
+    "successHasBody": true
+  },
+  {
+    "path": "/v2/data:import",
+    "method": "POST",
+    "operationId": "importAppRecords",
+    "summary": "Import app records",
+    "description": "Create the supplied records under the verified calling app in one transaction. Preserve record IDs and create fresh versions. Validate every line, schema, uniqueness and quota. Existing IDs conflict; any failed line rolls back the upload. A line must be a single UTF-8 JSON object. No blank lines.",
+    "tags": [
+      "app-resource"
+    ],
+    "security": [
+      {
+        "coreBearer": []
+      }
+    ],
+    "responses": [
+      "200",
+      "400",
+      "401",
+      "403",
+      "404",
+      "409",
+      "413",
+      "415",
+      "422",
+      "429",
+      "502",
+      "503",
+      "504"
+    ],
+    "hasRequestBody": true,
+    "requestContentTypes": [
+      "application/x-ndjson"
+    ],
+    "pathParameters": [],
+    "queryParameters": [],
+    "headerParameters": [
+      {
+        "name": "Idempotency-Key",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        },
+        "description": "Required UUID for this write. A missing or malformed key returns 400 invalid_request. Core retains the first recorded result for 24 hours, scoped to the verified tenant and caller, HTTP method and concrete request path. Within that window, the same key and logical request replay the first status, body and resource headers without another write. A changed body or write precondition for the same key returns 422 idempotency_key_reused. Concurrent identical requests share one result; every replay requires current authorization."
+      }
+    ],
+    "successStatus": "200",
+    "successContentType": "application/json",
+    "successHasBody": true
+  },
+  {
     "path": "/health",
     "method": "GET",
     "operationId": "getHealth",
@@ -596,9 +975,9 @@
   {
     "path": "/v2/data/{collection}",
     "method": "GET",
-    "operationId": "v2ListRecords",
-    "summary": "V2 list records",
-    "description": "Active registered backend resolved from verified tenant/issuer/client_id and exact operator-enrolled resource_subject. Owner-only mutations; individually shared reads. Suspension/revocation and disabled enrollment block access. PATCH replaces the complete data object. POST has no automatic retry guarantee. Lists use keyset pagination by (created_at, id), default ascending. Only limit, order and cursor are accepted, once each; unknown/repeated keys or invalid limit/order return 400 invalid_query. Pass nextCursor with the same order to continue; malformed cursors or an order mismatch return 400 invalid_cursor. nextCursor is null when no further row was found.",
+    "operationId": "listFilteredRecords",
+    "summary": "Filter and list records",
+    "description": "Without sort, use the existing (created_at, id) order. Supply nextCursor with unchanged owner, filters and ordering. Data returned to authorized management readers omits sensitive fields. Filtering and sorting on those fields are unavailable to these readers. Shared reads include only live exact shares and live app-group shares with current membership. Missing or inaccessible owner scope returns 404. In compatibility mode, a list without the new filter parameters may retain the legacy body and cursor without version fields.",
     "tags": [
       "app-resource"
     ],
@@ -612,6 +991,7 @@
       "400",
       "401",
       "403",
+      "404",
       "405",
       "429",
       "502",
@@ -666,6 +1046,41 @@
           "pattern": "^[A-Za-z0-9_-]+$"
         },
         "description": "Opaque nextCursor from the previous page. Malformed cursors or a cursor order different from the requested order return 400 invalid_cursor."
+      },
+      {
+        "name": "where",
+        "required": false,
+        "schema": {
+          "type": "object",
+          "propertyNames": {
+            "type": "string",
+            "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,63}$",
+            "description": "Case-sensitive top-level field in data."
+          },
+          "additionalProperties": {
+            "type": "string",
+            "pattern": "^(eq|in|gte|lte|prefix):.+$"
+          }
+        },
+        "description": "One condition per indexed top-level field, combined with AND. Operands are JSON scalars (eq), nonempty JSON arrays of scalars (in), ordered JSON numbers/strings (gte/lte) or JSON strings (prefix). Field types must match the schema. Percent-encode query values."
+      },
+      {
+        "name": "sort",
+        "required": false,
+        "schema": {
+          "type": "string",
+          "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,63}\\.(asc|desc)$"
+        },
+        "description": "Sort by a declared indexed field. Missing and null values sort last, and id breaks ties in the requested direction. Mutually exclusive with order."
+      },
+      {
+        "name": "ownerAppId",
+        "required": false,
+        "schema": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        },
+        "description": "Defaults to the calling app. Another app's collection yields only records explicitly shared with the caller, including live app-group shares with current membership."
       }
     ],
     "headerParameters": [],
@@ -676,9 +1091,9 @@
   {
     "path": "/v2/data/{collection}",
     "method": "POST",
-    "operationId": "v2CreateRecord",
-    "summary": "V2 create record",
-    "description": "Active registered backend resolved from verified tenant/issuer/client_id and exact operator-enrolled resource_subject. Owner-only mutations; individually shared reads. Suspension/revocation and disabled enrollment block access. PATCH replaces the complete data object. POST has no automatic retry guarantee.",
+    "operationId": "createVersionedRecord",
+    "summary": "Create a validated record",
+    "description": "Only the owner app writes. Validate data against the registered schema, if any, and enforce the unique field and collection quota. Compact UTF-8 JSON in data is limited to 64 KiB across write endpoints. New records start at version 1. An Idempotency-Key enables the versioned response. A server in compatibility mode also accepts requests without the key and returns the legacy body with an ETag. Strict mode requires the key.",
     "tags": [
       "app-resource"
     ],
@@ -692,10 +1107,12 @@
       "400",
       "401",
       "403",
+      "404",
       "405",
       "409",
       "413",
       "415",
+      "422",
       "429",
       "502",
       "503",
@@ -717,7 +1134,17 @@
       }
     ],
     "queryParameters": [],
-    "headerParameters": [],
+    "headerParameters": [
+      {
+        "name": "Idempotency-Key",
+        "required": false,
+        "schema": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        },
+        "description": "UUID required in strict mode. With a key, an identical request replays its original response within 24 hours."
+      }
+    ],
     "successStatus": "201",
     "successContentType": "application/json",
     "successHasBody": true
@@ -725,9 +1152,9 @@
   {
     "path": "/v2/data/{collection}/{id}",
     "method": "GET",
-    "operationId": "v2GetRecord",
-    "summary": "V2 get record",
-    "description": "Active registered backend resolved from verified tenant/issuer/client_id and exact operator-enrolled resource_subject. Owner-only mutations; individually shared reads. Suspension/revocation and disabled enrollment block access. PATCH replaces the complete data object. POST has no automatic retry guarantee.",
+    "operationId": "getVersionedRecord",
+    "summary": "Get a versioned record",
+    "description": "Returns the current representation. An owner receives the strong ETag to use on a subsequent write. Existing records start at version 1. An authorized management reader sees data with sensitive top-level fields omitted. Masking grants no read permission. Strict mode includes version in the response body. Compatibility mode retains the legacy body. Shared and management reads omit the write ETag.",
     "tags": [
       "app-resource"
     ],
@@ -791,9 +1218,9 @@
   {
     "path": "/v2/data/{collection}/{id}",
     "method": "PATCH",
-    "operationId": "v2ReplaceRecordData",
-    "summary": "V2 replace record data",
-    "description": "Active registered backend resolved from verified tenant/issuer/client_id and exact operator-enrolled resource_subject. Owner-only mutations; individually shared reads. Suspension/revocation and disabled enrollment block access. PATCH replaces the complete data object. POST has no automatic retry guarantee.",
+    "operationId": "replaceVersionedRecord",
+    "summary": "Replace record data or increment numeric fields",
+    "description": "The data form replaces the complete data object and checks schema and uniqueness. The operations form is the only edit that may omit If-Match, because it updates server-side without a client read. An If-Match supplied with operations must still match. An Idempotency-Key is required for operations. A lock held by a different caller blocks either form. An increment uses the current value of a declared top-level numeric indexed field. by, min and max are numbers. Bounds are optional and inclusive, and min must be at most max. A nonnumeric or absent value, an ineligible field or inverted bounds returns 400. Process increments in array order and apply them together in one database statement. A bound failure returns 409 with limit_exceeded and the field name. A successful write increments the record version once and validates the resulting data against the collection schema. Strict mode requires If-Match for replacements. Compatibility mode accepts its omission and preserves the legacy replacement body. An atomic increment always returns a versioned body.",
     "tags": [
       "app-resource"
     ],
@@ -810,8 +1237,12 @@
       "404",
       "405",
       "409",
+      "412",
       "413",
       "415",
+      "422",
+      "423",
+      "428",
       "429",
       "502",
       "503",
@@ -842,7 +1273,26 @@
       }
     ],
     "queryParameters": [],
-    "headerParameters": [],
+    "headerParameters": [
+      {
+        "name": "If-Match",
+        "required": false,
+        "schema": {
+          "type": "string",
+          "pattern": "^\"record-[a-f0-9]{64}-[1-9][0-9]{0,15}\"$"
+        },
+        "description": "Send the exact strong ETag from the record response. Required when the request replaces existing data. Atomic increments and creation by unique key may omit it. If supplied, a missing or stale record version returns 412."
+      },
+      {
+        "name": "Idempotency-Key",
+        "required": false,
+        "schema": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        },
+        "description": "Required when the PATCH body contains operations. The planned Idempotency-Key replay and 24-hour retention rules apply when a key is supplied."
+      }
+    ],
     "successStatus": "200",
     "successContentType": "application/json",
     "successHasBody": true
@@ -850,9 +1300,9 @@
   {
     "path": "/v2/data/{collection}/{id}",
     "method": "DELETE",
-    "operationId": "v2DeleteRecord",
-    "summary": "V2 delete record",
-    "description": "Active registered backend resolved from verified tenant/issuer/client_id and exact operator-enrolled resource_subject. Owner-only mutations; individually shared reads. Suspension/revocation and disabled enrollment block access. PATCH replaces the complete data object. POST has no automatic retry guarantee.",
+    "operationId": "deleteVersionedRecord",
+    "summary": "Delete a record conditionally",
+    "description": "In strict mode the owner must supply If-Match for every existing record, including in schemaless collections and while holding the record lock. A missing required tag or stale tag leaves the record unchanged. A lock held by a different caller prevents deletion. Compatibility mode accepts an omitted If-Match.",
     "tags": [
       "app-resource"
     ],
@@ -868,6 +1318,9 @@
       "403",
       "404",
       "405",
+      "412",
+      "423",
+      "428",
       "429",
       "502",
       "503",
@@ -896,7 +1349,163 @@
       }
     ],
     "queryParameters": [],
-    "headerParameters": [],
+    "headerParameters": [
+      {
+        "name": "If-Match",
+        "required": false,
+        "schema": {
+          "type": "string",
+          "pattern": "^\"record-[a-f0-9]{64}-[1-9][0-9]{0,15}\"$"
+        },
+        "description": "Send the exact strong ETag from the record response. Required when the request replaces existing data. Atomic increments and creation by unique key may omit it. If supplied, a missing or stale record version returns 412."
+      },
+      {
+        "name": "Idempotency-Key",
+        "required": false,
+        "schema": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        },
+        "description": "With a key, an identical request replays its original response within 24 hours."
+      }
+    ],
+    "successStatus": "204",
+    "successContentType": null,
+    "successHasBody": false
+  },
+  {
+    "path": "/v2/data/{collection}/{id}:lock",
+    "method": "POST",
+    "operationId": "lockRecord",
+    "summary": "Acquire or renew a record lock",
+    "description": "The owner app may acquire an exclusive lock for 300 seconds by default, up to 1800 seconds per request. Core binds the lock to the verified app and, when present, its verified delegated user. To renew an active lock, send its lockId in the body and a fresh Idempotency-Key. Renewal sets the expiry relative to the renewal time and retains the lockId. Acquiring without lockId while already holding the active lock returns that lock without extending it. A stale lockId returns 409 resource_conflict. A lock held by another caller returns 423. Core checks the active lock in the same transaction as each record mutation. Locks expire automatically and leave the record ETag unchanged.",
+    "tags": [
+      "app-resource"
+    ],
+    "security": [
+      {
+        "coreBearer": []
+      }
+    ],
+    "responses": [
+      "200",
+      "400",
+      "401",
+      "403",
+      "404",
+      "405",
+      "409",
+      "413",
+      "415",
+      "422",
+      "423",
+      "429",
+      "502",
+      "503",
+      "504"
+    ],
+    "hasRequestBody": true,
+    "requestContentTypes": [
+      "application/json"
+    ],
+    "pathParameters": [
+      {
+        "name": "collection",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_-]{0,62}$"
+        },
+        "description": ""
+      },
+      {
+        "name": "id",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        },
+        "description": ""
+      }
+    ],
+    "queryParameters": [],
+    "headerParameters": [
+      {
+        "name": "Idempotency-Key",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        },
+        "description": "Required UUID for this write. A missing or malformed key returns 400 invalid_request. Core retains the first recorded result for 24 hours, scoped to the verified tenant and caller, HTTP method and concrete request path. Within that window, the same key and logical request replay the first status, body and resource headers without another write. A changed body or write precondition for the same key returns 422 idempotency_key_reused. Concurrent identical requests share one result; every replay requires current authorization."
+      }
+    ],
+    "successStatus": "200",
+    "successContentType": "application/json",
+    "successHasBody": true
+  },
+  {
+    "path": "/v2/data/{collection}/{id}:lock",
+    "method": "DELETE",
+    "operationId": "releaseRecordLock",
+    "summary": "Release a record lock",
+    "description": "Only the holder of the active lock may release it, using the exact Lock-Id. Administrators cannot force release. If the record exists and has no active lock, return 204. An active lock held by another caller returns 423. An active lock held by this caller with a different lockId returns 409 resource_conflict.",
+    "tags": [
+      "app-resource"
+    ],
+    "security": [
+      {
+        "coreBearer": []
+      }
+    ],
+    "responses": [
+      "204",
+      "400",
+      "401",
+      "403",
+      "404",
+      "405",
+      "409",
+      "423",
+      "429",
+      "502",
+      "503",
+      "504"
+    ],
+    "hasRequestBody": false,
+    "requestContentTypes": [],
+    "pathParameters": [
+      {
+        "name": "collection",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_-]{0,62}$"
+        },
+        "description": ""
+      },
+      {
+        "name": "id",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        },
+        "description": ""
+      }
+    ],
+    "queryParameters": [],
+    "headerParameters": [
+      {
+        "name": "Lock-Id",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        },
+        "description": "The lockId from the active lock response."
+      }
+    ],
     "successStatus": "204",
     "successContentType": null,
     "successHasBody": false
@@ -1082,9 +1691,9 @@
   {
     "path": "/v2/resource-shares",
     "method": "POST",
-    "operationId": "createReadShare",
-    "summary": "Create read share",
-    "description": "Owner backend explicitly approves read of one live resource for a different active same-tenant app. No update/delete, resharing, wildcard or cross-tenant grant. Future object versions remain shared until expiry/revocation. Not a capability grant or human delegation.",
+    "operationId": "shareResourceWithAppOrGroup",
+    "summary": "Share a resource with an app or a record with an app group",
+    "description": "Use granteeAppId for an exact app recipient or granteeAppGroup for one same-tenant operator-managed app label. A group share applies to one record and expires within 24 hours, like an exact app share. Active membership is checked at read time; expiry, revocation or app suspension terminates subsequent reads. Existing revoke-by-shareId also revokes group shares. Shares grant no write or onward grant authority. A supplied Idempotency-Key replays the original share instead of creating another.",
     "tags": [
       "app-resource"
     ],
@@ -1101,6 +1710,7 @@
       "404",
       "413",
       "415",
+      "422",
       "429",
       "502",
       "503",
@@ -1112,7 +1722,17 @@
     ],
     "pathParameters": [],
     "queryParameters": [],
-    "headerParameters": [],
+    "headerParameters": [
+      {
+        "name": "Idempotency-Key",
+        "required": false,
+        "schema": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        },
+        "description": "Supply a stable UUID for replay safety. Existing exact-app shares remain accepted without it in compatibility mode."
+      }
+    ],
     "successStatus": "201",
     "successContentType": "application/json",
     "successHasBody": true

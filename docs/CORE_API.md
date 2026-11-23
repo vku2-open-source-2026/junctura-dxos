@@ -89,10 +89,12 @@ Methods are included with each family; action suffixes are described in the link
 | `/v1/identity` (GET) | Caller's verified identity | None | Identity and gateway below |
 | `/identity/` (upstream methods) | Keycloak OIDC passthrough | Keycloak protocol/client policy | Identity and gateway below |
 | `/v1/data/*` (GET, POST, PATCH, DELETE) | Legacy tenant records | Legacy client allowlist; writer for mutations | Structured data below |
-| `/v2/data/*` (GET, POST, PATCH, DELETE) | Application-private records | Active bound backend; owner/writer for mutations; exact read shares | Structured data below; [SECURITY.md](SECURITY.md) |
+| `/v2/data/*` (GET, POST, PATCH, DELETE) | Application-private records, filtered lists and aggregates | Active bound backend; owner/writer for mutations; exact or app-group read shares | Structured data below; [SECURITY.md](SECURITY.md) |
+| `/v2/data:export`, `/v2/data:import` (GET, POST) | Owner-only NDJSON snapshot and transactional import | Active bound backend; writer for import | Structured data below |
+| `/v2/data/{collection}/aggregate` (GET) | Count and group readable records | Active bound backend; owner, read share or management grant | Structured data below |
 | `/v1/objects` and `/*` (GET, POST, PUT, DELETE) | Legacy tenant bytes | Legacy client allowlist; writer for mutations | Unstructured objects below |
 | `/v2/objects` and `/*` (GET, POST, PUT, DELETE) | Application-private bytes | Active bound backend; owner/writer for mutations; exact read shares | Unstructured objects below; [SECURITY.md](SECURITY.md) |
-| `/v2/resource-shares` (POST), `/{shareId}` (DELETE) | Create/revoke exact read shares | Active owner backend and writer | [SECURITY.md](SECURITY.md) |
+| `/v2/resource-shares` (POST), `/{shareId}` (DELETE) | Create/revoke exact app or app-group read shares | Active owner backend and writer | [SECURITY.md](SECURITY.md) |
 | `/v2/secrets/{name}` (GET, PUT, DELETE) | Secret metadata/write/delete; GET never returns plaintext | Active bound backend; writer for PUT/DELETE | [OPERATIONS.md](OPERATIONS.md) |
 | `/v1/workflows/*` (GET, POST, DELETE) | Definitions and execution lifecycle/oversight | Writer for lifecycle mutations; management `audit.read` for list/summary | Workflow engine; Storage summary and workflow history below |
 | `/v1/applications` (POST), `/{appId}` (GET), `/{appId}/approve`, `/{appId}/state` (POST) | Register through authorized setup tooling, inspect, activate and change application state | Enrolled owner/admin visibility, `audit.read` reads any (read-only); `applications.register` / `applications.approve` | [CAPABILITIES.md](CAPABILITIES.md) |
@@ -154,7 +156,7 @@ and upstream send/read to 15 seconds. Upstream URLs are fixed configuration. Aut
 
 Collections match `^[a-z][a-z0-9_-]{0,62}$`; IDs are lowercase UUIDs. JSON writes require `application/json`, at most
 64 KiB and exactly one object-valued `data` field. Unknown envelope fields/query parameters are rejected.
-All access requires reader; mutations require writer. Responses expose only ID, collection, JSON data and creation time. There are no application-specific schemas or business rules.
+All access requires reader; mutations require writer. Responses expose only ID, collection, JSON data and creation time. V1 collections are schemaless.
 
 V2 has the same methods/envelopes under `/v2/data`, with server-resolved owner application, owner-only writes and
 exact resource read shares. Active registration/backend binding and live app state are checked; see [SECURITY.md](SECURITY.md).
@@ -168,11 +170,115 @@ order mismatch return `400 invalid_cursor`. Item GET accepts only `limit`, valid
 default 100) and returns one record even if a larger limit is supplied. It continues to accept repeated `limit`
 keys using the first value. `order` and `cursor` on item GET, and all query keys on writes, return `400 invalid_query`.
 
-Core signs 30-second tenant assertions for PostgREST (`aud=junctura-data`, role `junctura_api` for legacy records;
-`junctura_resource_api` for v2). Caller tokens are not database credentials. PostgreSQL FORCE ROW LEVEL SECURITY
+Core signs 30-second tenant assertions for PostgREST with audience `junctura-data`.
+The database role is `junctura_api` for legacy records, `junctura_resource_api` for legacy v2 list,
+and `junctura_record_api` for the v2 record RPC. Caller tokens are not database credentials. PostgreSQL FORCE ROW LEVEL SECURITY
 checks tenant/resource claims. The signing secret stays private; no anonymous PostgREST role or data/database port is published.
 `data-migrate` applies versioned SQL transactionally, retaining data and recording checksums; changed applied migrations
 are refused. Add reviewed migrations for schema changes. Named volumes survive `docker compose down`; never use `down -v` on persistent data.
+
+### Versioned records
+
+| Route | Methods | Contract |
+| --- | --- | --- |
+| `/v2/data-schemas/{collection}` | PUT | Register a collection schema and indexed, searchable, sensitive and unique fields. |
+| `/v2/data/{collection}` | POST | Create a record with a generated ID and version 1. |
+| `/v2/data/{collection}/{id}` | GET, PATCH, DELETE | Read, replace, increment or delete an individual record. |
+| `/v2/data/{collection}/{id}:lock` | POST, DELETE | Acquire, renew or release an exclusive lease. |
+| `/v2/data/{collection}/by-key/{key}` | PUT | Create or conditionally replace by a case-sensitive unique key. |
+| `/v2/data:batch` | POST | Apply 1–50 operations in request order in one transaction. |
+
+V2 collection schemas use `type`, `required`, `properties`, `enum`, `minLength`,
+`maxLength`, `pattern`, `minimum`, `maximum`, `items` and `format` for dates and
+date-times. The root is an object and the maximum schema depth is eight. Patterns are at most 256
+characters and use PostgreSQL regular expressions with C collation. The subset
+supports ASCII literals, character classes, anchors and quantifiers on single
+atoms. Grouping, alternation and backreferences are outside the subset.
+Indexed fields have a declared scalar type. Dates and offset date-times are
+normalized to UTC in the index at PostgreSQL's microsecond precision. Record
+writes reject numbers outside ±2^53 or numbers that lose decimal precision
+during HTTP parsing. Core measures the 64 KiB data limit in compact UTF-8
+JSON with insignificant whitespace and trailing decimal zeros removed.
+
+Schema registration validates existing records and rebuilds their indexed field
+values in one transaction while holding the collection's write lock. The record
+RPC has a 4-second statement timeout and a 2-second lock timeout. A timeout rolls
+back the registration and can return `503 data_unavailable` to it or to writers
+waiting on the collection. Register schemas before bulk loads. For populated
+collections, schedule registration during low write traffic and validate its
+duration with representative data before updating large collections.
+
+The owner receives a strong, incarnation-specific ETag on individual reads and
+writes. Keep the complete tag, including the quotes. In compatibility mode,
+unkeyed creates and individual reads retain their legacy bodies. Creates with
+an idempotency key return a versioned body. To require keys on creates and
+preconditions on replacements and deletes, set `STRICT_RECORD_WRITES=true`
+on every Core replica. In strict mode, the default list scope is the calling
+app and list items include their version. Restart pagination after switching
+modes. Management readers with an explicit app-level grant receive the
+representation with sensitive fields omitted.
+
+In compatibility mode, `409` from `POST /v2/data/{collection}` and
+`PATCH /v2/data/{collection}/{id}` returns `error: "conflict"` with the specific
+code in `details.code` and any increment field in `details.field`. This applies
+with or without an idempotency key. Strict mode puts the specific code in `error`
+and returns an increment field at the top level.
+
+#### Filtered lists and aggregates
+
+`GET /v2/data/{collection}` filters indexed fields with `where[field]`. Use a JSON scalar after `eq:`, a
+non-empty JSON array of scalars after `in:`, a JSON string or number after `gte:` or `lte:`, and a JSON
+string after `prefix:`. Operands must match the declared field type; integer fields reject fractional
+values and every numeric operand must survive HTTP parsing without losing decimal precision. URL-encode
+the operands.
+
+Set `sort=field.asc` or `sort=field.desc` to order by one indexed field. `sort` is mutually exclusive with
+`order`; without `sort`, `order` controls creation-time order. Missing and null sort values come last and
+`id` breaks ties. Send `nextCursor` back as `cursor` with the same owner, filters, ordering and schema
+revision. Cursors are opaque and signed; a changed owner, filter, ordering kind or schema revision returns
+`400 invalid_cursor`. System ordering and a data field named `created_at` are distinct bindings even though
+both expose `created_at`.
+
+`GET /v2/data/{collection}/aggregate?count` counts readable matches. Repeat `groupBy` for up to two
+indexed fields or UTC day buckets such as `day(createdOn)`; day buckets require a date or date-time field.
+Missing values group as `null`. Queries that would return more than 1,000 groups return
+`400 invalid_query`. Lists and aggregates read the caller, ACL, schema and rows from one snapshot.
+
+Management readers with an explicit app-level grant can list or aggregate another app's collection with
+`ownerAppId`; sensitive fields are omitted from list data and may not be used as filters, sort keys or
+group dimensions. A scope the caller may not read returns `404 not_found`.
+
+In compatibility mode (`STRICT_RECORD_WRITES=false`), a list without `sort`, any `where[...]` or
+`ownerAppId` keeps the legacy body and cursor without `version` fields. Strict mode and any filtered list
+return the versioned page. Restart pagination after switching modes.
+
+#### Record archives
+
+`GET /v2/data:export` streams a consistent snapshot of the calling app's records as UTF-8 NDJSON in
+`(collection, id)` order, containing record IDs, collections and data. Collection definitions, revisions,
+shares, file bytes and audit rows are outside the format. Register schemas before importing data that needs
+validation. Core reads the first page before sending `200`, bounds snapshot bytes and concurrent snapshots,
+and removes the snapshot when streaming ends, fails or the client disconnects.
+
+`POST /v2/data:import` accepts that NDJSON format, preserves record IDs, starts new versions at 1 and
+applies schema, uniqueness and quota checks in one transaction. The body is required; blank lines, a BOM
+and more than one object per line are rejected. Any failed line rolls back the whole upload. Schema and
+framing failures report the one-based input line as `issues[].line`; an existing record ID conflicts. The
+record data limit is 64 KiB in compact UTF-8 JSON. Per-collection record counts and per-app file bytes are
+subject to configured quotas.
+
+#### App-group read shares
+
+`POST /v2/resource-shares` accepts `granteeAppGroup` for a read share of one catalog record, or
+`granteeAppId` for an exact app share of a record or object. A group share applies to one record and
+expires within 24 hours. `expiresAt` is a real UTC instants ending in `Z`, with seconds or exactly three
+fractional digits. Group membership and share expiry are checked when a recipient reads; removing
+membership, revoking the share, expiry or app suspension terminates subsequent reads. Revoke either kind
+with `DELETE /v2/resource-shares/{shareId}`. Reusing an `Idempotency-Key` with a different body returns
+`422 idempotency_key_reused` with a `requestId`. Shares grant no write or onward grant authority.
+
+When listing another app's collection, set `ownerAppId` to see only the records explicitly shared with the
+caller, including live app-group shares with current membership.
 
 ## Unstructured objects
 
@@ -438,34 +544,6 @@ To build a mock API document, replace each operation carrying that extension wit
 top-level planned operations. Keep both contract files together so relative references resolve.
 Use the current route index for calls to a deployed Core.
 
-### Record store
-
-- `PUT /v2/data-schemas/{collection}` registers the calling app's record schema. Declare top-level
-  `indexed`, `searchable` and `sensitive` fields and an optional string `uniqueKey`. Core checks all
-  later writes and checks existing rows before accepting a replacement. Unregistered collections remain schemaless.
-  The supported JSON Schema keywords are `type`, `required`, `properties`, `enum`, `minLength`,
-  `maxLength`, `pattern`, `minimum`, `maximum`, `items` and `format` for `date` and `date-time`.
-- `GET /v2/data/{collection}` filters indexed fields with `where[field]` and sorts them with
-  `sort=field.asc` or `sort=field.desc`. Use a JSON scalar after `eq:`, a JSON array after `in:`,
-  a JSON string or number after `gte:` or `lte:`, and a JSON string after `prefix:`. URL-encode the
-  operands. Send `nextCursor` back as `cursor` with the same filters, owner and sort. The existing
-  `order` parameter controls creation-time order when `sort` is absent.
-  `GET /v2/data/{collection}/aggregate?count` counts readable matches. Repeat `groupBy` for up to two
-  indexed fields or UTC day buckets such as `day(createdOn)`. Queries can return up to 1,000 groups.
-- `PUT /v2/data/{collection}/by-key/{key}` creates or replaces the record matched by the registered
-  unique field. Send `If-Match` when replacing an existing record. Every record carries a numeric
-  `version`, and individual record responses carry an `ETag`.
-  `POST /v2/data:batch` performs up to 50 creates, replacements, deletes or atomic increments across
-  collections of the calling app in one transaction. A failed operation rolls back the batch.
-- `POST /v2/resource-shares` accepts `granteeAppGroup` for a read share of one catalog record (planned contract; current Core grants reads per resource to each same-tenant application).
-  Group membership and share expiry are checked when a recipient reads. Set `ownerAppId`
-  when listing another app's collection to see its records explicitly shared with the caller.
-- `GET /v2/data:export` streams UTF-8 NDJSON containing the owner's record IDs, collections and data.
-  `POST /v2/data:import` uses that format, retains IDs and applies schema and uniqueness checks in a
-  single transaction. Register schemas before importing data that needs validation.
-  An existing record ID conflicts. The record data limit is 64 KiB in compact UTF-8 JSON.
-  Per-collection record counts and per-app file bytes are subject to configured quotas.
-
 ### Workflows
 
 - `GET /v1/workflows/tasks` lists waiting tasks from verified group memberships. Filter by `definitionKey`,
@@ -495,17 +573,17 @@ Use the current route index for calls to a deployed Core.
 
 ### Concurrent writes and retries
 
-**Breaking change for existing v2 clients when these operations take effect.** Before a record
-replacement or deletion, GET the individual record and copy its `ETag` verbatim into `If-Match`.
-This applies to PATCH with `data`, PUT by unique key when it replaces a record, and DELETE, even
-for collections without a schema. Supply `ifMatch` on every batch replacement or deletion. A
-missing precondition returns `428`. On `412`, reread the record, reconcile your edits and submit
-the new precondition.
+Before a record replacement or deletion, GET the individual record and copy its
+`ETag` verbatim into `If-Match`. Strict mode requires this on PATCH with `data`
+and DELETE, including schemaless collections. PUT by unique key always requires
+it for replacements. Supply `ifMatch` on every batch replacement or deletion.
+A missing required precondition returns `428`. On `412`, reread the record,
+reconcile your edits and submit the new precondition.
 
 For relative changes to indexed numeric fields, send PATCH with `operations` and use
 `increment` with a positive or negative `by`. Core applies the arithmetic in one database
-statement. Optional `min` and `max` bound the result inclusively. This is the only edit that can
-omit `If-Match` because it operates on the current value without a client read.
+statement. Optional `min` and `max` bound the result inclusively. Increments can
+omit `If-Match` in strict mode because they operate on current values.
 
 Use `POST /v2/data/{collection}/{id}:lock` to reserve a record during an edit. The lock expires
 after 5 minutes by default and can last up to 30 minutes per request. Renew it with the returned
@@ -521,6 +599,14 @@ Core keeps the first recorded result for 24 hours in the verified tenant, caller
 path scope. A retry with the same key and logical request, including any write precondition, replays
 the original status, body and resource headers. A changed request with the same key returns
 `422 idempotency_key_reused`. Use a fresh key for each new operation.
+
+Record writes save receipts for `2xx`, `409`, `412`, `422` and `429`. A `423`
+can be retried with the same key after the lock expires or is released. After
+`400` or `428`, correct the request and retry with the same key.
+
+If a batch increment produces data that violates the collection schema, the issue
+points to the resulting field at `/operations/N/data/<field>`, using a zero-based
+batch index and JSON Pointer escaping.
 
 With `quantity` registered as an indexed numeric field, send this body with an `Idempotency-Key`
 to `POST /v2/data:batch` to decrease stock for two items together. If either quantity would go

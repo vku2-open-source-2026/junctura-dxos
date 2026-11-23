@@ -3,6 +3,9 @@
 import { randomUUID } from "node:crypto";
 import { HttpError, json, readJson, requireWriter, uuidPattern } from "../../platform/http/http.mjs";
 import { signInternalToken } from "../../platform/security/internal-token.mjs";
+export { handleAppRecords, presentRecordRequest } from "./records.mjs";
+export { handleRecordArchive } from "./archive/archives.mjs";
+export { handleRecordQuery } from "./query/handler.mjs";
 import { resourceRequest } from "../resources/resources.mjs";
 
 export function dataToken(tenantId, secret) {
@@ -53,7 +56,9 @@ export async function handleData(request, response, identity, config, url) {
   const match = url.pathname.match(/^\/v[12]\/data\/([a-z][a-z0-9_-]{0,62})(?:\/([0-9a-f-]+))?$/);
   if (!match || (match[2] && !uuidPattern.test(match[2]))) throw new HttpError(400, "invalid_record_path");
   const [, collection, id] = match;
-  const send = (query, options) => identity.appId
+  const appScoped = url.pathname.startsWith("/v2/");
+  if (appScoped && !identity.appId) throw new HttpError(403, "application_access_required");
+  const send = (query, options) => appScoped
     ? resourceRequest(config, identity, "app_records", query, options)
     : dataRequest(config, identity.tenantId, query, options);
   const query = new URLSearchParams({ collection: `eq.${collection}`, select: "id,collection,data,created_at", order: "created_at.asc,id.asc" });
@@ -91,6 +96,10 @@ export async function handleData(request, response, identity, config, url) {
     const nextCursor = hasMore
       ? Buffer.from(JSON.stringify({ t: last.created_at, i: last.id, o: order })).toString("base64url") : null;
     return json(response, 200, { items, nextCursor });
+  }
+  if (appScoped) {
+    response.setHeader("Allow", id ? "GET, PATCH, DELETE" : "GET, POST");
+    throw new HttpError(405, "method_not_allowed");
   }
   if ((request.method === "POST" && !id) || (request.method === "PATCH" && id)) {
     requireWriter(identity);

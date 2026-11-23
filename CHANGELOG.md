@@ -8,6 +8,14 @@ All notable changes to Junctura are recorded here. Versions follow
 
 ## Unreleased
 
+- **Indexed record queries, archives and app-group shares:** migrations 031, 034 and 035 add
+  filtered list and aggregate RPCs, short-lived export snapshots with transactional NDJSON import,
+  and operator-managed app groups whose live membership authorizes one-record read shares.
+  `src/modules/data/query` validates `where[field]` operators, the `sort`/`order` exclusion,
+  aggregate `groupBy` (including UTC `day(...)`, at most two dimensions and 1,000 groups), and
+  signed opaque cursors bound to owner, filters, sort and schema revision. `@junctura/server-client`
+  adds calls for every new record operation, including ETag round-tripping, atomic increments,
+  locks, batches, filtered lists, aggregates, NDJSON export/import and app-group shares.
 - **Docs — three-tier model (issue #61):** Document the three-tier model and its
   call and storage rules. `junctura-workspace` is the planned Layer 2 workspace.
   The health pack and five health applications belong to Layer 3. This supersedes

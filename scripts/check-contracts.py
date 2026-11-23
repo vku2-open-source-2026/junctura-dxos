@@ -78,6 +78,12 @@ EXPECTED = {
     '/v1/applications/{appId}/approve': {'post'}, '/v1/applications/{appId}/state': {'post'},
     '/v1/approvals': {'post'}, '/v1/approvals/{approvalId}': {'get'},
     '/v1/approvals/{approvalId}/revoke': {'post'},
+    '/v2/data-schemas/{collection}': {'put'},
+    '/v2/data/{collection}/{id}:lock': {'post', 'delete'},
+    '/v2/data/{collection}/aggregate': {'get'},
+    '/v2/data/{collection}/by-key/{key}': {'put'}, '/v2/data:batch': {'post'},
+    '/v2/data/{collection}/aggregate': {'get'}, '/v2/data:export': {'get'}, '/v2/data:import': {'post'},
+    '/v2/data:export': {'get'}, '/v2/data:import': {'post'},
     '/v2/resource-shares': {'post'}, '/v2/resource-shares/{shareId}': {'delete'},
     '/v1/workflows/definitions': {'get'}, '/v1/workflows/executions': {'post'},
     '/v1/workflows/executions/{executionId}': {'get', 'delete'},
@@ -145,7 +151,30 @@ def check_value(spec, schema, value, label):
     validator = Draft202012Validator({'$ref': URI + '#/$defs/Observed'}, registry=registry, format_checker=FORMATS)
     error = next(validator.iter_errors(value), None)
     # jsonschema's normal messages can contain tokens/payloads. Never emit them.
-    require(error is None, label + ': schema mismatch' + (f' ({error.validator})' if error else ''))
+    # Diagnostics list only JSON paths and keyword names, never values.
+    require(error is None, label + ': schema mismatch' + (f' ({error.validator}{describe_error(error)})' if error else ''))
+
+
+def describe_error(error):
+    def where(item):
+        path = '/'.join(str(part) for part in item.absolute_path)
+        return '/' + path if path else '/'
+    def token(item):
+        # Server-defined machine codes are safe to show; never show other values.
+        value = item.instance
+        if item.validator != 'enum':
+            return ''
+        if isinstance(value, str) and re.fullmatch(r'[a-z_]{1,64}', value):
+            return f'={value}'
+        if isinstance(value, str):
+            classes = ''.join(sorted({'a' if c.islower() else 'A' if c.isupper() else '9' if c.isdigit() else '_' if c == '_' else ' ' if c.isspace() else '.' for c in value}))
+            return f'=<str len {len(value)} chars [{classes}]>'
+        return f'=<{type(value).__name__}>'
+    branches = []
+    for item in error.context or []:
+        branches.append(f'branch {item.relative_schema_path[0]} {where(item)} {item.validator}{token(item)}')
+    detail = ' at ' + where(error)
+    return detail + ('; ' + '; '.join(branches[:8]) if branches else '')
 
 
 def validate_official_structure(*specs):
@@ -191,7 +220,7 @@ def validate_paths(spec, dereference, *, foundation=False):
             return
         if not planned:
             require((ROOT / operation['x-junctura-source']).is_file(), oid + ': source missing')
-            require(operation['x-junctura-test-suite'] in ('core', 'applications'), oid + ': coverage suite missing')
+            require(operation['x-junctura-test-suite'] in ('core', 'applications', 'records', 'record-queries', 'record-archives', 'app-group-shares'), oid + ': coverage suite missing')
         parameters = [dereference(p) for p in operation.get('parameters', [])]
         require(len({(p['in'], p['name']) for p in parameters}) == len(parameters), oid + ': duplicate parameter')
         require({p['name'] for p in parameters if p['in'] == 'path'} == set(re.findall(r'{([^}]+)}', path)), oid + ': path parameters differ')
@@ -277,11 +306,11 @@ def validate_observations(spec, observations, suite=None):
             require(media in response['content'], label + ': undocumented response content type')
             if media == 'application/json':
                 require(not item.get('responseInvalidJson'), label + ': invalid response JSON')
-                check_value(spec, response['content'][media]['schema'], item.get('responseBody'), label + ' response')
+                check_value(spec, response['content'][media]['schema'], item.get('responseBody'), label + ' response ' + str(item['status']))
             elif media == 'application/octet-stream':
                 require(item['responseBytes'] > 0, label + ': empty object download')
                 require(int(headers['content-length']) == item['responseBytes'], label + ': binary length mismatch')
-            else:
+            elif media != 'application/x-ndjson':
                 require(item['responseBytes'] > 0, label + ': empty text representation')
         if not operation or item['status'] >= 400:
             continue  # Malformed/unauthorized negative requests need not satisfy a success request schema.
@@ -289,11 +318,25 @@ def validate_observations(spec, observations, suite=None):
         security = operation.get('security', [])
         require(not security or {} in security or item['authorized'], label + ': protected request succeeded without credentials')
         parameters = [resolve(spec, p) for p in operation.get('parameters', [])]
-        known_query = {p['name'] for p in parameters if p['in'] == 'query'}
-        if operation['x-junctura-query-policy'] == 'closed':
-            require(set(item['query']) <= known_query, label + ': unknown query succeeded')
+        query = dict(item['query'])
+        known_query = set()
         for param in parameters:
-            where = {'path': item['pathParams'], 'query': item['query'], 'header': item['requestHeaders']}[param['in']]
+            if param['in'] != 'query':
+                continue
+            name = param['name']
+            known_query.add(name)
+            if param.get('style') == 'deepObject':
+                prefix = name + '['
+                fields = {key[len(prefix):-1]: query.pop(key) for key in list(query)
+                          if key.startswith(prefix) and key.endswith(']')}
+                if fields:
+                    query[name] = fields
+            elif name in query and resolve(spec, param['schema']).get('type') == 'array':
+                query[name] = item.get('repeatedQuery', {}).get(name, [query[name]])
+        if operation['x-junctura-query-policy'] == 'closed':
+            require(set(query) <= known_query, label + ': unknown query succeeded')
+        for param in parameters:
+            where = {'path': item['pathParams'], 'query': query, 'header': item['requestHeaders']}[param['in']]
             key = param['name'].lower() if param['in'] == 'header' else param['name']
             require(not param.get('required') or key in where, label + ': required request parameter missing')
             if key in where:
@@ -306,12 +349,14 @@ def validate_observations(spec, observations, suite=None):
                         raise ContractError(label + ': noninteger query') from None
                 check_value(spec, param['schema'], value, label + ' request parameter')
         if 'requestBody' in operation:
+            if not item['requestBytes'] and not operation['requestBody'].get('required'):
+                continue
             require(item['requestBytes'] > 0, label + ': missing request body')
             require(item['requestBytes'] <= operation.get('x-max-body-bytes', 10485760), label + ': accepted oversized body')
             require(item['requestBytes'] >= operation.get('x-min-body-bytes', 0), label + ': accepted undersized body')
             media = item['requestHeaders'].get('content-type', '').split(';')[0].strip()
             require(media in operation['requestBody']['content'], label + ': accepted undocumented request media type')
-            if media != 'application/octet-stream':
+            if media not in ('application/octet-stream', 'application/x-ndjson'):
                 require(not item.get('requestInvalidJson'), label + ': accepted invalid request JSON')
                 check_value(spec, operation['requestBody']['content'][media]['schema'], item.get('requestBody'), label + ' request')
     if suite:
@@ -332,7 +377,7 @@ def self_test(spec):
     check_value(spec, batch['schema'], increments, 'Atomic batch example')
     record = {key: increments['operations'][0][key] for key in ('collection', 'id')}
     for operation in ({**record, 'op': 'delete'}, {**record, 'op': 'replace', 'data': {}}):
-        check_value(spec, batch['schema'], {'operations': [{**operation, 'ifMatch': '"record-2"'}]},
+        check_value(spec, batch['schema'], {'operations': [{**operation, 'ifMatch': '"record-' + 'a' * 64 + '-2"'}]},
                     'Conditional batch example')
         try:
             check_value(spec, batch['schema'], {'operations': [operation]}, 'Missing batch ifMatch')
