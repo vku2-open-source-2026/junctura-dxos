@@ -58,6 +58,76 @@ test("fresh install records every checksum atomically", async () => {
   assert.equal(await sql("SELECT last_version FROM core.schema_migration_state WHERE id = 1"), latestVersion);
 });
 
+test("workflow migration preserves legacy reservations and scopes worker leases", async () => {
+  const tenant = "workflow-migration";
+  const key = randomUUID();
+  await sql(`INSERT INTO core.workflow_requests (tenant_id, key, definition_id, input_hash, engine_id)
+    VALUES ('${tenant}', '${key}', 'checkpoint:1:1', repeat('0', 64), 'old-execution');`);
+  assert.equal(await sql(`SET ROLE junctura_workflow_api;
+    SELECT set_config('request.jwt.claims','{"tenant_id":"${tenant}","role":"junctura_workflow_api"}',false);
+    SELECT core.workflow_execution_command('get','{"executionId":"old-execution"}')->'value';`).then(result => result.split("\n").at(-1)), "null");
+  assert.equal(await sql(`SELECT engine_id FROM core.workflow_requests WHERE tenant_id='${tenant}' AND key='${key}';`), "old-execution");
+  assert.equal(await sql(`SELECT has_function_privilege('junctura_workflow_api','core.workflow_worker_command(text,jsonb)','EXECUTE'),
+    has_table_privilege('junctura_workflow_worker','app_private.workflow_completion_outbox','SELECT'),
+    has_table_privilege('junctura_api','app_private.workflow_definition_policies','INSERT');`), "f|f|f");
+
+  await sql(`INSERT INTO app_private.workflow_executions
+    (tenant_id,caller_scope,request_key,digest,definition_id,definition_key,steps,execution_id,start_result)
+    VALUES ('${tenant}',sha256(''::bytea),'${key}',sha256(''::bytea),'workflow:1:1','workflow','{}','execution','{}');
+    INSERT INTO app_private.workflow_completion_outbox
+    (tenant_id,execution_id,definition_id,task_id,engine_execution_id,step_key,unit,candidate_group,actor_subject,variables)
+    VALUES ('${tenant}','execution','workflow:1:1','task','child-execution','review','unit','group','subject','{}');`);
+  const worker = async (operation, payload = {}, scope) => {
+    const claims = JSON.stringify({ role: "junctura_workflow_worker", tenant_id: scope });
+    const output = await sql(`SET ROLE junctura_workflow_worker;
+      SELECT set_config('request.jwt.claims','${claims}',false);
+      SELECT core.workflow_worker_command('${operation}','${JSON.stringify(payload)}');`);
+    return JSON.parse(output.split("\n").at(-1));
+  };
+  const { value: leased } = await worker("lease");
+  assert.equal(leased.tenant_id, tenant);
+  assert.equal(leased.task_id, "task");
+  assert.equal((await worker("lease")).value, null);
+  const settle = { taskId: leased.task_id, lease: leased.lease, state: "cancelled" };
+  await worker("settle", settle, "foreign-tenant");
+  assert.equal(await sql(`SELECT state FROM app_private.workflow_completion_outbox WHERE tenant_id='${tenant}';`), "pending");
+  await worker("settle", { ...settle, lease: randomUUID() }, tenant);
+  assert.equal(await sql(`SELECT state FROM app_private.workflow_completion_outbox WHERE tenant_id='${tenant}';`), "pending");
+  await worker("settle", settle, tenant);
+  assert.equal(await sql(`SELECT state FROM app_private.workflow_completion_outbox WHERE tenant_id='${tenant}';`), "cancelled");
+});
+
+test("workflow cancellation resume is tenant-scoped and fenced by the current lease", async () => {
+  const tenant = "workflow-cancel";
+  await sql(`INSERT INTO app_private.workflow_executions
+    (tenant_id,caller_scope,request_key,digest,definition_id,definition_key,steps,execution_id,start_result,cancel_requested)
+    VALUES ('${tenant}',sha256(''::bytea),gen_random_uuid(),sha256(''::bytea),'workflow:1:1','workflow','{}','execution','{}',true);`);
+  const command = async (operation, payload = {}, scope = tenant) => {
+    const claims = JSON.stringify({ role: "junctura_workflow_api", tenant_id: scope, resource_writer: true });
+    const output = await sql(`SET ROLE junctura_workflow_api;
+      SELECT set_config('request.jwt.claims','${claims}',false);
+      SELECT core.workflow_task_command('${operation}','${JSON.stringify({ executionId: "execution", ...payload })}');`);
+    return JSON.parse(output.split("\n").at(-1));
+  };
+  const flag = () => sql(`SELECT cancel_requested FROM app_private.workflow_executions WHERE tenant_id='${tenant}';`);
+  assert.deepEqual(await command("history"), { status: 200, value: [] });
+  assert.deepEqual(await command("history", { executionId: "legacy" }), { status: 200, value: [] });
+  const first = await command("cancel", { status: "running" });
+  assert.equal(first.status, 200);
+  assert.ok(first.value);
+  assert.equal((await command("cancel", { status: "running" })).error, "task_conflict");
+  await command("resume", { lease: first.value }, "another-tenant");
+  assert.equal(await flag(), "t");
+  await sql(`UPDATE app_private.workflow_executions SET cancel_lease_until='-infinity' WHERE tenant_id='${tenant}';`);
+  const replacement = await command("cancel", { status: "running" });
+  assert.equal(replacement.status, 200);
+  assert.notEqual(replacement.value, first.value);
+  await command("resume", { lease: first.value });
+  assert.equal(await flag(), "t");
+  assert.equal((await command("resume", { lease: replacement.value })).status, 204);
+  assert.equal(await flag(), "f");
+});
+
 test("upgrading 029 preserves records and backfills incarnations without a table rewrite", async () => {
   const database = "record_upgrade";
   const upgradeDir = join(directory, "record-upgrade");

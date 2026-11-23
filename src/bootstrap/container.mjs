@@ -7,6 +7,7 @@ import { createApi } from "../api.mjs";
 import { createCapabilityRuntime } from "../modules/capability/execution/runtime.mjs";
 import { startDirectoryReconciler } from "../modules/directory/directory.mjs";
 import { createCompositionRuntime } from "../modules/capability/composition/runtime.mjs";
+import { startWorkflowReconciler } from "../modules/workflow/workflow.mjs";
 
 // Approved public origins plus, when configured, internal origins trusted only
 // through the operator's provider CA.
@@ -28,8 +29,9 @@ export function createApplication(config, execution, composition) {
   }
   const route = createApi(config);
   const stopDirectory = startDirectoryReconciler(config);
+  const stopWorkflow = startWorkflowReconciler(config);
   return {
     route,
-    close() { stopDirectory?.(); executionRuntime?.close(); compositionRuntime?.close(); },
+    close() { stopDirectory?.(); stopWorkflow?.(); executionRuntime?.close(); compositionRuntime?.close(); },
   };
 }

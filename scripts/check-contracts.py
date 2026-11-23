@@ -88,6 +88,9 @@ EXPECTED = {
     '/v1/workflows/definitions': {'get'}, '/v1/workflows/executions': {'post'},
     '/v1/workflows/executions/{executionId}': {'get', 'delete'},
     '/v1/workflows/executions/{executionId}/complete': {'post'},
+    '/v1/workflows/executions/{executionId}/history': {'get'},
+    '/v1/workflows/tasks': {'get'}, '/v1/workflows/tasks/{taskId}/claim': {'post'},
+    '/v1/workflows/tasks/{taskId}/release': {'post'},
     '/v1/directory/unit-types': {'get'}, '/v1/directory/unit-types/{unitType}': {'put', 'delete'},
     '/v1/directory/units': {'get'}, '/v1/directory/units/{unit}': {'put', 'delete'},
     '/v1/directory/units/{unit}/groups': {'get'},
@@ -226,7 +229,7 @@ def validate_paths(spec, dereference, *, foundation=False):
             return
         if not planned:
             require((ROOT / operation['x-junctura-source']).is_file(), oid + ': source missing')
-            require(operation['x-junctura-test-suite'] in ('core', 'applications', 'records', 'record-queries', 'record-archives', 'app-group-shares', 'directory'), oid + ': coverage suite missing')
+            require(operation['x-junctura-test-suite'] in ('core', 'applications', 'records', 'record-queries', 'record-archives', 'app-group-shares', 'directory', 'workflow-tasks'), oid + ': coverage suite missing')
         parameters = [dereference(p) for p in operation.get('parameters', [])]
         require(len({(p['in'], p['name']) for p in parameters}) == len(parameters), oid + ': duplicate parameter')
         require({p['name'] for p in parameters if p['in'] == 'path'} == set(re.findall(r'{([^}]+)}', path)), oid + ': path parameters differ')
@@ -353,6 +356,8 @@ def validate_observations(spec, observations, suite=None):
                         value = int(value)
                     except (ValueError, TypeError):
                         raise ContractError(label + ': noninteger query') from None
+                if schema.get('type') == 'boolean' and value in ('true', 'false'):
+                    value = value == 'true'
                 check_value(spec, param['schema'], value, label + ' request parameter')
         if 'requestBody' in operation:
             if not item['requestBytes'] and not operation['requestBody'].get('required'):

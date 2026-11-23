@@ -177,16 +177,19 @@ function requestExample(endpoint: ApiEndpointDef): RequestExample {
         };
       case "revokeApplicationApproval":
         return { contentType, json: { reason: "Operator revoked approval" } };
-      case "startWorkflow":
+      case "startWorkflowWithDeadlines":
         return {
           contentType,
           json: {
-            definitionId: EXECUTION_ID,
+            definitionId: "process_a:1:42",
             input: { requestId: "example-request" },
+            dueAt: futureIso(60),
           },
         };
-      case "completeWorkflow":
-        return { contentType, json: {} };
+      case "completeWorkflowTask":
+        return { contentType, json: { taskId: "task-23", variables: { decision: "approved" } } };
+      case "claimWorkflowTask":
+        return { contentType, json: { ttlSeconds: 1800 } };
       case "putDirectoryUnitType":
       case "putDirectoryGroup":
         return { contentType, json: { name: "Example" } };

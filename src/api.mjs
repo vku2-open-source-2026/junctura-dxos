@@ -292,8 +292,8 @@ export function createApi(config) {
       return handleSecrets(request, response, identity, config, new URL(request.url, "http://core"));
     }
     if (path?.startsWith("/v1/workflows/")) {
-      const identity = await authorize(request, true);
-      return handleWorkflow(request, response, identity, config, new URL(request.url, "http://core"));
+      return presentRecordRequest(request, response, async () =>
+        handleWorkflow(request, response, await authorize(request, true), config, new URL(request.url, "http://core")));
     }
     if (path === "/internal/auth" || path === "/v1/identity") {
       let identity;
