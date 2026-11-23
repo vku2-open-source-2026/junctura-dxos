@@ -7,7 +7,7 @@
       "name": "Apache License 2.0",
       "identifier": "Apache-2.0"
     },
-    "description": "Machine-readable contract for implemented Core routes and planned additions. Planned operations carry x-junctura-status: planned. An x-junctura-planned-operation contains the full future Operation Object at the same path and method as its implemented parent. Mock consumers can replace each parent with its planned operation to build a planned view. The following authority rules apply to implemented routes. Capability Registry, Resolver, Composition, delegation and provider dispatch remain separate design drafts. Reader/writer roles are not OAuth scopes. Tenant/app IDs in caller headers or JSON never supply authority. V2 binds active registered apps to verified tenant, issuer and client. Core checks the enrolled service account or the current user assignment. Records and objects of a deployed app are isolated by the verified unit. Application backends enforce their own domain decisions. Owner writes and exact expiring read shares are enforced at SQL/storage boundaries. App/owner suspension blocks subsequent v2 access, not already-authorized in-flight work. Workflow and explicitly allowlisted v1 resources remain tenant-scoped. See RESOURCE_AUTHORIZATION.md for migration, logical deletion and retained bytes."
+    "description": "Machine-readable contract for implemented Core routes and planned additions. Planned operations carry x-junctura-status: planned. An x-junctura-planned-operation contains the full future Operation Object at the same path and method as its implemented parent. Mock consumers can replace each parent with its planned operation to build a planned view. Capability extensions are described in a separate contract. Reader/writer roles are not OAuth scopes. Tenant/app IDs in caller headers or JSON never supply authority. V2 binds active registered apps to verified tenant, issuer and client. Core checks the enrolled service account or the current user assignment. Token exchange binds an enrolled application actor to a currently assigned user and unit. Records and objects of a deployed app are isolated by the verified unit. Application backends enforce their own domain decisions. Owner writes and exact expiring read shares are enforced at SQL/storage boundaries. App/owner suspension blocks subsequent v2 access while authorized in-flight work may finish. Workflow and explicitly allowlisted v1 resources remain tenant-scoped. See RESOURCE_AUTHORIZATION.md for migration, logical deletion and retained bytes."
   },
   "jsonSchemaDialect": "https://json-schema.org/draft/2020-12/schema",
   "servers": [
@@ -2889,6 +2889,68 @@
         },
         "x-junctura-source": "src/modules/identity/identity.mjs",
         "x-junctura-test-suite": "core"
+      }
+    },
+    "/v1/token-exchange": {
+      "post": {
+        "operationId": "exchangeUserToken",
+        "summary": "Exchange a user's login token for a delegated Core bearer",
+        "description": "Authenticate as an active deployed application's enrolled service account. Send a user access token issued to that same client and tenant. Core validates the current user assignment and pins its selected unit. The result carries the user's sub and application's act, expires within 60 seconds and within both input token lifetimes, and has no refresh token. Each delegated request checks Keycloak, deployment and assignment again. Write access requires both input tokens to carry core-writer and the current app role to allow the operation.",
+        "tags": ["tenant"],
+        "security": [{"coreBearer": []}],
+        "x-junctura-core-roles": ["core-reader"],
+        "x-junctura-authority": "app-delegation",
+        "x-junctura-query-policy": "closed",
+        "x-junctura-source": "src/platform/auth/auth.mjs",
+        "x-junctura-test-suite": "delegation",
+        "x-max-body-bytes": 65536,
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "subjectToken": {"type": "string", "minLength": 1, "maxLength": 8185, "writeOnly": true}
+                },
+                "required": ["subjectToken"],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Delegated access token. Present as Authorization: Bearer to supported Core routes.",
+            "headers": {
+              "Cache-Control": {"$ref": "#/components/headers/CacheControl"},
+              "X-Content-Type-Options": {"$ref": "#/components/headers/NoSniff"}
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "access_token": {"type": "string", "minLength": 1, "maxLength": 8185},
+                    "token_type": {"const": "Bearer"},
+                    "expires_in": {"type": "integer", "minimum": 1, "maximum": 60}
+                  },
+                  "required": ["access_token", "token_type", "expires_in"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {"$ref": "#/components/responses/BadRequest"},
+          "401": {"$ref": "#/components/responses/Unauthorized"},
+          "403": {"$ref": "#/components/responses/Forbidden"},
+          "413": {"$ref": "#/components/responses/TooLarge"},
+          "415": {"$ref": "#/components/responses/UnsupportedMedia"},
+          "429": {"$ref": "#/components/responses/RateLimited"},
+          "502": {"$ref": "#/components/responses/BadGateway"},
+          "503": {"$ref": "#/components/responses/Unavailable"},
+          "504": {"$ref": "#/components/responses/GatewayTimeout"}
+        }
       }
     },
     "/v1/data/{collection}": {
@@ -12702,7 +12764,8 @@
           "consent_required",
           "consent_revoked",
           "consent_expired",
-          "unit_mismatch"
+          "unit_mismatch",
+          "delegation_not_allowed"
         ]
       },
       "AppAccessDenial": {

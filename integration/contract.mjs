@@ -11,7 +11,7 @@ const routes = Object.keys(spec.paths)
   .map(path => ({ path, names: [...path.matchAll(/\{([^}]+)\}/g)].map(m => m[1]),
   regex: new RegExp('^' + path.replace(/[.*+?^$()|[\]\\]/g, '\\$&').replace(/\{[^}]+\}/g, '([^/]+)') + '$') }));
 const observations = [];
-const secretNames = new Set(['client_secret', 'access_token', 'refresh_token', 'id_token', 'id_token_hint', 'code', 'code_verifier']);
+const secretNames = new Set(['client_secret', 'access_token', 'refresh_token', 'id_token', 'id_token_hint', 'code', 'code_verifier', 'subjectToken']);
 // `details.code` carries a machine error code, not an OAuth code, so it stays visible to the validator.
 function redact(value, parent) {
   if (Array.isArray(value)) return value.map(item => redact(item));

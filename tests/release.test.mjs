@@ -20,7 +20,7 @@ test("release packaging requires each app access migration", { skip: !wholeRepos
     "compose.yaml", ".env.example", "docs/GETTING_STARTED.md", "docs/RELEASE.md", "docs/DEVELOPING.md",
     ...readdirSync(new URL("../infra/postgres/", import.meta.url)).map(file => `infra/postgres/${file}`)];
   assertRequiredReleaseFiles(releaseFiles(files));
-  for (const name of ["047-app-access.sql", "048-app-data-units.sql", "049-access-denial-reasons.sql", "050-app-access-compatibility.sql"]) {
+  for (const name of ["047-app-access.sql", "048-app-data-units.sql", "049-access-denial-reasons.sql", "050-app-access-compatibility.sql", "051-delegation.sql"]) {
     const path = `infra/postgres/${name}`;
     assert.throws(() => assertRequiredReleaseFiles(files.filter(file => file !== path)), {
       message: `Missing release file ${path}`,

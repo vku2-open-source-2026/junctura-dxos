@@ -21,7 +21,7 @@ async function operatorToken() {
 async function admin(path, body, method = "GET") {
   return fetch(`${base}/identity/admin/realms/junctura/${path}`, { method, headers: { Authorization: `Bearer ${adminToken}`, "Content-Type": "application/json" }, body: body === undefined ? undefined : JSON.stringify(body) });
 }
-async function login(username, password, clientId) {
+async function login(username, password, clientId, clientSecret) {
   const verifier = randomBytes(32).toString("base64url");
   const params = new URLSearchParams({ client_id: clientId, response_type: "code", scope: "openid", redirect_uri: "http://127.0.0.1:9876/callback", code_challenge_method: "S256", code_challenge: createHash("sha256").update(verifier).digest("base64url") });
   const page = await fetch(`${issuer}/protocol/openid-connect/auth?${params}`, { redirect: "manual" });
@@ -30,7 +30,7 @@ async function login(username, password, clientId) {
   const response = await fetch(action[1].replaceAll("&amp;", "&"), { method: "POST", redirect: "manual", headers: { Cookie: cookies }, body: new URLSearchParams({ username, password, credentialId: "" }) });
   assert.equal(response.status, 302, "real human PKCE authentication");
   const code = new URL(response.headers.get("location")).searchParams.get("code"); assert.ok(code);
-  const tokens = await fetch(`${issuer}/protocol/openid-connect/token`, { method: "POST", body: new URLSearchParams({ grant_type: "authorization_code", client_id: clientId, redirect_uri: "http://127.0.0.1:9876/callback", code, code_verifier: verifier }) });
+  const tokens = await fetch(`${issuer}/protocol/openid-connect/token`, { method: "POST", body: new URLSearchParams({ grant_type: "authorization_code", client_id: clientId, redirect_uri: "http://127.0.0.1:9876/callback", code, code_verifier: verifier, ...(clientSecret ? { client_secret: clientSecret } : {}) }) });
   assert.equal(tokens.status, 200); return (await tokens.json()).access_token;
 }
 async function human(label, tenant, permissions) {

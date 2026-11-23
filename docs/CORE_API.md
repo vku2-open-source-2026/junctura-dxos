@@ -9,8 +9,8 @@ Configure TLS, trusted proxies and secrets before exposure beyond the local envi
 
 ## Contract and checks
 
-Foundation OpenAPI 3.1.1 describes **31 implemented paths and 45 implemented operations**, covering health/readiness,
-identity/OIDC integration, application registration/approvals, legacy and private resources, read shares and workflow lifecycle.
+Foundation OpenAPI 3.1.1 describes health/readiness, identity/OIDC integration, application registration and approvals,
+delegated access, legacy and private resources, read shares and workflow lifecycle.
 Both files carry [planned API contracts](#planned-apis-not-yet-implemented). The route index below describes live routes.
 Capability OpenAPI separately marks implemented registry, trust and
 opt-in execution/composition subsets and design-only operations. Do not assume every operation exists.
@@ -89,6 +89,7 @@ Methods are included with each family; action suffixes are described in the link
 | --- | --- | --- | --- |
 | `/health` (GET, HEAD), `/ready` (GET) | Liveness and dependency readiness | Public | Identity and gateway below |
 | `/v1/identity` (GET) | Caller's verified identity | None | Identity and gateway below |
+| `/v1/token-exchange` (POST) | Obtain a short-lived bearer for calling as an assigned user | Enrolled application service account and login access token for the same client and tenant | Delegated application access below |
 | `/identity/` (upstream methods) | Keycloak OIDC passthrough | Keycloak protocol/client policy | Identity and gateway below |
 | `/v1/data/*` (GET, POST, PATCH, DELETE) | Legacy tenant records | Legacy client allowlist; writer for mutations | Structured data below |
 | `/v2/data/*` (GET, POST, PATCH, DELETE) | Application-private records, filtered lists and aggregates | Active bound backend; owner/writer for mutations; exact or app-group read shares | Structured data below; [SECURITY.md](SECURITY.md) |
@@ -122,7 +123,7 @@ Methods are included with each family; action suffixes are described in the link
 | `/v1/directory/unit-types`, `/units`, `/units/{unit}/groups`, `/units/{unit}/members` (GET), item PUT/DELETE | Directory management desired state | Management `directory.write`; writer for mutations. Console roles can list units, groups and members. | Tenant directory below |
 | `/v1/storage/summary`, `/files`, `/collections` (GET) | Storage aggregates and reduced metadata | Management `audit.read` | Storage summary and workflow history below |
 
-Nginx proxies all `^/v[12]/` paths after authentication. With both `config.executionRuntime` and
+Nginx uses a Core authorization subrequest for versioned paths. The token exchange handler authenticates both input tokens itself. With both `config.executionRuntime` and
 `config.compositionRuntime` absent (default `C4A_ENABLED=false`, `C4B_ENABLED=false`), invocation/introspection
 paths fall through to Core `404`. Composition registry paths likewise return `404` without `config.compositionRuntime`.
 With only composition enabled, capability-target submission returns `422 capability_runtime_disabled`.
@@ -146,7 +147,7 @@ Gateway auth-request and Core independently introspect bearer tokens through con
 Tokens must be active, unexpired, from the configured issuer, have audience `junctura-core`, role `core-reader`,
 and a `tenant_id` present in authoritative `tenant_memberships`. Caller tenant headers are ignored; provider failures
 fail closed with `503`. Core returns only supported reader/writer roles. Group membership and role grants are administrator-owned;
-a tenant attribute alone grants no membership. Core has no custom JWT verifier or password database.
+a tenant attribute alone grants no membership. Keycloak remains the authority for login tokens and user status.
 
 The imported realm supplies two service-account tenants, a read-only account and tenant-A `local-user` with random
 credentials from ignored `.env`. Registration is disabled. Public client `junctura-local` requires authorization-code
@@ -157,6 +158,16 @@ Keycloak imports only into an empty database; edit existing realms through revie
 Unknown routes return `404`; invalid/denied credentials return `401/403`. Nginx limits versioned requests per source
 address to 100 requests/second with burst 50 (`429`), body reads to 10 seconds, upstream connect to 3 seconds,
 and upstream send/read to 15 seconds. Upstream URLs are fixed configuration. Auth subrequests and provider ports are unpublished.
+
+## Delegated application access
+
+The application backend sends `POST /v1/token-exchange` with its enrolled service account's access token in `Authorization: Bearer` and the user's login access token in a JSON body `{"subjectToken":"<user-access-token>"}`. The login token must come from the same application client and tenant. Core resolves the user's current assignment and pins the unit selected by the application access rules. If the application credential names a unit, that unit must match.
+
+Present the returned `access_token` as a bearer to `/v1/identity`, `/v1/search`, or the v2 record, schema and object routes permitted by the current assignment. It carries the user in `sub`, the app client and its service account in `act`, and the verified tenant and selected unit. Writes require `core-writer` in both input tokens and a current assignment that permits the operation. The bearer lasts at most 60 seconds and expires by the earlier input expiry. To renew access, exchange an active login token and an active service account token again. Token exchange accepts only those two input credentials.
+
+Core uses Keycloak Standard Token Exchange V2 to obtain an access-only user proof and checks it on every delegated call. Core also checks the active app, enrollment, assignment and unit on every call. For an existing realm, apply the token exchange attributes and audience mapper on `junctura-core` from the realm configuration. [Realm configuration](../infra/keycloak/realm.json)
+
+Policy refusals return `403` with `requestId`. `not_assigned_to_app` means the current user assignment is missing, `unit_mismatch` means the selected unit is invalid for the call, and `capability_not_granted` means the effective roles or supported route set exclude the operation. `delegation_not_allowed` covers an invalid delegation pairing or a delegated credential whose user proof has become inactive, including a locked user. Tenant audit records `delegation.exchanged`, `delegation.authorized` and `authorization.denied` with the request ID in `reason`, the login in `subject`, the app client in `managementClient` and the application ID in `actorAppId` when the enrollment is verified.
 
 ## Structured data
 

@@ -9,10 +9,11 @@ import { createEventStreams, EVENTS_PATH } from "./modules/events/events.mjs";
 import { handleIdentity, verifiedSubjectBinding } from "./modules/identity/identity.mjs";
 import { handleConsent, isConsentPath } from "./modules/consent/consent.mjs";
 import { createAuthorizer, logAccessDenial } from "./platform/auth/auth.mjs";
+import { tokenExchangePath } from "./platform/auth/delegation.mjs";
 import { handleApprovals, handleCapabilities } from "./modules/capability/registry/capabilities.mjs";
 import { handleCompositions } from "./modules/capability/composition/registry.mjs";
 import { readExecutionJson } from "./modules/capability/execution/runtime.mjs";
-import { accessDenialCodes, HttpError, json, requestIdFor } from "./platform/http/http.mjs";
+import { accessDenialCodes, HttpError, json, readFlatJsonObject, requestIdFor } from "./platform/http/http.mjs";
 import { handleAppRecords, handleData, handleRecordArchive, handleRecordQuery, presentRecordRequest } from "./modules/data/data.mjs";
 import { handleObjects } from "./modules/objects/objects.mjs";
 import { checkReadiness } from "./bootstrap/readiness.mjs";
@@ -55,6 +56,24 @@ export function createApi(config) {
         await checkReadiness(config);
         return json(response, 200, { status: "ready" });
       } catch { throw new HttpError(503, "not_ready"); }
+    }
+    if (path === tokenExchangePath) {
+      const requestId = requestIdFor(request);
+      response.setHeader("X-Request-Id", requestId);
+      try {
+        if (request.method !== "POST") {
+          response.setHeader("Allow", "POST");
+          throw new HttpError(405, "method_not_allowed");
+        }
+        if (request.url.includes("?")) throw new HttpError(400, "invalid_query");
+        const body = await readFlatJsonObject(request);
+        if (Object.keys(body).length !== 1 || !Object.hasOwn(body, "subjectToken")) throw new HttpError(400, "invalid_request");
+        return json(response, 200, await authorizer.exchange(request, body.subjectToken));
+      } catch (error) {
+        if (error.status === 413) response.setHeader("Connection", "close");
+        return json(response, error instanceof HttpError ? error.status : 503,
+          { error: error instanceof HttpError ? error.message : "identity_unavailable", requestId }, request.method);
+      }
     }
     if ((config.executionRuntime || config.compositionRuntime) &&
       (path === "/v1/capability-executions" || path?.startsWith("/v1/capability-executions/") || path === "/v1/capability-authorizations/introspect")) {

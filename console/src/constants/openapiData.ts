@@ -118,6 +118,8 @@ function requestExample(endpoint: ApiEndpointDef): RequestExample {
 
   if (contentType === "application/json") {
     switch (endpoint.operationId) {
+      case "exchangeUserToken":
+        return { contentType, json: { subjectToken: "<user-access-token>" } };
       case "v1CreateRecord":
       case "v2CreateRecord":
       case "v1ReplaceRecordData":
