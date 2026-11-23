@@ -106,12 +106,13 @@ Methods are included with each family; action suffixes are described in the link
 | `/v1/capability-executions` (POST), `/{executionId}` (GET) | Opt-in C4A/C4B invocation and status | Bound consumer, exact invocation authority; writer for submission | [CAPABILITIES.md](CAPABILITIES.md) |
 | `/v1/capability-authorizations/introspect` (POST) | Opt-in provider ticket redemption | Writer, exact bound provider and valid ticket/context | [CAPABILITIES.md](CAPABILITIES.md) |
 | `/v1/compositions` and `/*` (GET, POST, PUT) | Opt-in C4B registry/lifecycle | `config.compositionRuntime`; management `compositions.write` / `compositions.publish` | [CAPABILITIES.md](CAPABILITIES.md) |
-| `/v1/me/consents` (GET, POST), `/{consentId}/revoke` (POST) | Manage the caller's own consents | Verified subject/client; no writer requirement | [SECURITY.md](SECURITY.md) |
-| `/v1/me/data-access` (GET) | Capability calls naming the caller as data subject | Verified subject/client; own tenant/issuer/subject only | [SECURITY.md](SECURITY.md) |
+| `/v1/me/consents` (GET, POST), `/{consentId}/revoke` (POST) | Manage the caller's own consents | Own authenticated login with a matching binding if the token supplies `subjectId` | [SECURITY.md](SECURITY.md) |
+| `/v1/me/data-access` (GET) | Capability calls naming the caller as data subject | Verified client and own tenant, issuer and subject | [SECURITY.md](SECURITY.md) |
 | `/v1/emergency-accesses` (GET), `/{executionId}/review` (POST) | Review emergency invocations | List: management `trust.approve` or `audit.read`; review: `trust.approve` and writer | [SECURITY.md](SECURITY.md) |
 | `/v1/audit-events` (GET), `/v1/audit-events/verify` (POST) | Protected event query and chain verification | Management `audit.read`; no writer requirement | Internal protected audit contract below; [SECURITY.md](SECURITY.md) |
 | `/v1/metrics/traffic`, `/requests`, `/features` (GET) | Per-tenant, process-local traffic observations | Management `audit.read`; verified client ID | Traffic metrics below |
 | `/v1/directory/principals`, `/organizations` (GET) | Tenant principal/application directory | Management `audit.read` | Tenant directory below |
+| `/v1/directory/unit-types`, `/units`, `/units/{unit}/groups`, `/units/{unit}/members` (GET), item PUT/DELETE | Directory management desired state | Management `directory.write`; writer for mutations | Tenant directory below |
 | `/v1/storage/summary`, `/files`, `/collections` (GET) | Storage aggregates and reduced metadata | Management `audit.read` | Storage summary and workflow history below |
 
 Nginx proxies all `^/v[12]/` paths after authentication. With both `config.executionRuntime` and
@@ -125,8 +126,12 @@ Authentication or gateway errors can precede these responses. See [CAPABILITIES.
 - `GET/HEAD /health` checks process liveness. `GET /ready` returns `200` or `503`, checking OIDC discovery/issuer
   and configured data RLS access, filer metadata/registered volume, ClamAV, secrets service and authenticated workflow engine.
   Readiness does not prove every future operation or complete disaster recovery.
-- `GET /v1/identity` returns `{subject,tenantId,roles}` and optional `preferredUsername` from the caller's own
+- `GET /v1/identity` returns `{subject,tenantId,roles,units,groups}` and optional `preferredUsername` from the caller's own
   safe `preferred_username` claim (well-formed, nonblank, at most 255 code points, without C0/DEL controls).
+  `units` and `groups` come from the token's verified group paths under the tenant namespace, default to `[]`,
+  and use `/unit/group` paths. An operator-bound `subjectId` claim appears only while the binding maps it to the
+  caller's own login subject in this tenant and issuer; it is distinct from `subject` and never looked up from
+  provider administration.
 - `/identity/realms/junctura/.well-known/openid-configuration` provides upstream discovery;
   use standard OIDC authorization, token/refresh, userinfo, keys and logout APIs.
 
@@ -307,28 +312,72 @@ reconcile an ambiguous outcome before retrying. No upstream call is blindly retr
 
 | Route | Methods | Contract |
 | --- | --- | --- |
-| `/v1/workflows/definitions` | GET | Up to 100 latest tenant definitions: `{items:[{id,key,version,name}]}`; excludes `junctura_c4a_single` |
-| `/v1/workflows/executions` | POST | `{definitionId,input?:{...}}` and lowercase UUID `Idempotency-Key`; `201` created or `200` replayed |
-| `/v1/workflows/executions/{id}` | GET | Durable engine history: `{id,definitionId,status,input}` |
-| `/v1/workflows/executions/{id}/complete` | POST | Empty JSON object; completes exactly one active user task; already-completed executions return their state |
-| `/v1/workflows/executions/{id}` | DELETE | Cancel running execution; repeated cancellation `204`; completed execution `409` |
+| `/v1/workflows/definitions` | GET | Up to 100 latest tenant definitions with ID, key, version and name. |
+| `/v1/workflows/executions` | POST | Start by exact `definitionId` with optional `input`, `unit`, `taskUnits`, `dueAt` and `taskDueAt`. Requires a UUID `Idempotency-Key`. |
+| `/v1/workflows/executions/{executionId}` | GET | `{id,definitionId,status,input,dueAt}`. Status is `running`, `completed` or `cancelled`. If deadline storage is unavailable, `dueAt` is null. |
+| `/v1/workflows/tasks` | GET | `{items,nextCursor}` for waiting tasks in the caller's candidate groups. |
+| `/v1/workflows/tasks/{taskId}/claim` | POST | Optional `{ttlSeconds}`. Returns `{taskId,claimedBy,claimedUntil}`. |
+| `/v1/workflows/tasks/{taskId}/release` | POST | Returns `204` when the caller's claim is released or the task is already unclaimed. |
+| `/v1/workflows/executions/{executionId}/complete` | POST | Business completion by `{taskId,variables?,records?}` with a UUID `Idempotency-Key`. Returns `202` and `{taskId,completionStatus:"pending",execution}`. |
+| `/v1/workflows/executions/{executionId}/history` | GET | `{items,nextCursor}` for confirmed task completions, newest first. |
+| `/v1/workflows/executions/{executionId}` | DELETE | Cancel a running execution. Returns `204` on cancellation and on repetition. A pending completion or a completed execution conflicts with `409`. |
 
-Reads require reader; writes require writer. Foreign tenant definition/execution IDs return `404`.
-Input uses a 64 KiB JSON request limit and nesting depth at most 32; unknown envelope/query fields are rejected. Caller fields cannot select the tenant. Engine URLs/credentials are not returned. Status is `running`, `completed` or `cancelled`.
-The internal C4A definition cannot be started or inspected through this lifecycle API.
+Reads require `core-reader`. Writes also require `core-writer`. Foreign tenant definitions, executions
+and tasks return `404`. The internal C4A definition is excluded. Keep private data out of workflow
+variables, which are visible within the tenant. Start JSON is limited to 64 KiB with input nesting at most 32.
 
-Flowable owns BPMN execution, tasks, variables and history in a separate database/role, using a private REST boundary
-and random administrative credential. Core and the one-shot initializer share the engine network; no engine port is published. The initializer installs the technical `junctura_checkpoint` per selected tenant: start, one user task, end, without
-business rules or external effects. Public callers cannot upload BPMN, scripts or network targets. The completion adapter
-supports one active user task; other installed definitions can still be started, observed and cancelled.
+### Deadlines, task routing and claims
 
-The RLS-protected SQL ledger uniquely reserves `(tenant_id,key)`; only the reservation owner calls engine start.
-Changing definition/input on retry returns `409`; object-key order does not change input identity.
-If no result was recorded, Core reconciles by tenant-scoped business key in durable engine history.
-Without one unique outcome it returns `409 execution_pending_reconciliation` and never starts again for that key.
-Operators resolve stuck reservations after checking history/in-flight work; there is no expiry, deletion or blind retry.
-Retain definitions, history and ledger for the retry window. Duplicate start prevention does not guarantee exactly-once external effects.
-Flowable initializes its own schema on first boot; review migrations/backups before engine upgrades. Ledger changes use versioned SQL.
+An operator binds each business definition version to a default unit and allowed units. The caller needs
+verified membership in the resolved default unit and every per-step override. `taskUnits` and `taskDueAt`
+use BPMN user-task element IDs. An unknown ID is invalid. A step uses the execution deadline unless it has
+an override, including when a step is revisited. Deadlines use absolute timestamps and mark work overdue.
+
+The inbox supports `definitionKey`, `unit`, `candidateGroup` and `overdue=true|false`. Eligibility
+requires a verified path for the task's unit and one of the definition's candidate groups. Filters narrow
+that set. Tasks sort by deadline ascending, then task ID, with undated tasks last. Each parallel step has its
+own task ID. Both inbox and history accept `limit` from 1 to 100, default 20, and an opaque `cursor` from the
+previous page with the same filters.
+Each inbox request scans at most 20 Flowable pages of 100 active tasks in task ID order before applying
+unit, candidate-group and deadline filters. Supply `definitionKey` to limit the scan to that definition key.
+The inbox cursor paginates the scanned set.
+
+An eligible writer can claim a waiting task for 1800 seconds by default or up to 28800 seconds.
+A repeated claim by the holder returns its existing expiry. An expired claim becomes available again.
+An active claim belonging to another writer returns `409 task_claimed` with its display name and expiry.
+Completion requires a matching group (`403 task_group_required`) and either an unclaimed task or the
+caller's own claim. A new attempt to complete the same finished task returns `409 task_already_completed`.
+
+### Completion, history and retries
+
+`variables` accepts strings, numbers and booleans up to 4096 bytes as compact UTF-8 JSON.
+`input` and `__junctura_completion` are reserved. `records` can create up to ten records in collections
+owned by the caller's enrolled, active app. The token must also carry an operator-bound verified subject
+for record-bearing requests. Core commits all records, the completion outbox entry and the replay receipt
+in one PostgreSQL transaction. Each parallel task can be completed by its own ID.
+
+Within the 24-hour receipt window the same key and logical request return the original response, including
+the original `202` after confirmation. Current authorization is checked on each request. A changed
+logical request with the same key returns `422 idempotency_key_reused`. The worker retries pending
+engine transitions and checks Flowable's tenant, process instance, execution, task and task-local completion
+marker before publishing history. History shows the actor, unit, first matching candidate group in BPMN
+order, optional decision and reason, and engine completion time. It is available to eligible execution
+members and enrolled `audit.read` principals. Checkpoints and executions without task policy or user tasks
+return an empty page after the tenant execution is verified.
+
+A cancellation in progress returns `409 task_conflict` to a competing cancellation. If cancellation
+fails and Flowable still reports a running execution, Core releases the cancellation lease so tasks
+can resume. If confirmation is unavailable, a new cancellation can take over after 60 seconds.
+
+A business start replays its original `201`. The permanent start reservation protects against duplicate
+engine instances even after receipt expiry. If start is uncertain, retry with the same key. Core looks up
+the exact tenant, definition and business key in Flowable history. It returns `409 execution_pending_reconciliation`
+until there is a unique result. Operators resolve stranded reservations after checking engine history.
+
+The technical `junctura_checkpoint` retains its empty-object completion with `200`, including repetition
+after completion. Earlier executions without task policy can drain through the same single-task path.
+A checkpoint started with just definition and input retains the original `200` replay. Changed input or
+options with the same checkpoint start key returns `409 idempotency_conflict`, including across the two start paths.
 
 ## Business workflow definitions
 
@@ -370,6 +419,16 @@ After configuring `.env`, run `docker compose run --rm workflow-init`.
 For every key/tenant, the initializer queries the latest definition: new keys deploy; existing keys skip only when
 original resource XML exactly equals the supplied file; changed XML creates a new deployment.
 The final line reports business/technical file counts, tenants and deployments. Engine failures use a generic message without private configuration.
+
+After deployment, an operator inserts or updates a row in `app_private.workflow_definition_policies` using the
+exact `(tenant_id, definition_id)` from the deployed version. Set `default_unit` and `allowed_units` to
+operator-managed directory units. Define at least one `flowable:candidateGroups` entry on every business user
+task, and register those groups in each unit where the step will run. Core captures the assignments at start.
+Create a binding for each newly deployed version before accepting business starts for that version.
+
+Flowable owns process execution and durable task history. Core holds the deadlines, claims and completion
+outbox in PostgreSQL. Inspect the private outbox for `cancelled` or `unconfirmed` rows when reconciling
+records accepted before an external engine change.
 
 ### Workflow display metadata
 
@@ -432,13 +491,31 @@ Directory, identity, metrics and unrecognized paths map to `other`; only observe
 | `/v1/directory/principals` | GET | `{items:[{subject,issuer,managementClient,permissions,enabled,displayName,organization,jobTitle,kind}],truncated}` |
 | `/v1/directory/organizations` | GET | `{root:{id,name,kind,children},relations:[{from,to,label}],truncated}` |
 
-Both require management `audit.read` in the caller's tenant/issuer, reject query parameters, and return `no-store`. The private `junctura_directory_api` role reads local tables; it never calls Keycloak administration or returns secrets/tokens/bodies.
+Both require management `audit.read` in the caller's tenant/issuer, reject query parameters, and return `no-store`. The private `junctura_directory_api` role reads local tables; it never returns secrets/tokens/bodies.
 Principals are capped at 1000, ordered by subject/issuer/client. Nullable bounded profile fields are operator-owned
 presentation metadata, not provider claims; `kind` is `admin`, `application` or `null`.
 The organization root is the tenant (`platform`); children are registered applications (`application`), without a separate organization table.
 Relations include active, unexpired direct grants only; labels use the capability title, falling back to its exact ID.
 Limits are 1000 applications and 500 relations; `truncated` reports overflow. Application names come from registrations;
 other principals use subjects, while callers can obtain their own `preferredUsername` from identity.
+
+An enrolled management principal with `directory.write` additionally manages the organization itself:
+list `/v1/directory/unit-types` and `/v1/directory/units` with `limit`/`cursor` keyset pages, then PUT or DELETE
+`/v1/directory/unit-types/{unitType}`, `/v1/directory/units/{unit}`, `/v1/directory/units/{unit}/groups/{group}`
+and `/v1/directory/units/{unit}/members/{subject}`. Mutations additionally require the `core-writer` role.
+Units stay flat; every referenced unit type, unit or group
+must already exist, and a member's `groups` array replaces that unit's group assignments for one existing tenant
+subject. Every change is stored as desired state with a per-row generation and applied to the identity provider
+through a dedicated service account; the API reports success only after reading the provider back and finding
+exactly that generation, and a retry of the same desired state converges. Deletions stay as durable tombstones
+until confirmed, so a generation is never reused across a delete and recreate, and every command serializes on a
+per-tenant advisory lock in PostgreSQL, so concurrent replicas never overwrite one another. PUT returns `201` for
+a new row and
+`200` for an updated or identical one; repeating a DELETE returns `204`; deleting a resource that is still
+referenced conflicts with `409 resource_conflict`. Previously issued tokens can retain old membership claims
+until they are renewed. The provider realm keeps organization groups under a per-tenant namespace, so verified
+group paths are `/{tenant}/{unit}/{group}` upstream and `/unit/group` in Core responses; tenant membership
+itself is proven only by the exact root group path `/{tenant}`.
 
 ## Application statistics
 
@@ -544,33 +621,6 @@ To build a mock API document, replace each operation carrying that extension wit
 top-level planned operations. Keep both contract files together so relative references resolve.
 Use the current route index for calls to a deployed Core.
 
-### Workflows
-
-- `GET /v1/workflows/tasks` lists waiting tasks from verified group memberships. Filter by `definitionKey`,
-  `unit`, `overdue` or `candidateGroup`. The group filter proposed in issue #49 narrows the
-  caller's authorized inbox. Each parallel step has its own `taskId`. The inbox includes the
-  holder's display name in `claimedBy` and the expiry in `claimedUntil`. Both fields are null
-  when the task is unclaimed.
-- `POST /v1/workflows/executions` accepts an execution `dueAt` and optional `taskDueAt`
-  overrides keyed by BPMN user-task ID. The inbox reports the effective deadline and whether it has passed.
-  Business steps use the execution's `unit` or a per-step `taskUnits` override, subject to the deployed
-  workflow's unit policy.
-  `GET /v1/workflows/executions/{executionId}/history` returns finished steps with the verified actor,
-  unit and group, the decision and reason if supplied, and the completion time.
-- `POST /v1/workflows/executions/{executionId}/complete` accepts `{taskId, variables?, records?}`
-  for business workflows. Use `variables` for the primitive BPMN values proposed as `output` in
-  issue #49. The UTF-8 JSON limit for variables is 4 KiB. Completion requires membership in a
-  candidate group in the task's unit. `records` can create up to ten records owned by the calling
-  app. Core saves them with a durable outbox entry, and `202` means the workflow transition is
-  pending. A retry with the same key replays the original response, including a `202`. Read the
-  execution and its history to check progress. Cancellation returns `409` while an accepted
-  completion remains pending. The technical checkpoint retains its empty-object request.
-- `POST /v1/workflows/tasks/{taskId}/claim` reserves a waiting task for an eligible group member
-  for 30 minutes by default and up to 8 hours with `ttlSeconds`. A repeat by the holder keeps the
-  original expiry. The holder can release it with `POST /v1/workflows/tasks/{taskId}/release`.
-  An eligible caller may complete an unclaimed task or a task they hold. A new completion attempt
-  on a finished task returns `409 task_already_completed`.
-
 ### Concurrent writes and retries
 
 Before a record replacement or deletion, GET the individual record and copy its
@@ -635,10 +685,37 @@ below zero, Core returns `409 limit_exceeded` and both quantities stay the same.
 
 An enrolled `directory.write` principal manages `/v1/directory/unit-types`, `/v1/directory/units`,
 and each unit's `groups` and `members`. List each collection and use PUT or DELETE at an item URL.
-The provider synchronizes these changes into Keycloak. Renew a token to refresh membership claims.
-`GET /v1/identity` exposes verified `units` and group paths of the form `/unit/group`.
-Data-subject accounts carry a verified `subjectId` claim. Core uses it, with tenant and issuer, for
-`/v1/me/*` consent, access history, feedback and flagging. The login identifier remains `subject`.
+Core takes a PostgreSQL lease per tenant before changing desired state. A competing write can return
+`409 resource_conflict`. Provider mutations renew the lease, and confirmation requires both the current
+lease and row generation. GET lists show the last confirmed values. With no sync client configured,
+provider-backed writes return `503` before saving changes. A provider outage after a save leaves work for
+the background reconciler. Each replica can run it, and the tenant lease coordinates who applies each job.
+The periodic sweep reads back confirmed rows and deletion tombstones too, so a late Keycloak write
+after lease expiry is corrected without a client retry. Renew the token to refresh membership claims.
+
+For rollout on an existing realm, run `npm run directory:provision` first. It discovers clients using the
+Junctura mapper template and aligns their tenant memberships to full group paths. Pass `--clients` for
+enrolled clients with custom mapper layouts. Configure a replacement sync secret before enabling the
+client. Inventory enrolled clients, renew their tokens and check that each carries its exact
+`/{tenant}` root. Then deploy Core with migrations 036–038. Operators can seed verified one-to-one
+bindings after migration 036 for the migration 038 backfill, or create them afterward and let the
+insert trigger map the login's existing consents. Renew each user's token after assigning `subject_id`
+to use its verified `subjectId`. Account holders cannot edit this managed attribute.
+
+`GET /v1/identity` exposes verified `units` and group paths of the form `/unit/group`. A bound
+`subjectId` is optional. The existing consent and history routes retain compatibility by looking up the
+authenticated login in its tenant and issuer. A consent request with a mismatched `subjectId` claim
+returns `403 verified_subject_required`. The planned flag and feedback routes require a verified binding.
+Consent grants require a UUID `Idempotency-Key`. The first committed result replays for 24 hours.
+
+Capability callers can name a login with `dataSubject`, or set `dataSubjectKind: "canonical"` to name
+an operator-bound subject ID. Unmapped consents stay in the login namespace pending operator
+reconciliation. The access log uses the binding for canonical events and the login for login events.
+Operators review ambiguous historical entries against the original execution and consent before assigning
+an identifier kind. Binding keys are immutable in normal operation.
+The planned delegated-user path for application audit depends on Keycloak token exchange that verifies
+both app and actor, followed by a SQL enrollment check. Resource authorization currently uses the
+enrolled backend service-account subject.
 
 ### Files, events, search and privacy
 
@@ -706,5 +783,4 @@ Pointer paths into the request and, for NDJSON, one-based line numbers.
 
 This is a local single-node stack, without production TLS/deployment or replicated storage configuration.
 Generic storage has no domain schema; v1 legacy and v2 private resources remain separate.
-Workflows remain tenant-scoped, and public task interaction is limited to single-task completion.
 Contracts and positive operation coverage do not prove exhaustive faults, external exactly-once effects or full provider conformance.

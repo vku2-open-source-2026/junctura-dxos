@@ -143,3 +143,104 @@ test("SDK redeems provider tickets once and never sends malformed tickets", asyn
   assert.deepEqual(sent, [{ path: "/v1/capability-authorizations/introspect",
     body: { ticket, invocationId, inputDigest: inputDigest({ subject: "p1" }) } }]);
 });
+
+test("SDK directory and consent calls hit the documented routes and bodies", async () => {
+  const calls = [];
+  const client = createJuncturaClient({ ...options, fetcher: async (url, init) => {
+    if (url.pathname.includes("/token")) return auth();
+    calls.push({ path: url.pathname, query: [...url.searchParams], method: init.method,
+      key: init.headers.get("Idempotency-Key"), body: init.body === undefined || init.body === null ? undefined : JSON.parse(init.body) });
+    return json({ unitType: "office", name: "Office" });
+  } });
+  await client.listDirectoryUnitTypes({ limit: 10, cursor: "next" });
+  await client.putDirectoryUnitType("office", "Office");
+  await client.deleteDirectoryUnitType("office");
+  await client.putDirectoryUnit("unit-a", { unitType: "office", name: "Unit A" });
+  await client.putDirectoryGroup("unit-a", "reviewers", "Reviewers");
+  await client.putDirectoryMember("unit-a", "subject-42", ["reviewers"]);
+  await client.listDirectoryMembers("unit-a", {});
+  await client.deleteDirectoryMember("unit-a", "subject-42");
+  const consents = client.consent("user-oidc-token");
+  await consents.create({ consumerAppId: "22222222-2222-4222-8222-222222222222",
+    capabilityId: "urn:junctura:capability:33333333-3333-4333-8333-333333333333:lookup",
+    purposes: ["service_review"], expiresAt: "2030-01-12T12:00:00Z" }, "consent-key");
+  await consents.list();
+  await consents.revoke("11111111-1111-4111-8111-111111111111");
+  assert.deepEqual(calls, [
+    { path: "/v1/directory/unit-types", query: [["limit", "10"], ["cursor", "next"]], method: "GET", key: null, body: undefined },
+    { path: "/v1/directory/unit-types/office", query: [], method: "PUT", key: null, body: { name: "Office" } },
+    { path: "/v1/directory/unit-types/office", query: [], method: "DELETE", key: null, body: undefined },
+    { path: "/v1/directory/units/unit-a", query: [], method: "PUT", key: null, body: { unitType: "office", name: "Unit A" } },
+    { path: "/v1/directory/units/unit-a/groups/reviewers", query: [], method: "PUT", key: null, body: { name: "Reviewers" } },
+    { path: "/v1/directory/units/unit-a/members/subject-42", query: [], method: "PUT", key: null, body: { groups: ["reviewers"] } },
+    { path: "/v1/directory/units/unit-a/members", query: [], method: "GET", key: null, body: undefined },
+    { path: "/v1/directory/units/unit-a/members/subject-42", query: [], method: "DELETE", key: null, body: undefined },
+    { path: "/v1/me/consents", query: [], method: "POST", key: "consent-key",
+      body: { consumerAppId: "22222222-2222-4222-8222-222222222222",
+        capabilityId: "urn:junctura:capability:33333333-3333-4333-8333-333333333333:lookup",
+        purposes: ["service_review"], expiresAt: "2030-01-12T12:00:00Z" } },
+    { path: "/v1/me/consents", query: [], method: "GET", key: null, body: undefined },
+    { path: "/v1/me/consents/11111111-1111-4111-8111-111111111111/revoke", query: [], method: "POST", key: null, body: {} },
+  ]);
+});
+
+test("consent calls carry the caller-provided user token, never the service token", async () => {
+  const authorizations = [];
+  const client = createJuncturaClient({ ...options, fetcher: async (url, init) => {
+    if (url.pathname.includes("/token")) return auth();
+    authorizations.push(init.headers.get("Authorization"));
+    return json({ consents: [] });
+  } });
+  assert.throws(() => client.consent(undefined), TypeError);
+  assert.throws(() => client.consent(""), TypeError);
+  const consents = client.consent("user-oidc-token");
+  await consents.list();
+  await consents.create({ consumerAppId: "22222222-2222-4222-8222-222222222222",
+    capabilityId: "urn:junctura:capability:33333333-3333-4333-8333-333333333333:lookup",
+    purposes: ["service_review"], expiresAt: "2030-01-12T12:00:00Z" });
+  assert.deepEqual(authorizations, ["Bearer user-oidc-token", "Bearer user-oidc-token"],
+    "no client-credentials token ever reaches a consent route");
+});
+
+test("SDK workflow task calls use the supplied verified token, filters and stable retry key", async () => {
+  const calls = [];
+  let firstCompletion = true;
+  const client = createJuncturaClient({ ...options, fetcher: async (url, init) => {
+    assert.equal(init.headers.get("Authorization"), "Bearer workflow-user");
+    calls.push([init.method, url.pathname + url.search, init.body && JSON.parse(init.body),
+      init.headers.get("Idempotency-Key")]);
+    if (init.method === "DELETE" || url.pathname.endsWith("/release")) return new Response(null, { status: 204 });
+    if (url.pathname.endsWith("/complete") && firstCompletion) {
+      firstCompletion = false;
+      throw new Error("lost gateway response");
+    }
+    return json(url.pathname.endsWith("/complete") ? { completionStatus: "pending" } : {}, url.pathname.endsWith("/complete") ? 202 : 200);
+  } });
+  const user = { userToken: "workflow-user" };
+  const start = { definitionId: "process:1:42", taskDueAt: { review: "2030-01-01T01:00:00Z" } };
+  const body = { taskId: "task:1", variables: { decision: "approved" }, records: [{ collection: "entries", data: {} }] };
+  await client.startWorkflowWithDeadlines(start, { ...user, idempotencyKey: "start-key" });
+  await client.getWorkflowWithDeadline("exec:1", user);
+  await client.listWorkflowTasks({ ...user, overdue: false, unit: "unit-a", candidateGroup: "reviewers", limit: 2 });
+  await client.claimWorkflowTask("task:1", { ...user, ttlSeconds: 60 });
+  await client.releaseWorkflowTask("task:1", user);
+  await assert.rejects(client.completeWorkflowTask("exec:1", body, user), { name: "TypeError", message: "idempotencyKey is required" });
+  const completion = { ...user, idempotencyKey: "11111111-1111-4111-8111-111111111111" };
+  await assert.rejects(client.completeWorkflowTask("exec:1", body, completion), { status: 0, code: "gateway_unavailable" });
+  assert.deepEqual(await client.completeWorkflowTask("exec:1", body, completion), {
+    completionStatus: "pending",
+  });
+  await client.cancelWorkflowWithPendingCheck("exec:1", user);
+  await client.listWorkflowTaskHistory("exec:1", { ...user, cursor: "next" });
+  assert.deepEqual(calls, [
+    ["POST", "/v1/workflows/executions", start, "start-key"],
+    ["GET", "/v1/workflows/executions/exec%3A1", undefined, null],
+    ["GET", "/v1/workflows/tasks?limit=2&unit=unit-a&candidateGroup=reviewers&overdue=false", undefined, null],
+    ["POST", "/v1/workflows/tasks/task%3A1/claim", { ttlSeconds: 60 }, null],
+    ["POST", "/v1/workflows/tasks/task%3A1/release", undefined, null],
+    ["POST", "/v1/workflows/executions/exec%3A1/complete", body, completion.idempotencyKey],
+    ["POST", "/v1/workflows/executions/exec%3A1/complete", body, completion.idempotencyKey],
+    ["DELETE", "/v1/workflows/executions/exec%3A1", undefined, null],
+    ["GET", "/v1/workflows/executions/exec%3A1/history?cursor=next", undefined, null],
+  ]);
+});

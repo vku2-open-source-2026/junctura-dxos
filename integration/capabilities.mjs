@@ -25,7 +25,7 @@ const visibility = {};
 let c4aFixture, c4aProvider, c4aConsumer, c4aReference, c4aGrant;
 
 const authority = createAuthorityFixture({ base, prefix, sql, q, api, clientIds, users });
-const { operatorToken, admin, login, human } = authority;
+const { operatorToken, admin, login, human, verifiedSubject, cleanupSubjectBindings } = authority;
 
 // A database restart recreates the Data and Core connection pools, and each
 // authority path (Trust, Registry discovery) reconnects independently. Wait until
@@ -208,6 +208,7 @@ after(async () => {
       DELETE FROM app_private.approvals WHERE app_id IN (${apps}); DELETE FROM app_private.applications WHERE owner_subject IN (${ids});
       DELETE FROM app_private.enrollments WHERE owner_subject IN (${ids}); DELETE FROM app_private.principals WHERE subject IN (${ids});`);
   }
+  await cleanupSubjectBindings();
   for (const id of clientIds) assert.equal((await admin(`clients/${id}`, undefined, "DELETE")).status, 204);
   for (const id of users) assert.equal((await admin(`users/${id}`, undefined, "DELETE")).status, 204);
   await verifyContracts("capabilities", trustCases, "--capability-runtime");
@@ -721,18 +722,47 @@ test("C4A real two-application OIDC invocation redeems a ticket and completes th
   console.log(`C4A proof: ${JSON.stringify({ executionId: completed.executionId, processId: stored.engine_process_id, definitionId: stored.engine_definition_id, providerExecutions: state.count, engineEnded: true })}`);
 
   // Purpose-bound call naming a data subject: the provider sees the context, the
-  // audit chain seals it, and only that subject can list the access.
+  // audit chain seals it, and only that subject can list the access. Consent
+  // routes use the verified subject identity, so the person first receives an
+  // operator-assigned subjectId bound to this login subject.
+  owner = await verifiedSubject(owner, stranger.id);
   const context = { purpose: "service_delivery", dataSubject: owner.id };
   const unconsented = await c4aStart({ ...executionBody("purpose"), context });
   assert.deepEqual([unconsented.status, unconsented.body.error], [403, "subject_consent_required"], "naming a person needs their consent");
   const consentBody = { consumerAppId: c4aConsumer.app.appId, capabilityId: c4aReference.capabilityId, purposes: ["service_delivery"],
     expiresAt: new Date(Date.now() + 86_400_000).toISOString() };
-  const consentResponse = await api("/v1/me/consents", owner, consentBody);
-  assert.equal(consentResponse.status, 201);
+  const consentKey = crypto.randomUUID();
+  const consentResponse = await api("/v1/me/consents", owner, consentBody, { "Idempotency-Key": consentKey });
+  assert.equal(consentResponse.status, 201, await consentResponse.clone().text());
   const consent = await consentResponse.json();
   trustCases.push({ schema: "SubjectConsentCreate", value: consentBody });
   trustCases.push({ schema: "SubjectConsent", value: consent });
-  assert.equal((await api("/v1/me/consents", stranger, { ...consentBody, purposes: ["Bad purpose"] })).status, 400);
+  const consentReplay = await api("/v1/me/consents", owner, consentBody, { "Idempotency-Key": consentKey });
+  assert.equal(consentReplay.status, 201);
+  assert.equal((await consentReplay.json()).consentId, consent.consentId, "the first committed grant replays");
+  const secondGrant = await api("/v1/me/consents", owner, consentBody, { "Idempotency-Key": crypto.randomUUID() });
+  assert.equal(secondGrant.status, 201, "a fresh key grants again");
+  const secondGrantId = (await secondGrant.json()).consentId;
+  const legacy = await api("/v1/me/consents", stranger, consentBody, { "Idempotency-Key": crypto.randomUUID() });
+  assert.equal(legacy.status, 201, "an unbound caller retains their own consent grant");
+  const legacyId = (await legacy.json()).consentId;
+  const canonicalContext = { purpose: context.purpose, dataSubject: stranger.id, dataSubjectKind: "canonical" };
+  const canonicalAccess = await c4aStart({ ...executionBody("canonical"), context: canonicalContext });
+  assert.equal(canonicalAccess.status, 202);
+  await c4aWait(canonicalAccess.body.executionId, ["succeeded"]);
+  assert.equal((await c4aFixture.providerState()).body.last.authorization.context.dataSubjectKind, "canonical");
+  const legacyAccess = await c4aStart({ ...executionBody("legacy"), context: { purpose: context.purpose, dataSubject: stranger.id } });
+  assert.equal(legacyAccess.status, 202);
+  await c4aWait(legacyAccess.body.executionId, ["succeeded"]);
+  for (const [person, own, foreign] of [
+    [owner, canonicalAccess, legacyAccess], [stranger, legacyAccess, canonicalAccess],
+  ]) {
+    const history = await (await api("/v1/me/data-access", person)).json();
+    assert.ok(history.entries.some(row => row.executionId === own.body.executionId));
+    assert.ok(!history.entries.some(row => row.executionId === foreign.body.executionId));
+  }
+  assert.equal((await api(`/v1/me/consents/${legacyId}/revoke`, stranger, {})).status, 200);
+  assert.equal((await api("/v1/me/consents", owner, { ...consentBody, purposes: ["Bad purpose"] }, { "Idempotency-Key": crypto.randomUUID() })).status, 400);
   const purposeful = await c4aStart({ ...executionBody("purpose"), context });
   assert.equal(purposeful.status, 202);
   const purposefulDone = await c4aWait(purposeful.body.executionId, ["succeeded"]);
@@ -758,9 +788,11 @@ test("C4A real two-application OIDC invocation redeems a ticket and completes th
   const consents = await (await api("/v1/me/consents", owner)).json();
   trustCases.push({ schema: "SubjectConsentList", value: consents });
   assert.ok(consents.consents.some(item => item.consentId === consent.consentId && item.state === "active"));
-  assert.equal((await api(`/v1/me/consents/${consent.consentId}/revoke`, stranger, {})).status, 404, "only the person can revoke");
+  assert.equal((await api(`/v1/me/consents/${consent.consentId}/revoke`, stranger, {})).status, 404, "foreign grants stay concealed");
   const revokedConsent = await api(`/v1/me/consents/${consent.consentId}/revoke`, owner, {});
   assert.equal(revokedConsent.status, 200); assert.equal((await revokedConsent.json()).state, "revoked");
+  const revokedSecond = await api(`/v1/me/consents/${secondGrantId}/revoke`, owner, {});
+  assert.equal(revokedSecond.status, 200, "every active grant of this person is revoked before the next check");
   assert.equal((await c4aStart({ ...executionBody("purpose"), context })).body.error, "subject_consent_required", "revocation is immediate");
 
   // Break-glass: no consent, but a justification; sealed, visible to the person, reviewed.
@@ -784,6 +816,72 @@ test("C4A real two-application OIDC invocation redeems a ticket and completes th
   const emergencyEntry = ownLog.entries.find(item => item.executionId === emergency.body.executionId);
   assert.deepEqual([emergencyEntry.emergency, emergencyEntry.review], [true, "justified"], "the person sees the emergency access and its review");
   trustCases.push({ schema: "SubjectAccessLog", value: ownLog });
+});
+
+test("verified identity preserves legacy consent isolation and gates planned routes", async () => {
+  const identity = await (await api("/v1/identity", owner)).json();
+  assert.equal(identity.subjectId, stranger.id);
+  assert.equal(identity.subject, owner.id);
+  assert.deepEqual(identity.units, []);
+  assert.deepEqual(identity.groups, []);
+  const grant = { consumerAppId: c4aConsumer.app.appId, capabilityId: c4aReference.capabilityId,
+    purposes: ["service_review"], expiresAt: new Date(Date.now() + 3_600_000).toISOString() };
+  const created = await api("/v1/me/consents", owner, grant, { "Idempotency-Key": crypto.randomUUID() });
+  assert.equal(created.status, 201, await created.clone().text());
+  const canonical = await created.json();
+  const stored = await sql(`SELECT data_subject,canonical_subject FROM execution_private.subject_consents
+    WHERE consent_id=${q(canonical.consentId)};`);
+  assert.equal(stored.stdout.trim(), `${owner.id}|${stranger.id}`);
+  const listed = await (await api("/v1/me/consents", stranger)).json();
+  assert.ok(!listed.consents.some(item => item.consentId === canonical.consentId));
+  for (const path of [`/v1/me/data-access/${crypto.randomUUID()}/flag`, `/v1/me/emergency-accesses/${crypto.randomUUID()}/feedback`]) {
+    const rejected = await api(path, stranger, {});
+    assert.equal(rejected.status, 403);
+    assert.equal((await rejected.json()).error, "verified_subject_required");
+  }
+  await sql(`DELETE FROM execution_private.subject_consents WHERE consent_id=${q(canonical.consentId)};`);
+  const revoked = await api(`/v1/me/consents/${canonical.consentId}/revoke`, owner, {});
+  assert.equal([revoked.status, (await revoked.json()).error].join("|"), "404|not_found");
+});
+
+test("revoking consent blocks redemption of the outstanding ticket", { timeout: 60000 }, async () => {
+  const grant = { consumerAppId: c4aConsumer.app.appId, capabilityId: c4aReference.capabilityId,
+    purposes: ["ticket_review"], expiresAt: new Date(Date.now() + 3_600_000).toISOString() };
+  const created = await api("/v1/me/consents", owner, grant, { "Idempotency-Key": crypto.randomUUID() });
+  assert.equal(created.status, 201, await created.clone().text());
+  const { consentId } = await created.json();
+  const before = (await c4aFixture.providerState()).body;
+  await c4aFixture.mode("hold-redemption");
+  try {
+    const pending = await c4aStart({ ...executionBody("consent-redemption"),
+      context: { purpose: "ticket_review", dataSubject: stranger.id, dataSubjectKind: "canonical" } });
+    assert.equal(pending.status, 202);
+    await c4aProviderWait(state => state.pending === 1);
+    // Signal after revoke has locked the grant, while its transaction is still open.
+    const signal = `consent-revocation:${consentId}`;
+    const claims = JSON.stringify({ tenant_id: "tenant-a", iss: issuer, sub: owner.id, subject_id: stranger.id });
+    const revocation = sql(`BEGIN; SET LOCAL ROLE junctura_subject_api;
+      SELECT set_config('request.jwt.claims',${q(claims)},true);
+      SELECT core.subject_consent('revoke',jsonb_build_object('consentId',${q(consentId)}::text))->>'status';
+      SELECT pg_advisory_xact_lock(hashtextextended(${q(signal)},0));
+      SELECT pg_sleep(2); COMMIT;`);
+    try {
+      let locked = false;
+      const deadline = Date.now() + 5000;
+      while (!locked && Date.now() < deadline) {
+        locked = (await sql(`SELECT NOT pg_try_advisory_xact_lock(hashtextextended(${q(signal)},0));`)).stdout.trim() === "t";
+        if (!locked) await new Promise(resolve => setTimeout(resolve, 50));
+      }
+      assert.ok(locked, "revocation holds the consent row during redemption");
+      await c4aFixture.mode("normal");
+    } finally {
+      assert.match((await revocation).stdout, /^200$/m);
+    }
+    await c4aStoredWait(pending.body.executionId, ["failed"]);
+    assert.equal((await c4aFixture.providerState()).body.count, before.count);
+  } finally {
+    await c4aFixture.mode("normal");
+  }
 });
 
 test("C4A rejects untrusted bodies and isolated callers; concurrent replays invoke the provider once", { timeout: 60000 }, async () => {

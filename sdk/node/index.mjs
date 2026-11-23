@@ -74,12 +74,12 @@ export function createJuncturaClient({ baseUrl, clientId, clientSecret, timeoutM
     })();
     try { return await pending; } finally { pending = undefined; }
   }
-  async function request(path, { method = "GET", json, body, contentType, ifMatch, idempotencyKey, lockId, signal } = {}) {
+  async function request(path, { method = "GET", json, body, contentType, ifMatch, idempotencyKey, lockId, signal, bearer } = {}) {
     if (typeof path !== "string" || !/^\/v[12]\//.test(path) || /[\\#\r\n]/.test(path)) throw new TypeError("Use a versioned public Gateway path");
     const url = new URL(path, base);
     if (url.origin !== base.origin || !/^\/v[12]\//.test(url.pathname)) throw new TypeError("Gateway path escapes the public API");
     if (json !== undefined && body !== undefined) throw new TypeError("Supply JSON or binary body, not both");
-    const headers = new Headers({ Authorization: `Bearer ${await token()}` });
+    const headers = new Headers({ Authorization: `Bearer ${bearer ?? await token()}` });
     if (json !== undefined) headers.set("Content-Type", "application/json");
     else if (contentType) headers.set("Content-Type", contentType);
     if (ifMatch) headers.set("If-Match", ifMatch);
@@ -121,7 +121,19 @@ export function createJuncturaClient({ baseUrl, clientId, clientSecret, timeoutM
   const addOwner = (query, ownerAppId) => {
     if (ownerAppId !== undefined) query.set("ownerAppId", ownerAppId);
   };
+  const directoryList = (path, { limit, cursor } = {}) => {
+    const query = new URLSearchParams();
+    if (limit !== undefined) query.set("limit", String(limit));
+    if (cursor !== undefined) query.set("cursor", cursor);
+    return request(`${path}${query.size ? `?${query}` : ""}`);
+  };
   const finish = response => response.body?.cancel();
+  const workflowPath = id => `/v1/workflows/executions/${segment(id)}`;
+  const workflowRead = (path, filters, bearer) => {
+    const query = new URLSearchParams(Object.entries(filters)
+      .filter(([, value]) => value !== undefined).map(([key, value]) => [key, String(value)]));
+    return request(`${path}${query.size ? `?${query}` : ""}`, { bearer });
+  };
   const client = {
     request,
     async identity() { return (await request("/v1/identity")).json(); },
@@ -218,9 +230,71 @@ export function createJuncturaClient({ baseUrl, clientId, clientSecret, timeoutM
     },
     async putObject(id, bytes) { return (await request(`/v2/objects/${segment(id)}`, { method: "PUT", body: bytes, contentType: "application/octet-stream" })).json(); },
     async getObject(id) { return (await request(`/v2/objects/${segment(id)}`)).arrayBuffer(); },
+    async listDirectoryUnitTypes(page) { return (await directoryList("/v1/directory/unit-types", page)).json(); },
+    async putDirectoryUnitType(unitType, name) {
+      return (await request(`/v1/directory/unit-types/${segment(unitType)}`, { method: "PUT", json: { name } })).json();
+    },
+    async deleteDirectoryUnitType(unitType) { await finish(await request(`/v1/directory/unit-types/${segment(unitType)}`, { method: "DELETE" })); },
+    async listDirectoryUnits(page) { return (await directoryList("/v1/directory/units", page)).json(); },
+    async putDirectoryUnit(unit, { unitType, name }) {
+      return (await request(`/v1/directory/units/${segment(unit)}`, { method: "PUT", json: { unitType, name } })).json();
+    },
+    async deleteDirectoryUnit(unit) { await finish(await request(`/v1/directory/units/${segment(unit)}`, { method: "DELETE" })); },
+    async listDirectoryGroups(unit, page) { return (await directoryList(`/v1/directory/units/${segment(unit)}/groups`, page)).json(); },
+    async putDirectoryGroup(unit, group, name) {
+      return (await request(`/v1/directory/units/${segment(unit)}/groups/${segment(group)}`, { method: "PUT", json: { name } })).json();
+    },
+    async deleteDirectoryGroup(unit, group) { await finish(await request(`/v1/directory/units/${segment(unit)}/groups/${segment(group)}`, { method: "DELETE" })); },
+    async listDirectoryMembers(unit, page) { return (await directoryList(`/v1/directory/units/${segment(unit)}/members`, page)).json(); },
+    async putDirectoryMember(unit, subject, groups) {
+      return (await request(`/v1/directory/units/${segment(unit)}/members/${segment(subject)}`, { method: "PUT", json: { groups } })).json();
+    },
+    async deleteDirectoryMember(unit, subject) { await finish(await request(`/v1/directory/units/${segment(unit)}/members/${segment(subject)}`, { method: "DELETE" })); },
+    // Consent belongs to a verified person, not to the app's client
+    // credentials: pass the caller's OIDC access token (with its
+    // operator-bound subjectId) and every call carries it instead of the
+    // service token. Client credentials alone are refused by Core with
+    // 403 verified_subject_required.
+    consent(userToken) {
+      if (typeof userToken !== "string" || !userToken) throw new TypeError("A verified user access token is required");
+      return Object.freeze({
+        list: () => request("/v1/me/consents", { bearer: userToken }).then(response => response.json()),
+        create: (consentBody, idempotencyKey = randomUUID()) =>
+          request("/v1/me/consents", { method: "POST", json: consentBody, idempotencyKey, bearer: userToken }).then(response => response.json()),
+        revoke: consentId =>
+          request(`/v1/me/consents/${segment(consentId)}/revoke`, { method: "POST", json: {}, bearer: userToken }).then(response => response.json()),
+      });
+    },
     async workflowDefinitions() { return (await request("/v1/workflows/definitions")).json(); },
     async startWorkflow(definitionId, input, idempotencyKey = randomUUID()) {
       return (await request("/v1/workflows/executions", { method: "POST", json: { definitionId, input }, idempotencyKey })).json();
+    },
+    async startWorkflowWithDeadlines(body, { idempotencyKey = randomUUID(), userToken } = {}) {
+      return (await request("/v1/workflows/executions", { method: "POST", json: body, idempotencyKey, bearer: userToken })).json();
+    },
+    async getWorkflowWithDeadline(executionId, { userToken } = {}) {
+      return (await request(workflowPath(executionId), { bearer: userToken })).json();
+    },
+    async listWorkflowTasks({ limit, cursor, definitionKey, unit, candidateGroup, overdue, userToken } = {}) {
+      return (await workflowRead("/v1/workflows/tasks", { limit, cursor, definitionKey, unit, candidateGroup, overdue }, userToken)).json();
+    },
+    async claimWorkflowTask(taskId, { ttlSeconds, userToken } = {}) {
+      return (await request(`/v1/workflows/tasks/${segment(taskId)}/claim`, {
+        method: "POST", json: ttlSeconds === undefined ? undefined : { ttlSeconds }, bearer: userToken,
+      })).json();
+    },
+    async releaseWorkflowTask(taskId, { userToken } = {}) {
+      await finish(await request(`/v1/workflows/tasks/${segment(taskId)}/release`, { method: "POST", bearer: userToken }));
+    },
+    async completeWorkflowTask(executionId, body, { idempotencyKey, userToken } = {}) {
+      if (typeof idempotencyKey !== "string" || !idempotencyKey.trim()) throw new TypeError("idempotencyKey is required");
+      return (await request(`${workflowPath(executionId)}/complete`, { method: "POST", json: body, idempotencyKey, bearer: userToken })).json();
+    },
+    async cancelWorkflowWithPendingCheck(executionId, { userToken } = {}) {
+      await finish(await request(workflowPath(executionId), { method: "DELETE", bearer: userToken }));
+    },
+    async listWorkflowTaskHistory(executionId, { limit, cursor, userToken } = {}) {
+      return (await workflowRead(`${workflowPath(executionId)}/history`, { limit, cursor }, userToken)).json();
     },
     async discover({ limit, cursor } = {}) {
       const query = new URLSearchParams();

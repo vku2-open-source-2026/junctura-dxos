@@ -239,3 +239,61 @@ that retain source record IDs.
 
 Adds tenant-scoped app groups and membership, plus the optional group recipient
 on record read shares. Existing exact app grants are preserved.
+
+## Subject bindings (036)
+
+Adds the tenant-scoped table binding an operator-assigned `subjectId` to exactly
+one OIDC login subject per (tenant, issuer), plus the read-side check RPC that
+verifies a caller's own claim against that binding. Nothing here is writable
+through Core; provisioning inserts rows directly.
+
+## Directory management (037)
+
+Extends the management permission vocabulary with `directory.write` and adds
+the durable desired state for unit types, flat units, per-unit groups and unit
+memberships. Every row carries a generation and a synchronization status; a
+change is confirmed only after the identity provider state has been read back,
+and confirmations are keyed by generation so an older job never overwrites a
+newer one. Every command takes a per-tenant advisory lock, deletions remain as
+durable tombstones until confirmed (so a generation is never reused across a
+delete and recreate), a confirm that no longer matches the row generation is a
+lost race reported as a conflict, and mutations additionally require the
+`core-writer` role relayed by Core.
+
+## Verified subject consents (038)
+
+Consent list, grant and revoke now require a verified subject identity and use
+the bound `subjectId` as the canonical data subject, resolved one way only: a
+login subject maps to its bound subjectId, never the reverse. Each consent row
+carries that canonical key; the one-time backfill moved legacy rows written
+under a login subject to the bound subjectId, while rows no binding reaches
+stay quarantined with no canonical key until an operator re-maps them during
+reconciliation. Binding rows refuse identifiers shared between a subjectId and
+a login subject in the same tenant and issuer, and the per-subject
+active-consent limit counts and creates under its own advisory lock. Consent
+checks during capability execution resolve the named person through the same
+one-way join, so consents granted before verified subjects keep their
+authority, and the data subject's access log shows calls recorded under either
+of their identifiers.
+
+## Workflow deadlines and completion (039–041)
+
+Migration 039 creates operator-managed definition policies keyed by tenant and exact Flowable definition ID.
+Managed starts keep their reservation, effective unit assignments and deadlines in a private execution table
+and record the first response in the shared idempotency ledger. Existing checkpoint reservations remain
+in `core.workflow_requests`. Install bindings for each business definition version before starting it.
+
+Migration 040 adds expiring claims and a completion outbox. The tenant-scoped workflow RPC checks the task
+unit, candidate groups and active claim before committing records, the outbox and the replay receipt.
+A separate internal worker role leases pending entries. It publishes task history only after seeing the
+matching task-local marker and successful end in Flowable history. Both roles use RPC grants and the private
+tables enforce tenant RLS.
+
+Migration 041 adds a cancellation lease to the workflow execution row. If Flowable still reports the
+execution as running after a failed cancellation, the holder can reopen it for tasks. It also allows
+empty history for executions without task policy and aligns checkpoint key conflicts with legacy starts.
+
+Keep the PostgreSQL execution/outbox data and Flowable history together during backup and restore. An
+unconfirmed engine outcome stays pending and retries with a capped delay. A task ended by external deletion
+is marked `cancelled`. A task ended by a different command is marked `unconfirmed`. History contains
+confirmed completions. Use the stored execution and task IDs to reconcile committed records with Flowable.

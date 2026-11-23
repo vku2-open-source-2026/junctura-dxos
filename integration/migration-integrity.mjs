@@ -58,6 +58,76 @@ test("fresh install records every checksum atomically", async () => {
   assert.equal(await sql("SELECT last_version FROM core.schema_migration_state WHERE id = 1"), latestVersion);
 });
 
+test("workflow migration preserves legacy reservations and scopes worker leases", async () => {
+  const tenant = "workflow-migration";
+  const key = randomUUID();
+  await sql(`INSERT INTO core.workflow_requests (tenant_id, key, definition_id, input_hash, engine_id)
+    VALUES ('${tenant}', '${key}', 'checkpoint:1:1', repeat('0', 64), 'old-execution');`);
+  assert.equal(await sql(`SET ROLE junctura_workflow_api;
+    SELECT set_config('request.jwt.claims','{"tenant_id":"${tenant}","role":"junctura_workflow_api"}',false);
+    SELECT core.workflow_execution_command('get','{"executionId":"old-execution"}')->'value';`).then(result => result.split("\n").at(-1)), "null");
+  assert.equal(await sql(`SELECT engine_id FROM core.workflow_requests WHERE tenant_id='${tenant}' AND key='${key}';`), "old-execution");
+  assert.equal(await sql(`SELECT has_function_privilege('junctura_workflow_api','core.workflow_worker_command(text,jsonb)','EXECUTE'),
+    has_table_privilege('junctura_workflow_worker','app_private.workflow_completion_outbox','SELECT'),
+    has_table_privilege('junctura_api','app_private.workflow_definition_policies','INSERT');`), "f|f|f");
+
+  await sql(`INSERT INTO app_private.workflow_executions
+    (tenant_id,caller_scope,request_key,digest,definition_id,definition_key,steps,execution_id,start_result)
+    VALUES ('${tenant}',sha256(''::bytea),'${key}',sha256(''::bytea),'workflow:1:1','workflow','{}','execution','{}');
+    INSERT INTO app_private.workflow_completion_outbox
+    (tenant_id,execution_id,definition_id,task_id,engine_execution_id,step_key,unit,candidate_group,actor_subject,variables)
+    VALUES ('${tenant}','execution','workflow:1:1','task','child-execution','review','unit','group','subject','{}');`);
+  const worker = async (operation, payload = {}, scope) => {
+    const claims = JSON.stringify({ role: "junctura_workflow_worker", tenant_id: scope });
+    const output = await sql(`SET ROLE junctura_workflow_worker;
+      SELECT set_config('request.jwt.claims','${claims}',false);
+      SELECT core.workflow_worker_command('${operation}','${JSON.stringify(payload)}');`);
+    return JSON.parse(output.split("\n").at(-1));
+  };
+  const { value: leased } = await worker("lease");
+  assert.equal(leased.tenant_id, tenant);
+  assert.equal(leased.task_id, "task");
+  assert.equal((await worker("lease")).value, null);
+  const settle = { taskId: leased.task_id, lease: leased.lease, state: "cancelled" };
+  await worker("settle", settle, "foreign-tenant");
+  assert.equal(await sql(`SELECT state FROM app_private.workflow_completion_outbox WHERE tenant_id='${tenant}';`), "pending");
+  await worker("settle", { ...settle, lease: randomUUID() }, tenant);
+  assert.equal(await sql(`SELECT state FROM app_private.workflow_completion_outbox WHERE tenant_id='${tenant}';`), "pending");
+  await worker("settle", settle, tenant);
+  assert.equal(await sql(`SELECT state FROM app_private.workflow_completion_outbox WHERE tenant_id='${tenant}';`), "cancelled");
+});
+
+test("workflow cancellation resume is tenant-scoped and fenced by the current lease", async () => {
+  const tenant = "workflow-cancel";
+  await sql(`INSERT INTO app_private.workflow_executions
+    (tenant_id,caller_scope,request_key,digest,definition_id,definition_key,steps,execution_id,start_result,cancel_requested)
+    VALUES ('${tenant}',sha256(''::bytea),gen_random_uuid(),sha256(''::bytea),'workflow:1:1','workflow','{}','execution','{}',true);`);
+  const command = async (operation, payload = {}, scope = tenant) => {
+    const claims = JSON.stringify({ role: "junctura_workflow_api", tenant_id: scope, resource_writer: true });
+    const output = await sql(`SET ROLE junctura_workflow_api;
+      SELECT set_config('request.jwt.claims','${claims}',false);
+      SELECT core.workflow_task_command('${operation}','${JSON.stringify({ executionId: "execution", ...payload })}');`);
+    return JSON.parse(output.split("\n").at(-1));
+  };
+  const flag = () => sql(`SELECT cancel_requested FROM app_private.workflow_executions WHERE tenant_id='${tenant}';`);
+  assert.deepEqual(await command("history"), { status: 200, value: [] });
+  assert.deepEqual(await command("history", { executionId: "legacy" }), { status: 200, value: [] });
+  const first = await command("cancel", { status: "running" });
+  assert.equal(first.status, 200);
+  assert.ok(first.value);
+  assert.equal((await command("cancel", { status: "running" })).error, "task_conflict");
+  await command("resume", { lease: first.value }, "another-tenant");
+  assert.equal(await flag(), "t");
+  await sql(`UPDATE app_private.workflow_executions SET cancel_lease_until='-infinity' WHERE tenant_id='${tenant}';`);
+  const replacement = await command("cancel", { status: "running" });
+  assert.equal(replacement.status, 200);
+  assert.notEqual(replacement.value, first.value);
+  await command("resume", { lease: first.value });
+  assert.equal(await flag(), "t");
+  assert.equal((await command("resume", { lease: replacement.value })).status, 204);
+  assert.equal(await flag(), "f");
+});
+
 test("upgrading 029 preserves records and backfills incarnations without a table rewrite", async () => {
   const database = "record_upgrade";
   const upgradeDir = join(directory, "record-upgrade");
@@ -145,6 +215,96 @@ test("concurrent runners serialize and converge", async () => {
   assert.equal(results.length, 2);
   assert.equal(await sql("SELECT count(*) FROM core.schema_migration_checksums"), migrationCount);
   assert.equal(await sql("SELECT count(*) FROM core.schema_migrations"), migrationCount);
+});
+
+test("upgrading from 035 maps legacy consents one way and quarantines unmapped rows", async () => {
+  const database = "consent_upgrade";
+  const upgradeDir = join(directory, "consent-upgrade");
+  mkdirSync(upgradeDir);
+  const appId = randomUUID();
+  await sql(`CREATE DATABASE ${database} OWNER junctura_data`);
+  try {
+    for (const migration of migrations.filter(file => Number(file.slice(0, 3)) <= 35)) {
+      cpSync(join(directory, migration), join(upgradeDir, migration));
+    }
+    await migrate({ MIGRATION_DIR: "/migrations/consent-upgrade" }, database);
+    const issuer = "https://fixture.invalid";
+    const capability = `urn:junctura:capability:${appId}:lookup`;
+    await sql(`INSERT INTO app_private.applications
+      (tenant_id,app_id,issuer,oauth_client_id,owner_subject,provider_origin,display_name,digest,state)
+      VALUES('tenant-a','${appId}','${issuer}','fixture','subject','https://fixture.invalid',
+        'Consent fixture','sha256:${"0".repeat(64)}','active');
+      INSERT INTO execution_private.subject_consents(tenant_id,issuer,data_subject,consumer_app_id,capability_id,purposes,expires_at)
+        SELECT 'tenant-a','${issuer}',login,'${appId}','${capability}',
+          ARRAY['service_review']::text[],now()+interval '2 hours'
+        FROM unnest(ARRAY['legacy-person','verified-1','late-person']) login;`, database);
+    const addVersions = (min, max) => {
+      for (const migration of migrations.filter(file => {
+        const version = Number(file.slice(0, 3));
+        return version >= min && version <= max;
+      })) cpSync(join(directory, migration), join(upgradeDir, migration));
+    };
+    const upgrade = () => migrate({ MIGRATION_DIR: "/migrations/consent-upgrade" }, database);
+    addVersions(36, 36);
+    await upgrade();
+    const bind = (subject, login) => `INSERT INTO app_private.subject_bindings(tenant_id,issuer,subject_id,login_subject)
+      VALUES('tenant-a','${issuer}','${subject}','${login}')`;
+    await sql(bind("verified-1", "legacy-person"), database);
+    addVersions(37, 38);
+    await upgrade();
+    const mappings = () => sql(`SELECT jsonb_object_agg(data_subject,canonical_subject)
+      FROM execution_private.subject_consents WHERE consumer_app_id='${appId}';`, database);
+    assert.deepEqual(JSON.parse(await mappings()), { "legacy-person": "verified-1", "verified-1": null, "late-person": null });
+    await sql(bind("verified-2", "late-person"), database);
+    assert.deepEqual(JSON.parse(await mappings()), { "legacy-person": "verified-1", "verified-1": null, "late-person": "verified-2" });
+    const results = await Promise.allSettled([
+      sql(`BEGIN; ${bind("cross-id", "login-a")}; SELECT pg_sleep(0.3); COMMIT;`, database),
+      sql(`BEGIN; ${bind("canonical-b", "cross-id")}; SELECT pg_sleep(0.3); COMMIT;`, database),
+    ]);
+    assert.equal(results.filter(result => result.status === "fulfilled").length, 1);
+    assert.match(results.find(result => result.status === "rejected").reason.stderr, /must not share identifiers/);
+    await assert.rejects(sql("UPDATE app_private.subject_bindings SET login_subject='different' WHERE subject_id='verified-1';", database),
+      /operator reconciliation/);
+    await assert.rejects(sql("DELETE FROM app_private.subject_bindings WHERE subject_id='verified-1';", database),
+      /operator reconciliation/);
+  } finally {
+    await sql(`DROP DATABASE ${database}`);
+    rmSync(upgradeDir, { recursive: true, force: true });
+  }
+});
+
+test("directory confirmation requires the current lease and generation", async () => {
+  const tenant = "directory-lease-test";
+  const claims = { tenant_id: tenant, sub: "tester", iss: "https://directory.invalid", client_id: "manager",
+    role: "junctura_directory_api", directory_writer: true };
+  const rpc = async (operation, payload, session = claims) => JSON.parse((await sql(`
+    SET ROLE ${session.role};
+    SELECT set_config('request.jwt.claims','${JSON.stringify(session)}',true);
+    SELECT core.directory_command('${operation}','${JSON.stringify(payload)}');
+  `)).split("\n").at(-1));
+  await sql(`INSERT INTO app_private.principals(tenant_id,issuer,subject,management_client,permissions)
+    VALUES('${tenant}','${claims.iss}','${claims.sub}','${claims.client_id}',ARRAY['directory.write']);`);
+  const old = randomUUID(), current = randomUUID();
+  assert.equal((await rpc("unit_type_put", { unitType: "office", name: "Office" })).status, 201);
+  assert.equal((await rpc("sync_acquire", { lease: old })).status, 204);
+  assert.equal((await rpc("sync_acquire", { lease: current })).status, 409);
+  const keys = { unit: "office-a" };
+  const first = await rpc("unit_put", { ...keys, unitType: "office", name: "Old", lease: old });
+  assert.equal(first.status, 201);
+  assert.deepEqual((await rpc("unit_list", { limit: 10 })).value.items, []);
+  await sql(`UPDATE app_private.directory_sync_leases SET expires_at='-infinity' WHERE tenant_id='${tenant}';`);
+  assert.equal((await rpc("sync_acquire", { lease: current })).status, 204);
+  const next = await rpc("unit_put", { ...keys, unitType: "office", name: "Current", lease: current });
+  assert.equal(next.status, 200);
+  assert.equal((await rpc("unit_confirm", { ...keys, lease: old, generation: next.generation })).status, 409);
+  assert.equal((await rpc("unit_confirm", { ...keys, lease: current, generation: first.generation })).status, 409);
+  assert.equal((await rpc("unit_confirm", { ...keys, lease: current, generation: next.generation })).status, 204);
+  assert.deepEqual((await rpc("unit_list", { limit: 10 })).value.items, [{ ...keys, unitType: "office", name: "Current" }]);
+  const worker = { role: "junctura_directory_worker", tenant_id: tenant };
+  assert.ok((await rpc("sync_tenants", {}, worker)).value.includes(tenant));
+  assert.equal((await rpc("unit_put", { ...keys, lease: current }, worker)).status, 403);
+  const job = (await rpc("sync_next", { lease: current }, worker)).value;
+  assert.deepEqual([job.kind, job.keys, job.generation], ["unit", keys, next.generation]);
 });
 
 test("version-only history requires explicit operator adoption", async () => {

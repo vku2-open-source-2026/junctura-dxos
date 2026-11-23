@@ -64,12 +64,102 @@ export type RecordListFilter = {
   ownerAppId?: string;
 };
 export type RecordAggregateFilter = { count?: true; groupBy?: string[]; where?: Record<string, string>; ownerAppId?: string };
+export type VerifiedIdentity = {
+  subject: string;
+  tenantId: string;
+  roles: string[];
+  units: string[];
+  groups: string[];
+  subjectId?: string;
+  preferredUsername?: string;
+};
+export type DirectoryPage = { items: unknown[]; nextCursor: string | null };
+export type DirectoryUnitType = { unitType: string; name: string };
+export type DirectoryUnit = { unit: string; unitType: string; name: string };
+export type DirectoryGroup = { unit: string; group: string; name: string };
+export type DirectoryMember = { unit: string; subject: string; groups: string[] };
+export type SubjectConsent = {
+  consentId: string;
+  consumer: { appId: string; displayName: string | null };
+  capabilityId: string;
+  capabilityTitle: string | null;
+  purposes: string[];
+  createdAt: string;
+  expiresAt: string;
+  revokedAt: string | null;
+  state: 'active' | 'revoked' | 'expired';
+};
+export type ConsentCreate = { consumerAppId: string; capabilityId: string; purposes: string[]; expiresAt: string };
+export type WorkflowStart = {
+  definitionId: string;
+  input?: JsonObject;
+  unit?: string;
+  taskUnits?: Record<string, string>;
+  dueAt?: string;
+  taskDueAt?: Record<string, string>;
+};
+export type WorkflowExecution = {
+  id: string;
+  definitionId: string;
+  status: 'running' | 'completed' | 'cancelled';
+  input: JsonObject;
+};
+export type WorkflowExecutionWithDeadline = WorkflowExecution & { dueAt: string | null };
+export type WorkflowTaskClaim = { taskId: string; claimedBy: string; claimedUntil: string };
+export type WorkflowTask = {
+  taskId: string;
+  executionId: string;
+  definitionKey: string;
+  stepKey: string;
+  name: string;
+  unit: string;
+  candidateGroups: string[];
+  dueAt: string | null;
+  overdue: boolean;
+  claimedBy: string | null;
+  claimedUntil: string | null;
+};
+export type WorkflowPageOptions = { limit?: number; cursor?: string; userToken?: string };
+export type WorkflowTaskFilter = WorkflowPageOptions & { definitionKey?: string; unit?: string; candidateGroup?: string; overdue?: boolean };
+export type WorkflowTaskCompletion = {
+  taskId: string;
+  variables?: Record<string, string | number | boolean>;
+  records?: { collection: string; data: JsonObject }[];
+};
+export type WorkflowPendingCompletion = { taskId: string; completionStatus: 'pending'; execution: WorkflowExecutionWithDeadline };
+export type WorkflowHistoryEntry = {
+  taskId: string;
+  stepKey: string;
+  actorSubject: string;
+  unit: string;
+  group: string;
+  decision: string | null;
+  reason: string | null;
+  completedAt: string;
+};
 
 export function inputDigest(input: Json): string;
 export class JuncturaError extends Error { status: number; code: string; requestId?: string; }
 export function createJuncturaClient(options: { baseUrl: string; clientId: string; clientSecret: string; timeoutMs?: number; fetcher?: typeof fetch }): Readonly<{
   request(path: string, options?: RequestOptions): Promise<Response>;
-  identity(): Promise<{ subject: string; tenantId: string; roles: string[]; [key: string]: unknown }>;
+  identity(): Promise<VerifiedIdentity>;
+  listDirectoryUnitTypes(page?: { limit?: number; cursor?: string }): Promise<DirectoryPage>;
+  putDirectoryUnitType(unitType: string, name: string): Promise<DirectoryUnitType>;
+  deleteDirectoryUnitType(unitType: string): Promise<void>;
+  listDirectoryUnits(page?: { limit?: number; cursor?: string }): Promise<DirectoryPage>;
+  putDirectoryUnit(unit: string, body: { unitType: string; name: string }): Promise<DirectoryUnit>;
+  deleteDirectoryUnit(unit: string): Promise<void>;
+  listDirectoryGroups(unit: string, page?: { limit?: number; cursor?: string }): Promise<DirectoryPage>;
+  putDirectoryGroup(unit: string, group: string, name: string): Promise<DirectoryGroup>;
+  deleteDirectoryGroup(unit: string, group: string): Promise<void>;
+  listDirectoryMembers(unit: string, page?: { limit?: number; cursor?: string }): Promise<DirectoryPage>;
+  putDirectoryMember(unit: string, subject: string, groups: string[]): Promise<DirectoryMember>;
+  deleteDirectoryMember(unit: string, subject: string): Promise<void>;
+  consent(userToken: string): Readonly<{
+    list(): Promise<{ consents: SubjectConsent[] }>;
+    create(consent: ConsentCreate, idempotencyKey?: string): Promise<SubjectConsent>;
+    revoke(consentId: string): Promise<SubjectConsent>;
+  }>;
   createRecord(collection: string, data: Json): Promise<{ id: string; data: Json; [key: string]: unknown }>;
   getRecord(collection: string, id: string): Promise<{ id: string; data: Json; [key: string]: unknown }>;
   listRecords(collection: string, query?: { limit?: number; order?: 'asc' | 'desc'; cursor?: string }): Promise<{ items: { id: string; collection: string; data: Json; created_at: string }[]; nextCursor: string | null }>;
@@ -92,6 +182,14 @@ export function createJuncturaClient(options: { baseUrl: string; clientId: strin
   getObject(id: string): Promise<ArrayBuffer>;
   workflowDefinitions(): Promise<unknown>;
   startWorkflow(definitionId: string, input: Json, idempotencyKey?: string): Promise<unknown>;
+  startWorkflowWithDeadlines(body: WorkflowStart, options?: { idempotencyKey?: string; userToken?: string }): Promise<WorkflowExecution & { dueAt?: string | null }>;
+  getWorkflowWithDeadline(executionId: string, options?: { userToken?: string }): Promise<WorkflowExecutionWithDeadline>;
+  listWorkflowTasks(filters?: WorkflowTaskFilter): Promise<{ items: WorkflowTask[]; nextCursor: string | null }>;
+  claimWorkflowTask(taskId: string, options?: { ttlSeconds?: number; userToken?: string }): Promise<WorkflowTaskClaim>;
+  releaseWorkflowTask(taskId: string, options?: { userToken?: string }): Promise<void>;
+  completeWorkflowTask(executionId: string, body: WorkflowTaskCompletion, options: { idempotencyKey: string; userToken?: string }): Promise<WorkflowPendingCompletion>;
+  cancelWorkflowWithPendingCheck(executionId: string, options?: { userToken?: string }): Promise<void>;
+  listWorkflowTaskHistory(executionId: string, page?: WorkflowPageOptions): Promise<{ items: WorkflowHistoryEntry[]; nextCursor: string | null }>;
   discover(query?: { limit?: number; cursor?: string }): Promise<unknown>;
   execute(target: ExecutionTarget, input: Json, idempotencyKey?: string, context?: ExecutionContext): Promise<Execution>;
   redeemTicket(invocation: { authorization: string | undefined; invocationId: string; input: Json }): Promise<TicketContext>;

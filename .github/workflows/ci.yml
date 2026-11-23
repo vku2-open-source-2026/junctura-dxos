@@ -97,6 +97,10 @@ jobs:
           npm run test:record-queries
           npm run test:record-archives
           npm run test:app-group-shares
+      - name: Verify directory management against the real identity provider
+        run: npm run test:directory
+      - name: Verify workflow task policy and outbox against Flowable
+        run: npm run test:workflow-tasks
       - name: Verify registration, guarded capability invocation, resource isolation and Flowable worker
         run: |
           npm run test:applications

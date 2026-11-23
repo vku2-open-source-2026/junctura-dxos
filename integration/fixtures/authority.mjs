@@ -6,6 +6,7 @@ import { createHash, randomBytes } from "node:crypto";
 export function createAuthorityFixture({ base, prefix, sql, q, api, clientIds, users }) {
 const issuer = `${base}/identity/realms/junctura`;
 let adminToken;
+const bindings = [];
 async function operatorToken() {
   const deadline = Date.now() + 30000;
   while (Date.now() < deadline) {
@@ -44,7 +45,35 @@ async function human(label, tenant, permissions) {
   const roles = await Promise.all(["core-reader", "core-writer"].map(async name => (await admin(`roles/${name}`)).json()));
   assert.equal((await admin(`users/${id}/role-mappings/realm`, roles, "POST")).status, 204);
   await sql(`INSERT INTO app_private.principals(tenant_id,issuer,subject,management_client,permissions) VALUES(${q(tenant)},${q(issuer)},${q(id)},${q(clientId)},ARRAY[${permissions.map(q).join(",")}]::text[]);`);
-  return { id, token: await login(username, password, clientId) };
+  return { id, tenant, username, password, clientId, token: await login(username, password, clientId) };
+}
+
+// Assign an operator subjectId to a human fixture, bind it in (tenant, issuer)
+// and sign in again so the fresh token carries the verified claim. Bindings
+// are stable: rerunning the same assignment converges, and moving the same
+// subjectId to another login is never a silent fixture operation.
+async function verifiedSubject(person, subjectId) {
+  adminToken = await operatorToken();
+  const user = await (await admin(`users/${person.id}`)).json();
+  assert.equal((await admin(`users/${person.id}`, { ...user, attributes: { ...user.attributes, subject_id: [subjectId] } }, "PUT")).status, 204);
+  const bound = await sql(`INSERT INTO app_private.subject_bindings(tenant_id,issuer,subject_id,login_subject)
+    VALUES(${q(person.tenant)},${q(issuer)},${q(subjectId)},${q(person.id)})
+    ON CONFLICT (tenant_id,issuer,subject_id) DO UPDATE SET updated_at=clock_timestamp()
+    WHERE app_private.subject_bindings.login_subject=${q(person.id)}
+    RETURNING subject_id;`);
+  assert.equal(bound.stdout.trim().split(/\r?\n/)[0], subjectId,
+    "the binding must map this login; move the subjectId through operator reconciliation instead");
+  bindings.push([person.tenant, person.id, subjectId]);
+  return { ...person, token: await login(person.username, person.password, person.clientId) };
+}
+async function cleanupSubjectBindings() {
+  if (!bindings.length) return;
+  const keys = bindings.map(([tenant, login, subjectId]) => `(${[tenant, issuer, login, subjectId].map(q).join(",")})`);
+  await sql(`BEGIN;
+    ALTER TABLE app_private.subject_bindings DISABLE TRIGGER subject_binding_guard;
+    DELETE FROM app_private.subject_bindings WHERE (tenant_id,issuer,login_subject,subject_id) IN (${keys.join(",")});
+    ALTER TABLE app_private.subject_bindings ENABLE TRIGGER subject_binding_guard;
+    COMMIT;`);
 }
 async function backend(label, principal, administrator, tenant = "tenant-a", writer = true, providerOrigin) {
   adminToken = await operatorToken();
@@ -81,5 +110,5 @@ async function backend(label, principal, administrator, tenant = "tenant-a", wri
 }
 
 
-return { operatorToken, admin, login, human, backend };
+return { operatorToken, admin, login, human, verifiedSubject, cleanupSubjectBindings, backend };
 }

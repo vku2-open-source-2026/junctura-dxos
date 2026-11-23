@@ -3,7 +3,7 @@
 import { randomUUID } from "node:crypto";
 import { HttpError, json, readJson, requireWriter, uuidPattern } from "../../platform/http/http.mjs";
 import { signInternalToken } from "../../platform/security/internal-token.mjs";
-export { handleAppRecords, presentRecordRequest } from "./records.mjs";
+export { handleAppRecords, parseRecordBatch, presentRecordRequest, sendRecordResult } from "./records.mjs";
 export { handleRecordArchive } from "./archive/archives.mjs";
 export { handleRecordQuery } from "./query/handler.mjs";
 import { resourceRequest } from "../resources/resources.mjs";

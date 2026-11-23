@@ -53,7 +53,7 @@ function conditionText(source) {
   return cdata ? cdata[1].trim() : decodeReferences(value);
 }
 
-export function validateDefinition(xml, { reservedKeys = RESERVED_KEYS } = {}) {
+export function validateDefinition(xml, { reservedKeys = RESERVED_KEYS, includeTasks = false } = {}) {
   const problems = [];
   const reject = (rule, detail) => problems.push({ rule, detail });
   if (typeof xml !== "string") {
@@ -64,6 +64,7 @@ export function validateDefinition(xml, { reservedKeys = RESERVED_KEYS } = {}) {
 
   const processes = [];
   const conditions = [];
+  const tasks = [];
   // Scan complete tags (including quoted '>'), skipping comments, processing
   // instructions and CDATA. This is a safety policy, not an XML schema parser.
   const tags = /<!--[\s\S]*?-->|<!\[CDATA\[[\s\S]*?\]\]>|<\?[\s\S]*?\?>|<(\/?)([A-Za-z_][\w.:-]*)((?:[^"'<>]|"[^"]*"|'[^']*')*)>/g;
@@ -91,6 +92,14 @@ export function validateDefinition(xml, { reservedKeys = RESERVED_KEYS } = {}) {
     const entries = attributes(source);
     const attrs = new Map(entries);
     if (localName === "process") processes.push(attrs);
+    if (includeTasks && (element === "userTask" || element === "bpmn:userTask")) {
+      const id = attrs.get("id");
+      const groups = attrs.get("flowable:candidateGroups")?.split(",").map(group => group.trim()) ?? [];
+      if (!/^[A-Za-z0-9:_-]{1,128}$/.test(id ?? "") || tasks.some(task => task.id === id)) {
+        reject("invalid_task_id", "User task IDs must be unique and match the workflow task key format");
+      }
+      tasks.push({ id, name: attrs.get("name") || id, groups: [...new Set(groups)] });
+    }
     for (const [name, value] of entries) {
       if (name === "xmlns" || name.startsWith("xmlns:")) {
         const prefix = name === "xmlns" ? "" : name.slice(6);
@@ -131,5 +140,5 @@ export function validateDefinition(xml, { reservedKeys = RESERVED_KEYS } = {}) {
     }
   }
   if (problems.length) return { ok: false, problems };
-  return { ok: true, key: processes[0].get("id"), name: processes[0].get("name") };
+  return { ok: true, key: processes[0].get("id"), name: processes[0].get("name"), ...(includeTasks ? { tasks } : {}) };
 }

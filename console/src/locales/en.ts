@@ -2221,6 +2221,7 @@ export const en: typeof vi = {
   "consents": {
     "title": "User consents",
     "subtitle": "When a call concerns a person, that person must consent first. Users grant and withdraw their own consent.",
+    "verifiedHint": "This account has no operator-assigned verified subject yet. An operator must assign your subjectId in the identity provider; until then consents for your person cannot be listed or granted.",
     "readOnlyNote": "Administrators can only view; withdrawing consent is done by the user in the application.",
     "searchPlaceholder": "Search by person, application or data scope…",
     "activeCount": "Active consents",
