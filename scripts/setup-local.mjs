@@ -33,7 +33,7 @@ try {
   console.log("Created local configuration with random credentials; existing files are never overwritten.");
   console.log("Next: npm run doctor, npm run local:up, npm run healthcheck. See docs/GETTING_STARTED.md.");
 } catch (error) {
-  if (error.code === "EEXIST") console.error(".env already exists; preserve it and add missing settings manually");
+  if (error.code === "EEXIST") console.error(".env already exists; preserve it and add missing settings manually (an upgraded install without MEILI_MASTER_KEY needs a generated key; see docs/RELEASE.md)");
   else console.error("Could not create configuration. Check options, distinct ports (1-65535), and directory permissions.");
   process.exitCode = 1;
 }

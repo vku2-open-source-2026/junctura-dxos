@@ -35,7 +35,9 @@ function queryPayload(url, exporting) {
       if (!/^[0-9]{1,3}$/.test(value)) throw new HttpError(400, "invalid_audit_limit");
       payload.limit = Number(value);
     } else {
-      if (value.length < 1 || value.length > 1024) throw new HttpError(400, "invalid_audit_query");
+      if (value.length < 1 || value.length > 1024) {
+        throw new HttpError(400, key === "cursor" ? "invalid_cursor" : "invalid_audit_query");
+      }
       payload[key] = value;
     }
   }
@@ -108,6 +110,15 @@ async function exportAudit(response, identity, config, filters) {
   const exportRpc = (operation, payload, status = 200) =>
     auditRpc(config, identity, "audit_app_export", { operation, payload }, status,
       operation === "page" ? control.signal : undefined);
+  const readPage = async (after) => {
+    const page = await exportRpc("page", after === undefined ? { snapshotId } : { snapshotId, after });
+    if (!Array.isArray(page?.lines) || (page.nextAfter !== null &&
+        (typeof page.nextAfter !== "string" || !/^[1-9][0-9]{0,18}$/.test(page.nextAfter) ||
+          BigInt(page.nextAfter) <= BigInt(after ?? 0) || page.lines.length === 0))) {
+      throw new HttpError(503, "audit_unavailable");
+    }
+    return page;
+  };
   try {
     const started = await exportRpc("start", filters);
     snapshotId = started?.snapshotId;
@@ -115,15 +126,14 @@ async function exportAudit(response, identity, config, filters) {
       throw new HttpError(503, "audit_unavailable");
     }
     if (control.signal.aborted) return;
-    let page = await exportRpc("page", { snapshotId });
-    if (!Array.isArray(page?.lines)) throw new HttpError(503, "audit_unavailable");
+    let page = await readPage();
     response.writeHead(200, {
       "Content-Type": "application/x-ndjson; charset=utf-8",
       "X-Content-Type-Options": "nosniff",
     });
     await writeLines(response, [started.head, ...page.lines], control.signal);
     while (page.nextAfter !== null) {
-      page = await exportRpc("page", { snapshotId, after: page.nextAfter });
+      page = await readPage(page.nextAfter);
       await writeLines(response, page.lines, control.signal);
     }
     response.end();

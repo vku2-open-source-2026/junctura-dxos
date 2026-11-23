@@ -8,6 +8,7 @@ import { createCapabilityRuntime } from "../modules/capability/execution/runtime
 import { startDirectoryReconciler } from "../modules/directory/directory.mjs";
 import { createEventStreams } from "../modules/events/events.mjs";
 import { createCompositionRuntime } from "../modules/capability/composition/runtime.mjs";
+import { startObjectReconciler } from "../modules/objects/objects.mjs";
 import { startSearchIndexer } from "../modules/search/search.mjs";
 import { startWorkflowReconciler } from "../modules/workflow/workflow.mjs";
 
@@ -33,9 +34,10 @@ export function createApplication(config, execution, composition) {
   const route = createApi({ ...config, eventsRuntime });
   const stopDirectory = startDirectoryReconciler(config);
   const stopWorkflow = startWorkflowReconciler(config);
+  const stopObjects = startObjectReconciler(config);
   const stopSearch = startSearchIndexer(config);
   return {
     route,
-    close() { eventsRuntime.close(); stopDirectory?.(); stopWorkflow?.(); stopSearch?.(); executionRuntime?.close(); compositionRuntime?.close(); },
+    close() { eventsRuntime.close(); stopDirectory?.(); stopWorkflow?.(); stopObjects?.(); stopSearch?.(); executionRuntime?.close(); compositionRuntime?.close(); },
   };
 }

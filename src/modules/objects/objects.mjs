@@ -6,6 +6,8 @@ import { resourceCommand, resourceRequest } from "../resources/resources.mjs";
 import { requireCleanObject } from "./malware-scan.mjs";
 import { boundaryOf, parseMultipart } from "./multipart.mjs";
 
+export { startObjectReconciler } from "./reconcile.mjs";
+
 const maxBytes = 5 * 1024 * 1024;
 // Multipart framing adds the boundary and the metadata parts around the same
 // 5 MiB file; the contract bounds the whole envelope at 5.308.416 bytes.
@@ -103,27 +105,6 @@ async function objectCommand(config, identity, operation, payload = {}) {
   return result;
 }
 
-// Legacy published versions carry no byte size in PostgreSQL. Before the app
-// quota is charged, Core reads each unknown size from the Filer's current
-// version and backfills it; a version that has since been replaced backfills
-// never and old bytes stay uncounted.
-async function backfillObjectSizes(config, identity) {
-  const { value: missing } = await objectCommand(config, identity, "missing", { limit: 64 });
-  if (!missing.length) return;
-  const sizes = [];
-  for (const entry of missing) {
-    try {
-      const head = await storage(config, identity.tenantId, entry.id, { method: "HEAD" },
-        { ownerAppId: identity.appId, version: entry.version });
-      const length = Number(head.headers.get("content-length"));
-      if (Number.isSafeInteger(length) && length >= 1 && length <= maxBytes) {
-        sizes.push({ id: entry.id, version: entry.version, size: length });
-      }
-    } catch { /* The next pass retries a missing or unavailable legacy byte. */ }
-  }
-  if (sizes.length) await objectCommand(config, identity, "backfill", { sizes });
-}
-
 function parseTags(value) {
   if (!Array.isArray(value) || value.length > 20 ||
       value.some(tag => typeof tag !== "string" || !tag.isWellFormed() || !tagPattern.test(tag))) {
@@ -216,11 +197,9 @@ async function uploadObject(request, response, identity, config, url, objectId) 
   const replay = await objectCommand(config, identity, "replay", { key, digest, method, path });
   if (replay.value !== null) return json(response, replay.status, replay.value, method);
 
-  await backfillObjectSizes(config, identity);
   const current = (await objectCommand(config, identity, "prepare", {
     id: objectId, ...metadataPayload(recordRef, tags),
   })).value;
-  const status = current.version ? 200 : 201;
   // Quarantine → ClamAV → publish. Unscanned bytes never become downloadable.
   const scope = { ownerAppId: current.ownerAppId, version: randomUUID() };
   const uploadForm = () => {
@@ -229,25 +208,37 @@ async function uploadObject(request, response, identity, config, url, objectId) 
     return form;
   };
   try {
+    // The candidate version is recorded before the Filer sees any byte, so a
+    // lost commit response or a crashed process always leaves an operation the
+    // reconciliation task can finish or clean up.
+    await objectCommand(config, identity, "stage", { id: objectId, version: scope.version });
     const quarantined = await storage(config, identity.tenantId, objectId, { method: "POST", body: uploadForm() }, scope, { quarantine: true });
     await quarantined.arrayBuffer();
     await requireCleanObject(bytes, config);
     const published = await storage(config, identity.tenantId, objectId, { method: "POST", body: uploadForm() }, scope);
     await published.arrayBuffer();
-    const commit = await objectCommand(config, identity, "commit", {
-      id: objectId, version: scope.version, size: bytes.length, status, key, digest, method, path,
-      ...metadataPayload(recordRef, tags),
-    });
+    let commit;
+    try {
+      commit = await objectCommand(config, identity, "commit", {
+        id: objectId, version: scope.version, size: bytes.length, key, digest, method, path,
+        ...metadataPayload(recordRef, tags),
+      });
+    } catch (error) {
+      // The response may be lost after the database committed. Ask for the
+      // receipt instead of deleting bytes that may be referenced now; an
+      // attempt that cannot be confirmed stays staged for reconciliation.
+      let receipt = null;
+      try { receipt = await objectCommand(config, identity, "replay", { key, digest, method, path }); }
+      catch { /* The reconciliation task resolves the staged attempt later. */ }
+      if (receipt?.value) return json(response, receipt.status, receipt.value, method);
+      throw error;
+    }
     if (commit.replayed) {
       // A concurrent identical upload committed first; its result replays and
       // the bytes published for this attempt stay orphans no longer.
       await removeVersion(config, identity.tenantId, objectId, scope);
-      return json(response, commit.status, commit.value, method);
     }
     return json(response, commit.status, commit.value, method);
-  } catch (error) {
-    await removeVersion(config, identity.tenantId, objectId, scope);
-    throw error;
   } finally {
     await removeQuarantine(config, identity.tenantId, objectId, scope);
   }
@@ -308,7 +299,6 @@ async function listObjects(request, response, identity, config, url) {
   const filters = parseMetadataQuery(url);
   const after = filters.cursor === undefined
     ? undefined : decodeMetadataCursor(filters.cursor, { appId: identity.appId, recordRef: filters.recordRef, tag: filters.tag });
-  await backfillObjectSizes(config, identity);
   const { value } = await objectCommand(config, identity, "list", {
     limit: filters.limit,
     ...(filters.recordRef ? { recordRef: filters.recordRef } : {}),
@@ -343,6 +333,7 @@ async function serveObjects(request, response, identity, config, url) {
   const command = (operation, payload) => resourceCommand(config, identity, operation, payload).then(result => result.value);
   if ((request.method === "POST" && !id) || (request.method === "PUT" && id)) {
     if (scoped) return uploadObject(request, response, identity, config, url, id ?? randomUUID());
+    requireWriter(identity);
     if (url.search) throw new HttpError(400, "invalid_object_path");
     if (request.headers["content-type"]?.split(";", 1)[0].trim() !== "application/octet-stream") throw new HttpError(415, "binary_required");
     const bytes = await readBody(request, maxBytes);

@@ -2540,7 +2540,7 @@
     "method": "POST",
     "operationId": "uploadObjectWithMetadata",
     "summary": "Upload an object with optional metadata",
-    "description": "The file part must be 1 byte–5 MiB and is published only after a clean scan. A recordRef may point to a live record owned by the caller. The link and tags confer no read access. Charge the bytes of current published objects to the per-app quota before publication. Replacement charges the size delta; deletion releases the current size. The octet-stream form creates an unlinked and untagged object. For multipart uploads the logical request includes file bytes, link and tags. Multipart boundaries are transport framing and do not change the logical request.",
+    "description": "The file part must be 1 byte–5 MiB and is published only after a clean scan. A recordRef may point to a live record owned by the caller. The link and tags confer no read access. Charge the bytes of current published objects to the per-app quota before publication. Replacement charges the size delta; deletion releases the current size. The octet-stream form creates an unlinked and untagged object. For multipart uploads the logical request includes file bytes, link and tags. Multipart boundaries are transport framing and do not change the logical request. While any published version's byte size is still unmeasured by the internal reconciliation task, uploads answer 503 quota_unmeasured instead of charging an incomplete sum; a version whose bytes no longer exist stays uncounted. The listing hides a version until its size is measured. A commit whose staged upload attempt was invalidated by the internal reconciliation worker answers 409 staging_conflict; retry the upload with a fresh idempotency key.",
     "tags": [
       "app-resource"
     ],
@@ -2555,6 +2555,7 @@
       "401",
       "403",
       "404",
+      "409",
       "413",
       "415",
       "422",
@@ -2590,7 +2591,7 @@
     "method": "GET",
     "operationId": "listObjectsByMetadata",
     "summary": "List authorized objects by record or tag",
-    "description": "Return current clean object metadata readable with existing ownership or exact share grants. Match both filters when supplied. Use recordRef[collection] and recordRef[id] together. Sort by object ID. Record links alone never grant visibility.",
+    "description": "Return current clean object metadata readable with existing ownership or exact share grants. Match both filters when supplied. Use recordRef[collection] and recordRef[id] together. Sort by object ID. Record links alone never grant visibility. A version whose size is still unmeasured by the internal reconciliation task stays hidden from the listing until it is measured; while any version of the caller's app is unmeasured, uploads answer 503 quota_unmeasured.",
     "tags": [
       "app-resource"
     ],
@@ -2679,7 +2680,7 @@
     "method": "PUT",
     "operationId": "replaceObjectWithMetadata",
     "summary": "Create or replace an object with optional metadata",
-    "description": "The file part must be 1 byte–5 MiB and is published only after a clean scan. A recordRef may point to a live record owned by the caller. The link and tags confer no read access. Charge the bytes of current published objects to the per-app quota before publication. Replacement charges the size delta; deletion releases the current size. For an existing object, omitted metadata preserves the previous value. Use null to clear recordRef and [] to clear tags. A new object defaults to no link or tags. For multipart uploads the logical request includes file bytes, link and tags. Multipart boundaries are transport framing and do not change the logical request.",
+    "description": "The file part must be 1 byte–5 MiB and is published only after a clean scan. A recordRef may point to a live record owned by the caller. The link and tags confer no read access. Charge the bytes of current published objects to the per-app quota before publication. Replacement charges the size delta; deletion releases the current size. For an existing object, omitted metadata preserves the previous value. Use null to clear recordRef and [] to clear tags. A new object defaults to no link or tags. For multipart uploads the logical request includes file bytes, link and tags. Multipart boundaries are transport framing and do not change the logical request. A commit whose staged upload attempt was invalidated by the internal reconciliation worker answers 409 staging_conflict; retry the upload with a fresh idempotency key.",
     "tags": [
       "app-resource"
     ],
@@ -2695,6 +2696,7 @@
       "401",
       "403",
       "404",
+      "409",
       "413",
       "415",
       "422",

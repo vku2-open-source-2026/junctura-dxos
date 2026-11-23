@@ -9,19 +9,15 @@ import { decodeSearchCursor, encodeSearchCursor } from "../src/modules/search/se
 
 const identity = { tenantId: "tenant-a", appId: "22222222-2222-4222-8222-222222222222" };
 
-function pdfDocument(content) {
-  const stream = deflateSync(content);
-  const objects = [
-    "1 0 obj << /Type /Catalog >> endobj",
-    "2 0 obj << /Type /Page /Contents 3 0 R >> endobj",
-    `3 0 obj << /Length ${stream.length} /Filter /FlateDecode >>\nstream\n`,
-  ];
-  const head = objects.join("\n");
-  return Buffer.concat([
-    Buffer.from(`%PDF-1.4\n${head}`, "latin1"),
-    stream,
-    Buffer.from("\nendstream\nendobj\n%%EOF\n", "latin1"),
-  ]);
+function pdfDocument(...streams) {
+  const parts = [Buffer.from("%PDF-1.4\n", "latin1")];
+  for (const content of streams) {
+    const stream = deflateSync(content);
+    parts.push(Buffer.from(`3 0 obj << /Length ${stream.length} /Filter /FlateDecode >>\nstream\n`, "latin1"),
+      stream, Buffer.from("\nendstream\nendobj\n", "latin1"));
+  }
+  parts.push(Buffer.from("%%EOF\n", "latin1"));
+  return Buffer.concat(parts);
 }
 
 test("text extraction covers plain, markdown, csv, json and PDF text layers", () => {
@@ -32,6 +28,10 @@ test("text extraction covers plain, markdown, csv, json and PDF text layers", ()
     "report\ntitle\nQuarterly\nscore\n4\ntags\na\nb");
   assert.match(extractText(pdfDocument(Buffer.from("BT /F1 12 Tf 72 720 Td (Quarterly review) Tj 0 -20 Td (second line) Tj ET"))),
     /Quarterly review[\n ]+second line/s);
+  // Hexadecimal strings are the second PDF text encoding.
+  assert.match(extractText(pdfDocument(Buffer.from("BT /F1 12 Tf 72 720 Td <517561727465726C79 20726576696577> Tj ET"))),
+    /^Quarterly review/);
+  assert.equal(extractText(pdfDocument(Buffer.from("BT /F1 12 Tf 72 720 Td <41424> Tj ET"))), "AB@");
 });
 
 test("binary content and PDFs without text yield nothing", () => {
@@ -46,6 +46,17 @@ test("binary content and PDFs without text yield nothing", () => {
   assert.equal(extractText(Buffer.from('{"broken": ')), '{"broken":');
 });
 
+test("pdf extraction is bounded per stream, per document and in output", () => {
+  // A decompression bomb yields no text at all instead of exhausting memory.
+  const bomb = pdfDocument(Buffer.concat([
+    Buffer.from("BT /F1 12 Tf 72 720 Td (quarterly) Tj ET"), Buffer.alloc(4_000_000, 0x20)]));
+  assert.equal(extractText(bomb), null);
+  // Many text streams still answer, bounded to the shared output ceiling.
+  const page = "BT /F1 12 Tf 72 720 Td (".concat("word ".repeat(8192), ") Tj ET");
+  const text = extractText(pdfDocument(page, page, page, page));
+  assert.equal(text.length, 65_536);
+});
+
 test("extracted text is bounded", () => {
   const long = Buffer.from("x".repeat(100_000));
   assert.equal(extractText(long).length, 65_536);
@@ -55,11 +66,12 @@ test("meilisearch adapter creates the tenant index once and confirms tasks", asy
   const calls = [];
   const state = { index: false, tasks: {} };
   let nextTask = 1;
+  const uid = "junctura-search-tenant-a";
   const fetcher = async (url, options = {}) => {
     const path = new URL(url).pathname;
     const method = options.method ?? "GET";
     calls.push([path, method]);
-    if (method === "GET" && path === "/indexes/junctura-search-tenant-a") {
+    if (method === "GET" && path === `/indexes/${uid}`) {
       return Response.json({}, { status: state.index ? 200 : 404 });
     }
     if (method === "POST" && path === "/indexes") {
@@ -68,8 +80,8 @@ test("meilisearch adapter creates the tenant index once and confirms tasks", asy
       state.tasks[taskUid] = "enqueued";
       return Response.json({ taskUid }, { status: 202 });
     }
-    if ((method === "PATCH" && path === "/indexes/junctura-search-tenant-a/settings") ||
-        (method === "POST" && path === "/indexes/junctura-search-tenant-a/documents")) {
+    if ((method === "PATCH" && path === `/indexes/${uid}/settings`) ||
+        (method === "POST" && path === `/indexes/${uid}/documents`)) {
       const taskUid = nextTask++;
       state.tasks[taskUid] = "enqueued";
       return Response.json({ taskUid }, { status: 202 });
@@ -82,31 +94,32 @@ test("meilisearch adapter creates the tenant index once and confirms tasks", asy
     return Response.json({}, { status: 400 });
   };
   const meili = createMeilisearch({ searchUrl: "http://search.test", searchKey: "master" }, fetcher);
-  await meili.upsert("tenant-a", { id: "record:1", text: "hello" });
-  await meili.upsert("tenant-a", { id: "record:2", text: "again" });
+  await meili.upsert(uid, { id: "record:1", text: "hello" });
+  await meili.upsert(uid, { id: "record:2", text: "again" });
   assert.deepEqual(calls, [
-    ["/indexes/junctura-search-tenant-a", "GET"],
+    [`/indexes/${uid}`, "GET"],
     ["/indexes", "POST"],
     ["/tasks/1", "GET"],
-    ["/indexes/junctura-search-tenant-a/settings", "PATCH"],
+    [`/indexes/${uid}/settings`, "PATCH"],
     ["/tasks/2", "GET"],
-    ["/indexes/junctura-search-tenant-a/documents", "POST"],
+    [`/indexes/${uid}/documents`, "POST"],
     ["/tasks/3", "GET"],
-    ["/indexes/junctura-search-tenant-a/documents", "POST"],
+    [`/indexes/${uid}/documents`, "POST"],
     ["/tasks/4", "GET"],
   ]);
 });
 
 test("meilisearch adapter fails closed on transport and task errors", async () => {
   const failing = async () => { throw new Error("down"); };
+  const uid = "junctura-search-tenant-a";
   const meili = createMeilisearch({ searchUrl: "http://search.test", searchKey: "master" }, failing);
-  await assert.rejects(meili.search("tenant-a", "q", 10, 0), /search_unavailable/);
+  await assert.rejects(meili.search(uid, "q", 10, 0), /search_unavailable/);
   let polls = 0;
   const routing = async (url, options = {}) => {
     const path = new URL(url).pathname;
     const method = options.method ?? "GET";
-    if (method === "GET" && path === "/indexes/junctura-search-tenant-a") return Response.json({}, { status: 200 });
-    if (method === "POST" && path === "/indexes/junctura-search-tenant-a/documents") {
+    if (method === "GET" && path === `/indexes/${uid}`) return Response.json({}, { status: 200 });
+    if (method === "POST" && path === `/indexes/${uid}/documents`) {
       return Response.json({ taskUid: 7 }, { status: 202 });
     }
     if (path === "/tasks/7") {
@@ -116,19 +129,23 @@ test("meilisearch adapter fails closed on transport and task errors", async () =
     return Response.json({}, { status: 400 });
   };
   const other = createMeilisearch({ searchUrl: "http://search.test", searchKey: "master" }, routing);
-  await assert.rejects(other.upsert("tenant-a", { id: "record:1", text: "x" }), /search_unavailable/);
+  await assert.rejects(other.upsert(uid, { id: "record:1", text: "x" }), /search_unavailable/);
   assert.throws(() => createMeilisearch({ searchUrl: "http://search.test", searchKey: undefined }, failing),
     /search_unavailable/);
 });
 
-test("search cursors bind to the query, caller and generation, and expire", () => {
+test("search cursors bind to the query, tenant, caller, scope and generation, and expire", () => {
+  const secret = "s".repeat(32);
   const generation = "11111111-1111-4111-8111-111111111111";
-  const cursor = encodeSearchCursor("review", identity, generation, 51);
-  assert.deepEqual(decodeSearchCursor(cursor, "review", identity), { offset: 51, generation });
-  assert.throws(() => decodeSearchCursor(cursor, "other", identity));
-  assert.throws(() => decodeSearchCursor(cursor, "review", { ...identity, appId: "33333333-3333-4333-8333-333333333333" }));
-  assert.throws(() => decodeSearchCursor(cursor, "review", { tenantId: "tenant-a", clientOnly: true }));
-  assert.throws(() => decodeSearchCursor("broken", "review", identity));
-  const expired = Buffer.from(JSON.stringify({ o: 0, g: generation, f: "x", e: Date.now() - 1 })).toString("base64url");
-  assert.throws(() => decodeSearchCursor(expired, "review", identity));
+  const scope = { generation, management: ["22222222-2222-4222-8222-222222222222"], shares: [] };
+  const cursor = encodeSearchCursor("review", identity, scope, generation, 51, secret);
+  assert.deepEqual(decodeSearchCursor(cursor, "review", identity, scope, secret), { offset: 51, generation });
+  assert.throws(() => decodeSearchCursor(cursor, "other", identity, scope, secret));
+  assert.throws(() => decodeSearchCursor(cursor, "review", { ...identity, subject: "other" }, scope, secret));
+  assert.throws(() => decodeSearchCursor(cursor, "review", { ...identity, clientId: "other" }, scope, secret));
+  assert.throws(() => decodeSearchCursor(cursor, "review", identity,
+    { ...scope, management: [] }, secret), "a changed read scope expires the cursor");
+  assert.throws(() => decodeSearchCursor("broken", "review", identity, scope, secret));
+  const expired = `${Buffer.from(JSON.stringify({ o: 0, g: generation, f: "x", e: Date.now() - 1 })).toString("base64url")}.aaaa`;
+  assert.throws(() => decodeSearchCursor(expired, "review", identity, scope, secret));
 });

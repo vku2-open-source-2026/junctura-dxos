@@ -158,7 +158,7 @@ services:
     image: getmeili/meilisearch:v1.19@sha256:abab6e9054572fea9fd409cf0f4fe3b65f6c8e70cd0f213004592b6d0e9587ac
     restart: unless-stopped
     environment:
-      MEILI_MASTER_KEY: ${MEILI_MASTER_KEY:?Run npm run setup first}
+      MEILI_MASTER_KEY: ${MEILI_MASTER_KEY:?Run npm run setup first, or on an upgrade append a generated MEILI_MASTER_KEY to the existing .env}
       MEILI_NO_ANALYTICS: "true"
       MEILI_ENV: production
     volumes:
@@ -272,7 +272,7 @@ services:
       CLAMAV_PORT: "3310"
       CLAMAV_TIMEOUT_MS: ${CLAMAV_TIMEOUT_MS:-30000}
       MEILI_URL: http://search:7700
-      MEILI_MASTER_KEY: ${MEILI_MASTER_KEY:?Run npm run setup first}
+      MEILI_MASTER_KEY: ${MEILI_MASTER_KEY:?Run npm run setup first, or on an upgrade append a generated MEILI_MASTER_KEY to the existing .env}
       SECRETS_URL: http://secrets:8200
       SECRETS_TOKEN_FILE: /run/junctura/core-token
       SECRETS_MOUNT: ${SECRETS_MOUNT:-secret}

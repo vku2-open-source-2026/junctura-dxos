@@ -91,6 +91,16 @@ function parsePart(headerBlock, value) {
   return part;
 }
 
+// The closing delimiter line must be exactly two hyphens after the boundary,
+// optionally padded with linear whitespace and ended by the line break; a
+// longer line is a malformed envelope, never an accepted close.
+function closeDelimiter(buffer, position) {
+  while (buffer[position] === 0x20 || buffer[position] === 0x09) position++;
+  if (position >= buffer.length) return;
+  if (buffer[position] === 0x0d && buffer[position + 1] === 0x0a) return;
+  throw new HttpError(400, "invalid_multipart");
+}
+
 export function parseMultipart(buffer, boundary) {
   const delimiter = Buffer.from(`--${boundary}`, "utf8");
   const closing = Buffer.concat([CRLF, delimiter]);
@@ -103,7 +113,10 @@ export function parseMultipart(buffer, boundary) {
   position += delimiter.length;
   const parts = [];
   for (;;) {
-    if (buffer.subarray(position, position + 2).toString("latin1") === "--") break;
+    if (buffer.subarray(position, position + 2).toString("latin1") === "--") {
+      closeDelimiter(buffer, position + 2);
+      break;
+    }
     if (buffer.subarray(position, position + 2).toString("latin1") !== "\r\n") {
       throw new HttpError(400, "invalid_multipart");
     }

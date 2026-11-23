@@ -48,7 +48,7 @@ test("application audit shares the platform chain and enforces archive, regulato
 
   const empty = await archive("start", {});
   assert.equal(empty.value.head.sequence, 0);
-  assert.equal(empty.value.head.hash, null);
+  assert.equal(empty.value.head.hash, `sha256:${"0".repeat(64)}`);
   await archive("end", { snapshotId: empty.value.snapshotId });
 
   await audit(`app_private.audit_append('audit.platform_fixture','audit',${q(randomUUID())},1)`, management, "junctura_app_owner");
@@ -58,6 +58,16 @@ test("application audit shares the platform chain and enforces archive, regulato
   const unknownKey = randomUUID();
   assert.equal((await append({ ...body, action: "record.unknown" }, unknownKey)).error, "unknown_action");
   assert.equal((await append(body, unknownKey)).error, "idempotency_key_reused");
+  // The database itself enforces the scalar 2 KiB metadata rule (decision 11),
+  // not only the HTTP layer.
+  assert.equal((await append({ ...body, meta: { channel: "x".repeat(2100) } })).error, "invalid_audit_meta");
+  assert.equal((await append({ ...body, meta: { nested: { deep: true } } })).error, "invalid_audit_meta");
+  assert.equal((await append({ ...body, meta: { "bad-key": 1 } })).error, "invalid_audit_meta");
+  const nulled = JSON.parse((await sql(`BEGIN; SET LOCAL ROLE junctura_audit_api;
+    SELECT set_config('request.jwt.claims',${q(JSON.stringify(claims))},true);
+    SELECT core.audit_app_append(${sqlJson({ body: { ...body, meta: { ok: null } }, key: randomUUID() })});
+    ROLLBACK;`)).split("\n").at(-1));
+  assert.equal(nulled.status, 201, "null is an accepted scalar metadata value");
   const rollbackKey = randomUUID();
   await sql(`BEGIN; SET LOCAL ROLE junctura_audit_api;
     SELECT set_config('request.jwt.claims',${q(JSON.stringify(claims))},true);
@@ -90,6 +100,12 @@ test("application audit shares the platform chain and enforces archive, regulato
   assert.equal((await query({ subjectId: body.subjectId }, regulator)).value.items.length, 1);
   assert.equal((await query({ unit: "unit-b" }, regulator)).status, 403);
   assert.deepEqual((await query({}, { ...regulator, units: ["unit-b"] })).value.items, []);
+  // Every cursor failure class answers invalid_cursor, not invalid_audit_query.
+  assert.equal((await query({ cursor: "zz" }, claims)).error, "invalid_cursor");
+  assert.equal((await query({ cursor: "ff".repeat(70) }, claims)).error, "invalid_cursor");
+  assert.equal((await query({ cursor: "aa".repeat(70) }, claims)).error, "invalid_cursor");
+  const forged = Buffer.from("2030-01-01T00:00:00Z|11111111-1111-4111-8111-111111111111|forged").toString("hex");
+  assert.equal((await query({ cursor: forged }, claims)).error, "invalid_cursor");
 
   await sql(`UPDATE app_private.app_audit_actions SET visible_to_subject=false WHERE tenant_id=${q(tenant)};`);
   const visible = await audit(`(SELECT jsonb_agg(event_id) FROM app_private.audit_subject_entries(${q(body.subjectId)}))`,
@@ -126,6 +142,34 @@ test("application audit shares the platform chain and enforces archive, regulato
     DELETE FROM app_private.audit_app_payloads WHERE tenant_id=${q(tenant)} AND event_id=${q(restricted.value.eventId)};
     DELETE FROM app_private.audit WHERE tenant_id=${q(tenant)} AND event_id=${q(restricted.value.eventId)};`);
   assert.equal((await verify()).value.firstBreak.reason, "missing_entry");
+});
+
+test("an oversized authorized export fails with its own limit, not a rate limit", async () => {
+  // A separate tenant keeps the bulk rows away from the fixture chain: their
+  // guard requires identity claims, so the rows are written under claims in
+  // one transaction and the existing export path seals them before the limit
+  // check answers.
+  const bulkTenant = `bulk-${randomUUID()}`;
+  const bulkClaims = { tenant_id: bulkTenant, iss: issuer, sub: "bulk", client_id: "bulk" };
+  try {
+    await sql(`INSERT INTO app_private.principals(tenant_id,issuer,subject,management_client,permissions)
+      VALUES(${q(bulkTenant)},${q(issuer)},'bulk','bulk',ARRAY['audit.read']);
+      BEGIN;
+      SET LOCAL ROLE junctura_app_owner;
+      SELECT set_config('request.jwt.claims',${q(JSON.stringify(bulkClaims))},false);
+      INSERT INTO app_private.audit(tenant_id,event,resource_id,revision)
+        SELECT ${q(bulkTenant)},'audit.bulk_fixture',gen_random_uuid(),1 FROM generate_series(1,10001);
+      COMMIT;`);
+    const big = await archive("start", {}, { ...management, tenant_id: bulkTenant, iss: issuer, sub: "bulk", client_id: "bulk" });
+    assert.deepEqual([big.status, big.error], [400, "audit_export_too_large"]);
+  } finally {
+    await sql(`DELETE FROM app_private.audit WHERE tenant_id=${q(bulkTenant)};
+      DELETE FROM app_private.audit_chain_heads WHERE tenant_id=${q(bulkTenant)};
+      DELETE FROM app_private.principals WHERE tenant_id=${q(bulkTenant)};`);
+  }
+  const restored = await archive("start", {}, management);
+  assert.equal(restored.status, 200);
+  await archive("end", { snapshotId: restored.value.snapshotId }, management);
 });
 
 test("gateway append, self query and NDJSON export match the application audit contract", { timeout: 90000 }, async () => {

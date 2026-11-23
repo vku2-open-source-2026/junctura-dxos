@@ -1,11 +1,20 @@
 // SPDX-FileCopyrightText: 2026 Junctura Contributors
 // SPDX-License-Identifier: Apache-2.0
 // Minimal Meilisearch HTTP adapter over Node fetch: no client library, one
-// index per tenant with a fixed document key, and every write confirmed
-// through the task queue before the caller continues.
+// index per tenant generation with a fixed document key, and every write
+// confirmed through the task queue before the caller continues. A write
+// response without a task id, a failed task or an unusable filter all count as
+// an unavailable index so the durable queue keeps the job for a later retry.
 import { HttpError } from "../../platform/http/http.mjs";
 
-const indexUid = tenantId => `junctura-search-${tenantId}`;
+export const maxTotalHits = 10_000;
+const indexSettings = {
+  searchableAttributes: ["text"],
+  filterableAttributes: ["kind", "resourceId", "incarnation", "version", "schemaRevision", "projection", "generation"],
+  sortableAttributes: ["id"],
+  rankingRules: ["words", "typo", "proximity", "attribute", "sort", "exactness"],
+  pagination: { maxTotalHits },
+};
 
 export function createMeilisearch(config, fetcher = fetch) {
   if (!config.searchUrl || !config.searchKey) throw new HttpError(503, "search_unavailable");
@@ -28,6 +37,11 @@ export function createMeilisearch(config, fetcher = fetch) {
     return { status: response.status, value };
   }
 
+  function taskUid(value) {
+    if (typeof value?.taskUid !== "number") throw new HttpError(503, "search_unavailable");
+    return value.taskUid;
+  }
+
   async function waitTask(taskUid) {
     const deadline = Date.now() + 15_000;
     for (;;) {
@@ -41,41 +55,76 @@ export function createMeilisearch(config, fetcher = fetch) {
     }
   }
 
-  async function ensureIndex(tenantId) {
-    if (ready.has(tenantId)) return;
-    const uid = indexUid(tenantId);
-    if ((await call(`/indexes/${uid}`, {}, 5000)).status === 404) {
-      const created = await call("/indexes", { method: "POST", body: JSON.stringify({ uid, primaryKey: "id" }) });
-      if (created.value.taskUid !== undefined) await waitTask(created.value.taskUid);
-      const settings = await call(`/indexes/${uid}/settings`, {
-        method: "PATCH", body: JSON.stringify({ searchableAttributes: ["text"] }),
-      });
-      if (settings.value.taskUid !== undefined) await waitTask(settings.value.taskUid);
+  async function ensureIndex(indexUid) {
+    if (ready.has(indexUid)) return;
+    if ((await call(`/indexes/${indexUid}`, {}, 5000)).status !== 200) {
+      await waitTask(taskUid((await call("/indexes", {
+        method: "POST", body: JSON.stringify({ uid: indexUid, primaryKey: "id" }),
+      })).value));
     }
-    ready.add(tenantId);
+    await waitTask(taskUid((await call(`/indexes/${indexUid}/settings`, {
+      method: "PATCH", body: JSON.stringify(indexSettings),
+    })).value));
+    ready.add(indexUid);
+  }
+
+  // Index writes accept only an accepted task; the caller never drops a job
+  // before its index task succeeded. A vanished index (a rebuilt instance) is
+  // recreated once and the write retried.
+  async function write(indexUid, path, options) {
+    await ensureIndex(indexUid);
+    let result = await call(`/indexes/${indexUid}${path}`, options);
+    if (result.status === 404) {
+      ready.delete(indexUid);
+      await ensureIndex(indexUid);
+      result = await call(`/indexes/${indexUid}${path}`, options);
+    }
+    if (result.status !== 202) throw new HttpError(503, "search_unavailable");
+    return result;
   }
 
   return {
-    async search(tenantId, query, limit, offset) {
-      const { status, value } = await call(`/indexes/${indexUid(tenantId)}/search`, {
-        method: "POST", body: JSON.stringify({ q: query, limit, offset }),
+    async search(indexUid, query, limit, offset) {
+      const { status, value } = await call(`/indexes/${indexUid}/search`, {
+        method: "POST", body: JSON.stringify({ q: query, limit, offset, sort: ["id:asc"] }),
       });
+      // A generation whose index was never built has no hits, not an outage.
+      if (status === 404) return { hits: [] };
       if (status !== 200) throw new HttpError(503, "search_unavailable");
       return { hits: Array.isArray(value.hits) ? value.hits : [] };
     },
-    async upsert(tenantId, document) {
-      await ensureIndex(tenantId);
-      const { value } = await call(`/indexes/${indexUid(tenantId)}/documents`, {
-        method: "POST", body: JSON.stringify([document]),
+    // The superseded-document cleanup reads the immutable ids of the
+    // documents a resource currently has in its generation index.
+    async documents(indexUid, filter) {
+      const { status, value } = await call(`/indexes/${indexUid}/search`, {
+        method: "POST", body: JSON.stringify({ q: "", filter, limit: 200,
+          attributesToRetrieve: ["id"], sort: ["id:asc"] }),
       });
-      if (value.taskUid !== undefined) await waitTask(value.taskUid);
+      if (status === 404) return [];
+      if (status !== 200) throw new HttpError(503, "search_unavailable");
+      return Array.isArray(value.hits) ? value.hits : [];
     },
-    async remove(tenantId, documentId) {
-      await ensureIndex(tenantId);
-      const { value } = await call(`/indexes/${indexUid(tenantId)}/documents/${encodeURIComponent(documentId)}`, {
-        method: "DELETE",
-      });
-      if (value.taskUid !== undefined) await waitTask(value.taskUid);
+    async upsert(indexUid, document) {
+      await waitTask(taskUid((await write(indexUid, "/documents", {
+        method: "POST", body: JSON.stringify([document]),
+      })).value));
+    },
+    async purge(indexUid, filter) {
+      await waitTask(taskUid((await write(indexUid, "/documents/delete", {
+        method: "POST", body: JSON.stringify({ filter }),
+      })).value));
+    },
+    async purgeIds(indexUid, ids) {
+      await waitTask(taskUid((await write(indexUid, "/documents/delete-batch", {
+        method: "POST", body: JSON.stringify({ documents: ids }),
+      })).value));
+    },
+    async dropIndex(indexUid) {
+      let result = await call(`/indexes/${indexUid}`, { method: "DELETE" }, 5000);
+      // A retired generation whose index already vanished is done retiring.
+      if (result.status === 404) return;
+      if (result.status !== 202) throw new HttpError(503, "search_unavailable");
+      await waitTask(taskUid(result.value));
     },
   };
 }

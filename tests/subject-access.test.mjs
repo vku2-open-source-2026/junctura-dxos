@@ -81,36 +81,51 @@ test("list forwards limit and cursor to the database RPC", async () => {
   }
 });
 
-test("a truncated page carries a cursor bound to the last entry", async () => {
+test("a truncated page carries a cursor bound to the last entry and its caller", async () => {
   const original = globalThis.fetch;
   let requestPayload;
+  const page = () => ({ ok: true, json: async () => ({ status: 200, value: {
+    entries: [{ source: "application", accessId: "app:55555555-5555-4555-8555-555555555555",
+      accessedAt: "2030-01-12T12:00:00.123456Z", purpose: "service_review", flaggedAt: null,
+      app: { appId: "22222222-2222-4222-8222-222222222222", displayName: null },
+      action: "record.viewed", outcome: "success" }],
+    truncated: true, generatedAt: "2030-01-12T12:00:00.000Z" } }) });
   globalThis.fetch = async (url, init) => {
     requestPayload = JSON.parse(init.body);
-    return { ok: true, json: async () => ({ status: 200, value: {
-      entries: [{ source: "application", accessId: "app:55555555-5555-4555-8555-555555555555",
-        accessedAt: "2030-01-12T12:00:00.000Z", purpose: "service_review", flaggedAt: null,
-        app: { appId: "22222222-2222-4222-8222-222222222222", displayName: null },
-        action: "record.viewed", outcome: "success" }],
-      truncated: true, generatedAt: "2030-01-12T12:00:00.000Z" } }) };
+    return page();
   };
   try {
     const response = responseStub();
     await handleSubjectAccessEvents(requestStub("GET", SUBJECT_ACCESS_EVENTS_PATH, undefined), response,
       identity, config, new URL("/v1/me/data-access", "http://core"));
     assert.ok(response.payload.nextCursor);
-    await assert.rejects(handleSubjectAccessEvents(
-      requestStub("GET", SUBJECT_ACCESS_EVENTS_PATH, undefined), responseStub(), identity, config,
-      new URL("/v1/me/data-access?cursor=broken", "http://core")), /invalid_cursor/);
-    // A follow-up page forwards the decoded key.
+    const cursor = response.payload.nextCursor;
+    // The cursor carries the caller binding; the database only receives the
+    // page key.
     globalThis.fetch = async (url, init) => {
       requestPayload = JSON.parse(init.body);
       return { ok: true, json: async () => ({ status: 200, value: {
         entries: [], truncated: false, generatedAt: "2030-01-12T12:00:00.000Z" } }) };
     };
-    await handleSubjectAccessEvents(requestStub("GET", SUBJECT_ACCESS_EVENTS_PATH, undefined), response,
-      identity, config, new URL(`/v1/me/data-access?cursor=${response.payload.nextCursor}`, "http://core"));
+    await handleSubjectAccessEvents(requestStub("GET", SUBJECT_ACCESS_EVENTS_PATH, undefined), responseStub(), identity, config,
+      new URL(`/v1/me/data-access?cursor=${cursor}`, "http://core"));
     assert.deepEqual(requestPayload.payload.after, {
-      accessedAt: "2030-01-12T12:00:00.000Z", accessId: "app:55555555-5555-4555-8555-555555555555" });
+      accessedAt: "2030-01-12T12:00:00.123456Z", accessId: "app:55555555-5555-4555-8555-555555555555" });
+    // The same cursor under a foreign caller or subject fails closed.
+    for (const other of [{ ...identity, subject: "login-other" }, { ...identity, subjectId: "subject-2" },
+      { ...identity, tenantId: "tenant-b" }, { ...identity, issuer: "https://other.test" }]) {
+      await assert.rejects(handleSubjectAccessEvents(
+        requestStub("GET", SUBJECT_ACCESS_EVENTS_PATH, undefined), responseStub(), other, config,
+        new URL(`/v1/me/data-access?cursor=${cursor}`, "http://core")), /invalid_cursor/);
+    }
+    await assert.rejects(handleSubjectAccessEvents(
+      requestStub("GET", SUBJECT_ACCESS_EVENTS_PATH, undefined), responseStub(), identity, config,
+      new URL("/v1/me/data-access?cursor=broken", "http://core")), /invalid_cursor/);
+    // A modified page key is rejected by the signature before its claims.
+    await assert.rejects(handleSubjectAccessEvents(
+      requestStub("GET", SUBJECT_ACCESS_EVENTS_PATH, undefined), responseStub(), identity, config,
+      new URL(`/v1/me/data-access?cursor=${cursor.slice(0, -4)}aaaa`, "http://core")),
+      /invalid_cursor/);
   } finally {
     globalThis.fetch = original;
   }

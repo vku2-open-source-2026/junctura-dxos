@@ -10,23 +10,35 @@ const prefix = `omd_${randomBytes(6).toString("hex")}`;
 const support = recordTestSupport(prefix);
 const { api, sql, q } = support;
 const collection = `${prefix}_main`;
-let owner, other, recipient, recordId;
+let owner, other, recipient, quotaApp, recordId;
 
 const octets = (bytes) => new Blob([bytes], { type: "application/octet-stream" });
 const jsonPart = (value) => new Blob([JSON.stringify(value)], { type: "application/json" });
+const bytesOf = async (value) => Buffer.from(await value.arrayBuffer());
 
-const upload = (who, id, parts, { key = randomUUID(), method = "POST", contentType = "multipart/form-data" } = {}) => {
+// The envelope is built by hand: the observer measures the exact bytes and the
+// boundary stays transport framing, like the Core parser treats it.
+const upload = async (who, id, parts, { key = randomUUID(), method = "POST", contentType = "multipart/form-data" } = {}) => {
   const path = id ? `/v2/objects/${id}` : "/v2/objects";
   const headers = { Authorization: `Bearer ${who.token}`, "Idempotency-Key": key };
   if (contentType === "multipart/form-data") {
-    const form = new FormData();
+    const boundary = `omd${randomBytes(12).toString("hex")}`;
+    const chunks = [];
     for (const [name, value] of Object.entries(parts)) {
       if (value === undefined) continue;
-      form.append(name, value instanceof Blob ? value : jsonPart(value));
+      // Metadata parts carry JSON values (including an explicit null); only
+      // the file part stays a raw binary blob.
+      const part = name === "file" ? value : jsonPart(value);
+      chunks.push(Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="${name}"` +
+        `${name === "file" ? '; filename="object.bin"' : ""}\r\nContent-Type: ${part.type}\r\n\r\n`, "utf8"),
+        await bytesOf(part), Buffer.from("\r\n", "utf8"));
     }
-    return contractFetch(`${base}${path}`, { method, body: form, headers, signal: AbortSignal.timeout(30000) });
+    chunks.push(Buffer.from(`--${boundary}--\r\n`, "utf8"));
+    return contractFetch(`${base}${path}`, { method, body: Buffer.concat(chunks), headers: {
+      ...headers, "Content-Type": `multipart/form-data; boundary=${boundary}` },
+      signal: AbortSignal.timeout(30000) });
   }
-  return contractFetch(`${base}${path}`, { method, body: parts.file, headers: {
+  return contractFetch(`${base}${path}`, { method, body: await bytesOf(parts.file), headers: {
     ...headers, "Content-Type": "application/octet-stream" }, signal: AbortSignal.timeout(30000) });
 };
 
@@ -36,6 +48,7 @@ before(async () => {
   owner = await support.createBackend("meta-owner");
   other = await support.createBackend("meta-other");
   recipient = await support.createBackend("meta-reader");
+  quotaApp = await support.createBackend("meta-quota");
   assert.equal((await api(`/v2/data-schemas/${collection}`, owner, { method: "PUT", body: {
     schema: { type: "object", required: ["code"], properties: { code: { type: "string" } } },
     indexed: ["code"], uniqueKey: "code", searchable: [], sensitive: [],
@@ -46,18 +59,19 @@ before(async () => {
 });
 
 after(async () => {
-  await support.cleanup([owner, other, recipient]);
+  await support.cleanup([owner, other, recipient, quotaApp]);
 });
 
 test("multipart uploads publish metadata only after a clean scan", async () => {
   const created = await jsonResult(await upload(owner, undefined, {
     file: octets(Buffer.from("report-bytes")),
     recordRef: { collection, id: recordId },
+    // The stored tags are deduplicated and sorted by the database.
     tags: ["source", "draft"],
   }), 201);
   assert.equal(created.size, 12);
   assert.deepEqual(created.recordRef, { collection, id: recordId });
-  assert.deepEqual(created.tags, ["source", "draft"]);
+  assert.deepEqual(created.tags, ["draft", "source"]);
   const download = await api(`/v2/objects/${created.id}`, owner);
   assert.equal(download.status, 200);
   assert.equal(Buffer.from(await download.arrayBuffer()).toString(), "report-bytes");
@@ -128,38 +142,116 @@ test("record links stay valid only for the live linked record", async () => {
   }), 200);
   const afterRecreate = await list(owner, "?tag=linked");
   assert.equal((await afterRecreate.json()).items.find(item => item.id === created.id).recordRef, null);
+  // The expired link also stops matching the recordRef filter and a replace
+  // that keeps the metadata answers with the link's live state: null.
+  const filtered = await list(owner, `?recordRef[collection]=${collection}&recordRef[id]=${recordId}`);
+  assert.deepEqual((await filtered.json()).items, []);
+  const replaced = await jsonResult(await upload(owner, created.id, {
+    file: octets(Buffer.from("fifth")),
+  }, { method: "PUT" }), 200);
+  assert.equal(replaced.recordRef, null);
+});
+
+test("concurrent identical uploads publish one version and replay the other", async () => {
+  const key = randomUUID();
+  const parts = () => ({ file: octets(Buffer.from("twin-bytes")), tags: ["twin"] });
+  const [first, second] = await Promise.all([
+    upload(owner, undefined, parts(), { key }),
+    upload(owner, undefined, parts(), { key }),
+  ]);
+  assert.deepEqual([first.status, second.status], [201, 201]);
+  const receipt = await first.clone().json();
+  assert.deepEqual(await second.json(), receipt);
+  // The published version is the committed one: its bytes stay downloadable.
+  const download = await api(`/v2/objects/${receipt.id}`, owner);
+  assert.equal(Buffer.from(await download.arrayBuffer()).toString(), "twin-bytes");
+  // A replace under a different key works normally afterwards.
+  const replaced = await jsonResult(await upload(owner, receipt.id, {
+    file: octets(Buffer.from("grown-twin")),
+  }, { method: "PUT" }), 200);
+  assert.equal(replaced.size, 11);
+});
+
+test("concurrent replaces under different keys commit both and end on one live version", async () => {
+  const created = await jsonResult(await upload(owner, undefined, {
+    file: octets(Buffer.from("base-bytes")),
+  }), 201);
+  const [left, right] = await Promise.all([
+    upload(owner, created.id, { file: octets(Buffer.from("left-write")) }, { method: "PUT", key: randomUUID() }),
+    upload(owner, created.id, { file: octets(Buffer.from("right-write")) }, { method: "PUT", key: randomUUID() }),
+  ]);
+  // Both replaces charge and commit in some order; the row keeps exactly one
+  // live version whose size is one of the two committed sizes, and its bytes
+  // stay downloadable.
+  assert.deepEqual([left.status, right.status].sort(), [200, 200]);
+  const sizes = [(await left.json()).size, (await right.json()).size];
+  assert.deepEqual(sizes.sort((a, b) => a - b), [10, 11]);
+  const listed = (await (await list(owner)).json()).items.find(item => item.id === created.id);
+  assert.equal(sizes.includes(listed.size), true);
+  const download = await api(`/v2/objects/${created.id}`, owner);
+  assert.equal(sizes.includes(Buffer.from(await download.arrayBuffer()).length), true);
 });
 
 test("the per-app file quota charges published bytes once under the app lock", async () => {
   await sql(`INSERT INTO app_private.object_quotas (tenant_id, owner_app_id, max_bytes)
-    VALUES ('tenant-a','${owner.appId}',20) ON CONFLICT (tenant_id, owner_app_id)
+    VALUES ('tenant-a','${quotaApp.appId}',20) ON CONFLICT (tenant_id, owner_app_id)
     DO UPDATE SET max_bytes=20;`);
   try {
-    const first = await jsonResult(await upload(owner, undefined, { file: octets(Buffer.alloc(12, 1)) }), 201);
-    const second = await upload(owner, undefined, { file: octets(Buffer.alloc(12, 2)) });
+    const first = await jsonResult(await upload(quotaApp, undefined, { file: octets(Buffer.alloc(12, 1)) }), 201);
+    const second = await upload(quotaApp, undefined, { file: octets(Buffer.alloc(12, 2)) });
     assert.equal(second.status, 429);
     const body = await second.json();
     assert.equal(body.error, "quota_exceeded");
     assert.deepEqual(body.quota, { resource: "appFileBytes", limit: 20, used: 12 });
     // The refused bytes never became downloadable.
-    assert.equal((await list(owner)).status, 200);
+    assert.equal((await list(quotaApp)).status, 200);
     // Replacement charges only the delta; deletion releases the current size.
-    const grown = await jsonResult(await upload(owner, first.id, { file: octets(Buffer.alloc(20, 3)) }, { method: "PUT" }), 200);
+    const grown = await jsonResult(await upload(quotaApp, first.id, { file: octets(Buffer.alloc(20, 3)) }, { method: "PUT" }), 200);
     assert.equal(grown.size, 20);
-    assert.equal((await api(`/v2/objects/${first.id}`, owner, { method: "DELETE" })).status, 204);
-    const released = await jsonResult(await upload(owner, undefined, { file: octets(Buffer.alloc(20, 4)) }), 201);
+    assert.equal((await api(`/v2/objects/${first.id}`, quotaApp, { method: "DELETE" })).status, 204);
+    const released = await jsonResult(await upload(quotaApp, undefined, { file: octets(Buffer.alloc(20, 4)) }), 201);
     assert.equal(released.size, 20);
-    // Legacy rows without a size are backfilled from the Filer before charging.
+    // A version without a known size is unlisted and blocks charging; the
+    // internal reconciliation task measures it from the Filer's current bytes
+    // and the next attempt charges the measured size.
     await sql(`UPDATE app_private.resource_objects SET size_bytes=NULL
       WHERE tenant_id='tenant-a' AND id='${released.id}';`);
-    const page = await jsonResult(await list(owner));
-    assert.equal(page.items.find(item => item.id === released.id).size, 20);
-    const charged = await upload(owner, undefined, { file: octets(Buffer.alloc(1, 5)) });
+    const deadline = Date.now() + 120000;
+    for (;;) {
+      const page = (await (await list(quotaApp)).json()).items;
+      if (page.some(item => item.id === released.id && item.size === 20)) break;
+      assert.ok(Date.now() < deadline, "the reconciliation task did not measure the legacy version");
+      await new Promise(resolve => setTimeout(resolve, 2000));
+    }
+    const charged = await upload(quotaApp, undefined, { file: octets(Buffer.alloc(1, 5)) });
     assert.equal(charged.status, 429);
     assert.deepEqual((await charged.json()).quota, { resource: "appFileBytes", limit: 20, used: 20 });
   } finally {
-    await sql(`DELETE FROM app_private.object_quotas WHERE tenant_id='tenant-a' AND owner_app_id='${owner.appId}';`);
+    await sql(`DELETE FROM app_private.object_quotas WHERE tenant_id='tenant-a' AND owner_app_id='${quotaApp.appId}';`);
   }
+});
+
+test("a staged attempt without a confirmed commit is reconciled", async () => {
+  const created = await jsonResult(await upload(owner, undefined, {
+    file: octets(Buffer.from("committed")),
+  }), 201);
+  // Simulate a Core crash after staging but before committing: the stale
+  // attempt names a version whose bytes never publish.
+  const crashed = randomUUID();
+  await sql(`INSERT INTO app_private.object_upload_staging (tenant_id, owner_app_id, object_id, version, staged_at)
+    VALUES ('tenant-a','${owner.appId}','${created.id}','${crashed}', clock_timestamp() - interval '10 minutes');`);
+  const deadline = Date.now() + 120000;
+  let remaining;
+  do {
+    remaining = await sql(`SELECT count(*) FROM app_private.object_upload_staging
+      WHERE tenant_id='tenant-a' AND object_id='${created.id}' AND version='${crashed}';`);
+    if (remaining === "0") break;
+    await new Promise(resolve => setTimeout(resolve, 2000));
+  } while (Date.now() < deadline);
+  assert.equal(remaining, "0", "the reconciliation task did not clear the staged attempt");
+  // The published bytes stay untouched while the stale attempt is cleaned.
+  const download = await api(`/v2/objects/${created.id}`, owner);
+  assert.equal(Buffer.from(await download.arrayBuffer()).toString(), "committed");
 });
 
 test("upload rejections follow the planned envelope", async () => {
@@ -172,6 +264,16 @@ test("upload rejections follow the planned envelope", async () => {
     body: Buffer.from("x"), signal: AbortSignal.timeout(30000) });
   assert.equal(missingKey.status, 400);
   assert.match((await missingKey.json()).error, /^invalid_request$/);
+  // A closing delimiter that runs on into other bytes is a malformed envelope.
+  const boundary = `${prefix}bad`;
+  const malformed = await contractFetch(`${base}/v2/objects`, { method: "POST",
+    headers: { Authorization: `Bearer ${owner.token}`,
+      "Content-Type": `multipart/form-data; boundary=${boundary}`, "Idempotency-Key": randomUUID() },
+    body: `--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="a.bin"\r\n` +
+      `Content-Type: application/octet-stream\r\n\r\nbytes\r\n--${boundary}--junk\r\n`,
+    signal: AbortSignal.timeout(30000) });
+  assert.equal(malformed.status, 400);
+  assert.equal((await malformed.json()).error, "invalid_multipart");
   // A PUT racing a finished delete finds the tombstoned object gone.
   const target = await jsonResult(await upload(owner, undefined, { file: octets(Buffer.from("race")) }), 201);
   assert.equal((await api(`/v2/objects/${target.id}`, owner, { method: "DELETE" })).status, 204);

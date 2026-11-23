@@ -139,7 +139,7 @@ test("application append checks scalar metadata and returns the committed receip
 });
 
 test("audit export writes the snapshot header first and releases the snapshot", async () => {
-  const head = { type: "chainHead", sequence: 0, hash: null, generatedAt: "2026-11-22T00:00:00Z" };
+  const head = { type: "chainHead", sequence: 0, hash: `sha256:${"0".repeat(64)}`, generatedAt: "2026-11-22T00:00:00Z" };
   const cleaned = Promise.withResolvers();
   seen = [];
   reply = ({ operation }) => {
@@ -156,6 +156,43 @@ test("audit export writes the snapshot header first and releases the snapshot", 
   assert.deepEqual(seen.map(entry => JSON.parse(entry.body)), [
     { operation: "start", payload: { app: "self" } },
     { operation: "page", payload: { snapshotId: eventId } },
+    { operation: "end", payload: { snapshotId: eventId } },
+  ]);
+});
+
+test("audit export fails closed on a malformed page instead of looping from the start", async () => {
+  seen = [];
+  for (const page of [
+    { lines: [{ sequence: 1 }], nextAfter: "0" },
+    { lines: [{ sequence: 1 }], nextAfter: 5 },
+    { lines: [{ sequence: 1 }], nextAfter: "not-a-sequence" },
+    { lines: [], nextAfter: "5" },
+  ]) {
+    reply = ({ operation }) => operation === "start"
+      ? { status: 200, value: { snapshotId: eventId, head: { type: "chainHead", sequence: 1, hash: `sha256:${"a".repeat(64)}`, generatedAt: "2026-11-22T00:00:00Z" } } }
+      : { status: 200, value: page };
+    const response = await fetch(`${base}/v1/audit-events:export?app=self`);
+    assert.equal(response.status, 503, JSON.stringify(page));
+  }
+  // A well-formed continuation page still streams.
+  const head = { type: "chainHead", sequence: 5, hash: `sha256:${"b".repeat(64)}`, generatedAt: "2026-11-22T00:00:00Z" };
+  const done = Promise.withResolvers();
+  reply = ({ operation, payload }) => {
+    if (operation === "start") return { status: 200, value: { snapshotId: eventId, head } };
+    if (operation === "page") return payload.after === "5"
+      ? { status: 200, value: { lines: [], nextAfter: null } }
+      : { status: 200, value: { lines: [{ sequence: 1 }], nextAfter: "5" } };
+    done.resolve();
+    return { status: 204 };
+  };
+  seen = [];
+  const response = await fetch(`${base}/v1/audit-events:export?app=self`);
+  assert.equal(response.status, 200);
+  await done.promise;
+  assert.deepEqual(seen.map(entry => JSON.parse(entry.body)), [
+    { operation: "start", payload: { app: "self" } },
+    { operation: "page", payload: { snapshotId: eventId } },
+    { operation: "page", payload: { snapshotId: eventId, after: "5" } },
     { operation: "end", payload: { snapshotId: eventId } },
   ]);
 });

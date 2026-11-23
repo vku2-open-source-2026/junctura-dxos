@@ -311,9 +311,13 @@ V2 ownership resolves server-side: only owner writes and exact read shares autho
 (`recordRef[collection]` and `recordRef[id]` together, a `tag`, or both; sorted by object ID with a
 caller-bound cursor). The per-app quota charges the bytes of currently published versions under a
 per-app lock and answers `429 quota_exceeded` with `quota.resource: appFileBytes`, `limit` and `used`;
-replacement charges the delta and deletion releases the size. Versions published before this quota are
-backfilled from the Filer's current version before the quota is charged. See [SECURITY.md](SECURITY.md)
-for resource authorization.
+replacement charges the delta and deletion releases the size. An internal reconciliation task
+measures versions the quota does not know yet from the Filer's current bytes, so while any version
+is unmeasured the upload answers `503 quota_unmeasured` and the listing omits it; a version whose
+bytes no longer exist stays uncounted. Every upload records its candidate version before the Filer
+stores bytes, and the reconciliation task removes staged versions only after confirming the
+database no longer references them, so a lost commit response never deletes published bytes. See
+[SECURITY.md](SECURITY.md) for resource authorization.
 
 Both versions quarantine uploads, scan bytes with ClamAV and publish only a clean result. Detection returns
 `422 malware_detected`; scanner transport/protocol/timeout failures return `503`. Quarantine cleanup is best effort.
@@ -739,9 +743,11 @@ enrolled backend service-account subject.
   Octet-stream uploads remain available. Files pass malware scanning before publication. Use
   `GET /v2/objects` with `recordRef[collection]` and `recordRef[id]`, a `tag`, or both to
   list authorized file metadata. Only current published object bytes count toward the app quota.
-- `GET /v1/search?q=…` searches declared fields and clean text files, subject to live read permissions.
-  Meilisearch holds the index. The API returns references. Authorized administrators and viewers see record data with sensitive
-  fields omitted. Filters, sorting, grouping and search also exclude those fields for these readers.
+- `GET /v1/search?q=…&limit=…&cursor=…` searches declared fields and clean text files, subject to live read permissions.
+  Meilisearch holds one index per generation and only ranks candidates; the API returns references checked against
+  PostgreSQL at query time. Authorized administrators and viewers see record data with sensitive fields omitted.
+  A `cursor` is a signed page key bound to the query, the caller and the caller's current read scope and index
+  generation, and it fails closed with `400 invalid_cursor` when reused by anyone else or after a rebuild.
 - `GET /v1/me/data-access` merges capability calls and application events that were declared visible
   to the caller's bound subject at append time, newest first with a stable `accessId` tie-break and a
   cursor bound to the caller. Restricted actions and unresolved outcomes stay invisible. The page is
@@ -784,9 +790,11 @@ are outside the subject view.
   platform events and the structural projection of app events. It can still use `since` and
   `until` for the inclusive time range. Keep the filters and caller scope across pages.
 - `GET /v1/audit-events:export` streams an authorized snapshot as NDJSON. The first line gives the
-  tenant head even for an empty result. Each event line gives its sequence and digest. Scoped
-  views can have sequence gaps. A tenant can have two active exports, each with up to 10,000
-  events. Use smaller time ranges for larger exports. The privileged verify endpoint checks the
+  tenant head even for an empty result; an empty chain reports sequence 0 with the zero hash of 64
+  zeros, which the chain verifier accepts as the genesis predecessor. Each event line gives its
+  sequence and digest. Scoped views can have sequence gaps. A tenant can have two active exports,
+  each with up to 10,000 events. An export beyond that limit answers `400 audit_export_too_large`
+  instead of a rate limit; narrow the time range and retry. The privileged verify endpoint checks the
   full tenant chain, including both historical platform hashes and application events.
 
 ### Error responses
@@ -799,6 +807,7 @@ Pointer paths into the request and, for NDJSON, one-based line numbers.
 | --- | --- | --- | --- |
 | `invalid_request`, `invalid_query`, `invalid_schema` | 400 | An envelope, parameter or schema declaration is invalid, or a required idempotency key is missing or malformed | Correct the request and resubmit. |
 | `invalid_cursor` | 400 | A cursor is malformed or belongs to different filters or scope | Restart from the first page with the intended filters. |
+| `audit_export_too_large` | 400 | The authorized export matches more than 10,000 audit events | Narrow the time range or split the export. |
 | `forbidden`, `verified_subject_required` | 403 | The caller lacks the required authority or subject claim | Use an authorized identity or obtain a token with the required verified claim. |
 | `task_group_required` | 403 | The caller belongs to no candidate group for the task's unit | Refresh the inbox and route the task to an eligible group member. |
 | `unique_key_conflict`, `resource_conflict` | 409 | A key, record ID or directory resource conflicts with existing state | Inspect the existing resource and reconcile the change before retrying. |

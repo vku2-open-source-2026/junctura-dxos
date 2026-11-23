@@ -19,6 +19,8 @@ CREATE TABLE app_private.audit_app_payloads (
 );
 CREATE INDEX audit_app_subject_idx ON app_private.audit_app_payloads (tenant_id,(entry->>'subjectId'))
   WHERE visible_to_subject AND entry->>'sensitivity'='standard';
+CREATE INDEX audit_app_unit_idx ON app_private.audit_app_payloads (tenant_id,(entry->>'unit'));
+CREATE INDEX audit_actor_time_idx ON app_private.audit (tenant_id,actor_app_id,occurred_at DESC,event_id DESC);
 
 -- Operator-managed bindings are scoped to the enrolled app and its issuer.
 CREATE TABLE app_private.audit_app_units (
@@ -274,7 +276,7 @@ DECLARE
   path constant text := '/v1/audit-events';
   body jsonb := payload->'body';
   request_key uuid;
-  request_digest bytea := sha256(convert_to(body::text,'UTF8'));
+  request_digest bytea;
   writer record;
   catalog app_audit_actions;
   scope bytea;
@@ -292,6 +294,18 @@ BEGIN
     OR body-ARRAY['action','subjectId','resourceRef','outcome','purpose','meta']<>'{}'::jsonb THEN
     RETURN record_error(400,'invalid_audit_event');
   END IF;
+  IF body ? 'meta' THEN
+    IF jsonb_typeof(body->'meta') <> 'object' OR record_compact_bytes(body->'meta') > 2048 THEN
+      RETURN record_error(400,'invalid_audit_meta');
+    END IF;
+    IF EXISTS (SELECT FROM jsonb_each(body->'meta') m
+      WHERE m.key !~ '^[A-Za-z_][A-Za-z0-9_]{0,63}$'
+        OR jsonb_typeof(m.value) NOT IN ('string','number','boolean','null')) THEN
+      RETURN record_error(400,'invalid_audit_meta');
+    END IF;
+  END IF;
+  IF record_compact_bytes(body) > 16384 THEN RETURN record_error(413,'body_too_large'); END IF;
+  request_digest:=sha256(convert_to(body::text,'UTF8'));
   request_key:=(payload->>'key')::uuid;
   SELECT * INTO writer FROM audit_app_actor();
   IF NOT FOUND THEN RETURN record_error(403,'audit_app_required'); END IF;
@@ -441,14 +455,23 @@ BEGIN
     cursor_scope:=encode(sha256(convert_to(jsonb_build_array(tenant,encode(record_caller_scope(NULL),'hex'),
       view_scope,payload-ARRAY['limit','cursor'])::text,'UTF8')),'hex');
     IF payload ? 'cursor' THEN
-      cursor_parts:=string_to_array(convert_from(decode(payload->>'cursor','hex'),'UTF8'),'|');
-      IF NOT coalesce((cardinality(cursor_parts)=3 AND cursor_parts[3]=cursor_scope)
-        OR (cardinality(cursor_parts)=2 AND view_scope->>'mode'='management'
-          AND payload-ARRAY['since','until','cursor','limit']='{}'::jsonb),false) THEN
+      IF coalesce(length(payload->>'cursor'),0) NOT BETWEEN 64 AND 1024
+        OR payload->>'cursor' !~ '^[0-9a-f]+$' THEN
         RETURN record_error(400,'invalid_cursor');
       END IF;
-      cursor_time:=cursor_parts[1]::timestamptz;
-      cursor_id:=cursor_parts[2]::uuid;
+      BEGIN
+        cursor_parts:=string_to_array(convert_from(decode(payload->>'cursor','hex'),'UTF8'),'|');
+        IF NOT coalesce((cardinality(cursor_parts)=3 AND cursor_parts[3]=cursor_scope)
+          OR (cardinality(cursor_parts)=2 AND view_scope->>'mode'='management'
+            AND payload-ARRAY['since','until','cursor','limit']='{}'::jsonb),false) THEN
+          RETURN record_error(400,'invalid_cursor');
+        END IF;
+        cursor_time:=cursor_parts[1]::timestamptz;
+        cursor_id:=cursor_parts[2]::uuid;
+        IF NOT isfinite(cursor_time) THEN RETURN record_error(400,'invalid_cursor'); END IF;
+      EXCEPTION WHEN data_exception THEN
+        RETURN record_error(400,'invalid_cursor');
+      END;
     END IF;
   EXCEPTION WHEN data_exception THEN
     RETURN record_error(400,'invalid_audit_query');
@@ -461,7 +484,9 @@ BEGIN
     WHERE a.tenant_id=tenant AND (a.schema_version=1 OR p.event_id IS NOT NULL)
       AND (from_at IS NULL OR a.occurred_at>=from_at) AND (to_at IS NULL OR a.occurred_at<=to_at)
       AND (cursor_time IS NULL OR (a.occurred_at,a.event_id)<(cursor_time,cursor_id))
-      AND audit_visible(view_scope,a.actor_app_id,p.entry)
+      AND (view_scope->>'mode'<>'app' OR (p.event_id IS NOT NULL AND a.actor_app_id=(view_scope->>'appId')::uuid))
+      AND (view_scope->>'mode'<>'regulator' OR p.entry->>'unit'=ANY(
+        ARRAY(SELECT jsonb_array_elements_text(view_scope->'units'))))
       AND audit_filter(a,p.entry,payload,view_scope)
     ORDER BY a.occurred_at DESC,a.event_id DESC LIMIT page_limit+1
   ) selected;
@@ -501,7 +526,7 @@ BEGIN
       RETURN record_error(403,'audit_permission_required');
     END IF;
     SELECT jsonb_build_object('lines',coalesce(jsonb_agg(line ORDER BY sequence),'[]'::jsonb),
-      'nextAfter',CASE WHEN count(*)=100 THEN max(sequence) END) INTO result
+      'nextAfter',CASE WHEN count(*)=100 THEN max(sequence)::text END) INTO result
     FROM (SELECT sequence,line FROM audit_export_lines l WHERE l.tenant_id=tenant AND l.snapshot_id=snapshot
       AND l.sequence>after_seq ORDER BY sequence LIMIT 100) page;
     RETURN jsonb_build_object('status',200,'value',result);
@@ -537,11 +562,11 @@ BEGIN
   GET DIAGNOSTICS rows_inserted=ROW_COUNT;
   IF rows_inserted>10000 THEN
     DELETE FROM audit_export_snapshots s WHERE s.tenant_id=tenant AND s.snapshot_id=snapshot;
-    RETURN record_error(429,'rate_limited');
+    RETURN record_error(400,'audit_export_too_large');
   END IF;
   RETURN jsonb_build_object('status',200,'value',jsonb_build_object('snapshotId',snapshot,'head',
     jsonb_build_object('type','chainHead','sequence',coalesce(head.last_seq,0),
-      'hash','sha256:' || head.last_hash,'generatedAt',clock_timestamp())));
+      'hash','sha256:' || coalesce(head.last_hash,repeat('0',64)),'generatedAt',clock_timestamp())));
 END $$;
 
 REVOKE ALL ON FUNCTION app_private.audit_app_actor(),app_private.audit_seal_pending(),

@@ -3,14 +3,14 @@
 import assert from "node:assert/strict";
 import { randomBytes, randomUUID } from "node:crypto";
 import { after, before, test } from "node:test";
-import { base, jsonResult, recordTestSupport } from "./record-test-support.mjs";
+import { issuer, jsonResult, recordTestSupport } from "./record-test-support.mjs";
 import { verifyContracts } from "./contract.mjs";
 
 const prefix = `src_${randomBytes(6).toString("hex")}`;
 const support = recordTestSupport(prefix);
 const { api, sql, q } = support;
 const collection = `${prefix}_notes`;
-let owner, other, recipient, recordId, objectId, secretId;
+let owner, other, recipient, manager, recordId, objectId, secretId;
 
 const waitUntil = async (probe, seconds = 30) => {
   const deadline = Date.now() + seconds * 1000;
@@ -22,12 +22,19 @@ const waitUntil = async (probe, seconds = 30) => {
   }
 };
 
-const hits = async (who, query) => (await jsonResult(await api(`/v1/search?q=${encodeURIComponent(query)}`, who))).items;
+const hits = async (who, query) =>
+  (await jsonResult(await api(`/v1/search?q=${encodeURIComponent(query)}`, who), 200)).items;
 
 before(async () => {
   owner = await support.createBackend("search-owner");
   other = await support.createBackend("search-other");
   recipient = await support.createBackend("search-reader");
+  manager = await support.createBackend("search-manager");
+  // A management principal sees record structure without sensitive content.
+  await sql(`INSERT INTO app_private.principals(tenant_id,issuer,subject,management_client,permissions)
+    VALUES('tenant-a',${q(issuer)},${q(manager.subject)},${q(manager.clientId)},'{}'::text[]);
+    INSERT INTO app_private.record_read_grants(tenant_id,issuer,subject,management_client,owner_app_id)
+    VALUES('tenant-a',${q(issuer)},${q(manager.subject)},${q(manager.clientId)},'${owner.appId}');`);
   assert.equal((await api(`/v2/data-schemas/${collection}`, owner, { method: "PUT", body: {
     schema: { type: "object", required: ["code"], properties: { code: { type: "string" }, note: { type: "string" } } },
     indexed: ["code"], uniqueKey: "code", searchable: ["code", "note"], sensitive: ["note"],
@@ -35,11 +42,12 @@ before(async () => {
 });
 
 after(async () => {
-  await support.cleanup([owner, other, recipient]);
+  await support.cleanup([owner, other, recipient, manager]);
 });
 
 test("declared record fields become searchable with live ACL checks", async () => {
-  // note is searchable AND sensitive: its content never enters the index.
+  // note is searchable AND sensitive: owner and share readers match its
+  // content, management readers only see the fields they may read.
   const found = await jsonResult(await api(`/v2/data/${collection}`, owner, {
     method: "POST", body: { data: { code: `needle-${prefix}`, note: "hidden-personal" } },
     headers: { "Idempotency-Key": randomUUID() },
@@ -53,8 +61,12 @@ test("declared record fields become searchable with live ACL checks", async () =
   await waitUntil(async () => (await hits(owner, `needle-${prefix}`)).length);
   const items = await hits(owner, `needle-${prefix}`);
   assert.deepEqual(items, [{ type: "record", recordRef: { collection, id: recordId } }]);
-  // The sensitive value matches nothing for anyone.
-  assert.deepEqual(await hits(owner, "hidden-personal"), []);
+  // The owner matches the sensitive value; the management grant does not.
+  assert.deepEqual(await hits(owner, "hidden-personal"),
+    [{ type: "record", recordRef: { collection, id: recordId } }]);
+  assert.deepEqual(await hits(manager, "hidden-personal"), []);
+  assert.deepEqual(await hits(manager, `needle-${prefix}`),
+    [{ type: "record", recordRef: { collection, id: recordId } }]);
   // A candidate whose row disappeared between index and query never surfaces:
   // delete, then search for the still-indexed term.
   await sql(`DELETE FROM core.app_records WHERE tenant_id='tenant-a' AND id='${visible.id}';`);
@@ -98,6 +110,9 @@ test("shares decide visibility at query time and revocation is immediate", async
   }, headers: { "Idempotency-Key": randomUUID() } }), 201);
   assert.deepEqual(await hits(recipient, `needle-${prefix}`),
     [{ type: "record", recordRef: { collection, id: recordId } }]);
+  // A share reader reads full record content, sensitive fields included.
+  assert.deepEqual(await hits(recipient, "hidden-personal"),
+    [{ type: "record", recordRef: { collection, id: recordId } }]);
   // Another application in the same tenant sees nothing without a share.
   assert.deepEqual(await hits(other, `needle-${prefix}`), []);
   await sql(`UPDATE app_private.resource_shares SET revoked=true WHERE resource_id='${recordId}' AND NOT revoked;`);
@@ -112,7 +127,7 @@ test("cursors carry the query, caller and generation and fail closed", async () 
     }), 201);
   }
   await waitUntil(async () => (await hits(owner, term)).length >= 2);
-  const page = await jsonResult(await api(`/v1/search?q=${encodeURIComponent(term)}&limit=1`, owner));
+  const page = await jsonResult(await api(`/v1/search?q=${encodeURIComponent(term)}&limit=1`, owner), 200);
   assert.equal(page.items.length, 1);
   assert.ok(page.nextCursor);
   const next = await api(`/v1/search?q=${encodeURIComponent(term)}&limit=1&cursor=${page.nextCursor}`, owner);

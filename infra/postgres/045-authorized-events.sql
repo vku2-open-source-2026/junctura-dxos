@@ -127,14 +127,24 @@ BEGIN
       SELECT coalesce((SELECT sequence FROM event_heads WHERE tenant_id=tenant),0) AS sequence
     ), page AS (
       SELECT n.sequence,n.event,n.target FROM event_notifications n CROSS JOIN head h
-      WHERE n.tenant_id=tenant AND n.sequence>after_seq AND h.sequence-after_seq BETWEEN 0 AND 64
+      WHERE n.tenant_id=tenant AND n.sequence>after_seq
         AND n.published_at>statement_timestamp()-interval '2 minutes' ORDER BY n.sequence LIMIT 64
+    ), served AS (
+      SELECT count(*) AS served_rows,max(p.sequence) AS served_last FROM page
     )
-    SELECT jsonb_build_object('overflow',h.sequence-after_seq<>count(p.sequence),
+    SELECT jsonb_build_object('overflow',
+        -- A burst in one commit only pages the stream forward; the stream
+        -- reports overflow exactly when a sequence between the cursor and the
+        -- head is missing from the journal (deleted or never served).
+        (SELECT served_rows FROM served)=0 AND h.sequence>after_seq
+        OR (SELECT served_rows FROM served)<64 AND h.sequence-after_seq>(SELECT served_rows FROM served)
+        OR (SELECT served_rows FROM served)=64 AND EXISTS (
+          SELECT FROM generate_series(after_seq+1,(SELECT served_last FROM served)) g
+          WHERE NOT EXISTS (SELECT FROM page p WHERE p.sequence=g)),
       'items',coalesce(jsonb_agg(jsonb_strip_nulls(jsonb_build_object('sequence',p.sequence::text,'event',p.event,
         'task',CASE WHEN p.event='workflow.task.created' THEN p.target END)) ORDER BY p.sequence)
         FILTER (WHERE p.sequence IS NOT NULL),'[]'::jsonb))
-    INTO result FROM head h LEFT JOIN page p ON true GROUP BY h.sequence;
+    INTO result FROM head h LEFT JOIN page p ON true;
   ELSIF operation='deliver' THEN
     SELECT * INTO notification FROM event_notifications n
     WHERE n.tenant_id=tenant AND n.sequence=(payload->>'sequence')::bigint

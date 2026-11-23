@@ -3,6 +3,7 @@
 // Test-only HTTP observer. No runtime files, credentials or payload logs are produced.
 import { spawn } from 'node:child_process';
 import { readFileSync } from 'node:fs';
+import { boundaryOf, parseMultipart } from '../src/modules/objects/multipart.mjs';
 
 const spec = JSON.parse(readFileSync(new URL('../docs/contracts/foundation-api.openapi.json', import.meta.url)));
 const routes = Object.keys(spec.paths)
@@ -40,6 +41,13 @@ export async function contractFetch(input, options = {}) {
       .filter(name => response.headers.has(name)).map(name => [name, response.headers.get(name)])) };
   if (item.responseHeaders.location) item.responseHeaders.location = item.responseHeaders.location.replace(/([?&](?:code|id_token|access_token)=)[^&]*/g, '$1[redacted]');
   if (options.body instanceof URLSearchParams) item.requestBody = redact(Object.fromEntries(options.body));
+  else if (headers.get('content-type')?.startsWith('multipart/form-data')) {
+    try {
+      const parts = parseMultipart(Buffer.from(options.body), boundaryOf(headers.get('content-type')));
+      item.requestBody = redact(Object.fromEntries(parts.map(part => [part.name,
+        part.contentType === 'application/json' ? JSON.parse(part.value.toString('utf8')) : part.value.toString('latin1')])));
+    } catch { item.requestInvalidJson = true; }
+  }
   else if (headers.get('content-type')?.startsWith('application/json')) {
     try { item.requestBody = redact(JSON.parse(options.body)); } catch { item.requestInvalidJson = true; }
   }

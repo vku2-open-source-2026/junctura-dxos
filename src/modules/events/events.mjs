@@ -9,6 +9,13 @@ export const EVENTS_PATH = "/v1/events";
 const taskId = /^[A-Za-z0-9:_-]{1,128}$/;
 const eventNames = new Set(["record.status.changed", "consent.revoked", "workflow.task.created"]);
 const heartbeatMs = 10000;
+const taskPageSize = 100;
+// One scan walks at most a bounded page count and reports at most the batch
+// the journal accepts per observation; the keyset boundary carries the rest to
+// the next scan instead of failing the tenant.
+const maxObservedTasks = 400;
+const maxScanPages = 40;
+const maxObservedTaskIds = 4096;
 
 async function eventRpc(config, identity, name, body, signal) {
   const jwt = signInternalToken(config.dataSecret, {
@@ -52,23 +59,52 @@ async function taskStillActive(config, tenantId, target) {
   }
 }
 
-async function observeTasks(config, tenantId, startedAt, signal) {
-  const floor = new Date(Math.max(startedAt, Date.now() - 120000)).toISOString();
-  const params = new URLSearchParams({ tenantId, createdAfter: floor, size: "100", sort: "id", order: "asc", active: "true" });
+// One scan walks a fixed sweep window newest first. The keyset boundary is
+// the (createTime, taskId) pair: pages advance by createTime and every page
+// re-includes the boundary instant's ties, so a tie never falls between
+// pages, taskId dedup keeps the overlap and a resumed scan cheap, and an
+// active set that shrinks between pages can never skip a task behind the
+// boundary.
+async function observeTasks(config, tenantId, startedAt, state, signal) {
+  const floor = Math.max(startedAt, Date.now() - 120000);
+  const params = new URLSearchParams({ tenantId, createdAfter: new Date(floor).toISOString(),
+    size: String(taskPageSize), sort: "createTime", order: "desc", active: "true" });
   const tasks = [];
-  for (let start = 0; start < 400; start += 100) {
+  let before = state.taskBefore;
+  for (let page = 0; page < maxScanPages; page++) {
     signal.throwIfAborted();
-    params.set("start", String(start));
-    const page = await workflowRequest(config, `runtime/tasks?${params}`);
-    if (!Array.isArray(page?.data) || page.data.length > 100 || !Number.isInteger(page.total) || page.total > 400) {
+    const query = new URLSearchParams(params);
+    if (before !== undefined) query.set("createdBefore", new Date(before).toISOString());
+    const result = await workflowRequest(config, `runtime/tasks?${query}`);
+    if (!Array.isArray(result?.data) || result.data.length > taskPageSize ||
+        !Number.isSafeInteger(result.total) || result.total < 0) {
       throw new HttpError(503, "events_unavailable");
     }
-    for (const row of page.data) {
+    const rows = result.data;
+    let oldest = Infinity;
+    let boundary = before;
+    let fresh = false;
+    for (const row of rows) {
+      const created = Date.parse(row?.createTime);
+      if (Number.isFinite(created)) oldest = Math.min(oldest, created);
       const task = taskReference(row, tenantId);
-      if (task && Date.parse(task.createdAt) > Date.parse(floor)) tasks.push(task);
+      if (!task || Date.parse(task.createdAt) <= floor || state.observed.has(task.taskId)) continue;
+      state.observed.add(task.taskId);
+      fresh = true;
+      if (tasks.length < maxObservedTasks) tasks.push(task);
+      boundary = new Date(Date.parse(task.createdAt) + 1).toISOString();
+      if (tasks.length >= maxObservedTasks) break;
     }
-    if (!page.data.length || start + page.data.length >= page.total) break;
+    if (tasks.length >= maxObservedTasks) { state.taskBefore = boundary; break; }
+    if (!Number.isFinite(oldest)) { state.taskBefore = undefined; break; }
+    if (rows.length < taskPageSize) { state.taskBefore = undefined; break; }
+    // A page whose tasks were all observed before only appears when the scan
+    // resumed inside an already-served stretch: step past that createTime
+    // block exclusively, otherwise re-include its ties on the next page.
+    state.taskBefore = fresh ? oldest + 1 : oldest;
+    before = state.taskBefore;
   }
+  if (state.observed.size > maxObservedTaskIds) state.observed.clear();
   if (tasks.length) await eventRpc(config, { tenantId }, "event_observe_tasks", { payload: tasks }, signal);
 }
 
@@ -82,12 +118,9 @@ export function createEventStreams(config) {
     const floor = Math.min(...state.clients.values());
     if (!Number.isFinite(floor)) return;
     state.nextScan = Date.now() + 1000;
-    state.scan = observeTasks(config, tenantId, floor, state.control.signal)
-      .catch(error => {
-        if (error instanceof HttpError && error.message === "events_unavailable" && !state.control.signal.aborted) {
-          for (const stop of state.clients.keys()) stop();
-        }
-      }).finally(() => { state.scan = null; });
+    state.scan = observeTasks(config, tenantId, floor, state, state.control.signal)
+      .catch(() => { /* The journal still serves other events while task observation retries. */ })
+      .finally(() => { state.scan = null; });
   }
 
   async function handle(request, response, identity, reauthorize, url) {
@@ -100,7 +133,8 @@ export function createEventStreams(config) {
     if (!config.dataUrl || closed) throw new HttpError(503, "events_unavailable");
 
     const tenantId = identity.tenantId;
-    const state = tenants.get(tenantId) ?? { clients: new Map(), control: new AbortController(), nextScan: 0 };
+    const state = tenants.get(tenantId) ?? { clients: new Map(), control: new AbortController(),
+      nextScan: 0, observed: new Set(), taskBefore: undefined };
     if (connections.size >= 64 || state.clients.size >= 8) throw new HttpError(429, "rate_limited");
     const control = new AbortController();
     const stop = () => {

@@ -10,6 +10,15 @@ const url = new URL("http://core/v1/events");
 const reader = () => ({ tenantId: "tenant-a", issuer: "https://identity.invalid", subject: "reader", clientId: "console",
   credentialExpiresAt: Date.now() + 5000, groups: [] });
 const committed = "11111111-1111-4111-8111-111111111111";
+// Background task observations run beside the stream loop; the tests wait for
+// them explicitly instead of racing the stream teardown.
+const waitFor = async (probe, turns = 200) => {
+  for (let index = 0; index < turns; index++) {
+    if (probe()) return true;
+    await new Promise(resolve => setImmediate(resolve));
+  }
+  return probe();
+};
 
 class TestResponse extends EventEmitter {
   frames = [];
@@ -128,6 +137,137 @@ test("a delayed task observation cannot replay a task from before the stream", a
   assert.deepEqual(checked, ["removed", "live"]);
   assert.deepEqual(delivered, ["3"]);
   assert.equal(response.frames[1], 'event: workflow.task.created\ndata: {"taskId":"live","executionId":"execution"}\n\n');
+});
+
+test("an oversized Flowable task backlog still streams instead of failing the tenant", async t => {
+  const startedAt = Date.now() - 200;
+  // 500 active tasks, one millisecond apart: the keyset walk covers the first
+  // 400 (the observation batch) and the next scan resumes at the boundary.
+  const tasks = Array.from({ length: 500 }, (_, index) => ({
+    id: `task-${index}`, tenantId: "tenant-a", suspended: false,
+    processInstanceId: "execution", processDefinitionId: "review:1:1", taskDefinitionKey: "review",
+    createTime: new Date(startedAt + 5000 + index).toISOString(),
+  }));
+  const observes = [];
+  let polls = 0;
+  t.mock.method(globalThis, "fetch", async (input, init) => {
+    const url = new URL(input);
+    if (url.hostname === "workflow.invalid") {
+      if (url.pathname === "/runtime/tasks") {
+        assert.equal(url.searchParams.get("active"), "true");
+        assert.equal(url.searchParams.get("sort"), "createTime");
+        const floor = Date.parse(url.searchParams.get("createdAfter"));
+        const before = url.searchParams.has("createdBefore")
+          ? Date.parse(url.searchParams.get("createdBefore")) : Infinity;
+        const rows = tasks.filter(task => Date.parse(task.createTime) > floor &&
+          Date.parse(task.createTime) < before)
+          .sort((left, right) => Date.parse(right.createTime) - Date.parse(left.createTime))
+          .slice(0, 100);
+        return Response.json({ data: rows, total: tasks.length });
+      }
+      throw new Error("unexpected workflow call");
+    }
+    if (url.pathname === "/rpc/event_observe_tasks") {
+      const claims = JSON.parse(Buffer.from(init.headers.Authorization.split(".")[1], "base64url"));
+      assert.equal(claims.role, "junctura_event_observer");
+      observes.push(JSON.parse(init.body).payload);
+      return Response.json({ status: 204 });
+    }
+    const { operation, payload } = JSON.parse(init.body);
+    const claims = JSON.parse(Buffer.from(init.headers.Authorization.split(".")[1], "base64url"));
+    assert.equal(claims.role, "junctura_event_api");
+    if (operation === "start") return Response.json({ status: 200, value: { sequence: "0", startedAt: new Date(startedAt).toISOString() } });
+    if (operation === "poll") {
+      polls++;
+      // Keep the stream open until both background scans finished observing.
+      await waitFor(() => observes.length >= 2);
+      return polls === 1 ? Response.json({ status: 200, value: { overflow: false,
+        items: [{ sequence: "1", event: "record.status.changed" }] } }) :
+        Response.json({ status: 200, value: { overflow: true, items: [] } });
+    }
+    assert.equal(operation, "deliver");
+    return Response.json({ status: 200, value: { recordId: "55555555-5555-4555-8555-555555555551" } });
+  });
+  const response = new TestResponse();
+  const identity = reader();
+  await createEventStreams({ ...config, workflowUrl: "http://workflow.invalid", workflowPassword: "unused" })
+    .handle({ method: "GET" }, response, identity, () => identity, url);
+  assert.equal(response.destroyed, undefined);
+  assert.equal(response.ended, true);
+  assert.equal(response.frames.length, 2, "the stream delivered normally despite 500 active tasks");
+  assert.equal(observes.length, 2);
+  assert.equal(observes[0].length, 400, "four hundred newest tasks are observed, not a tenant-wide failure");
+  assert.equal(observes[1].length, 100, "the next scan resumes at the boundary and observes the rest");
+});
+
+test("repeated scans never skip or duplicate a task despite an unchanged backlog", async t => {
+  const startedAt = Date.now() - 200;
+  const tasks = Array.from({ length: 250 }, (_, index) => ({
+    id: `task-${index}`, tenantId: "tenant-a", suspended: false,
+    processInstanceId: "execution", processDefinitionId: "review:1:1", taskDefinitionKey: "review",
+    createTime: new Date(startedAt + 5000 + index * 1000).toISOString(),
+  }));
+  const observed = [];
+  let polls = 0;
+  t.mock.method(globalThis, "fetch", async (input, init) => {
+    const url = new URL(input);
+    if (url.hostname === "workflow.invalid") {
+      const floor = Date.parse(url.searchParams.get("createdAfter"));
+      const before = url.searchParams.has("createdBefore")
+        ? Date.parse(url.searchParams.get("createdBefore")) : Infinity;
+      const rows = tasks.filter(task => Date.parse(task.createTime) > floor &&
+        Date.parse(task.createTime) < before)
+        .sort((left, right) => Date.parse(right.createTime) - Date.parse(left.createTime))
+        .slice(0, 100);
+      return Response.json({ data: rows, total: tasks.length });
+    }
+    if (url.pathname === "/rpc/event_observe_tasks") {
+      observed.push(...JSON.parse(init.body).payload.map(task => task.taskId));
+      return Response.json({ status: 204 });
+    }
+    const { operation } = JSON.parse(init.body);
+    if (operation === "start") return Response.json({ status: 200, value: { sequence: "0", startedAt: new Date(startedAt).toISOString() } });
+    if (operation === "poll") {
+      polls++;
+      // The second scan re-walks the served stretch before the stream ends.
+      await waitFor(() => polls >= 2 && observed.length >= 250);
+      return Response.json({ status: 200, value: { overflow: true, items: [] } });
+    }
+    throw new Error("unexpected database call");
+  });
+  const response = new TestResponse();
+  const identity = reader();
+  await createEventStreams({ ...config, workflowUrl: "http://workflow.invalid", workflowPassword: "unused" })
+    .handle({ method: "GET" }, response, identity, () => identity, url);
+  assert.equal(new Set(observed).size, observed.length, "no task is observed twice");
+  assert.equal(observed.length, 250, "every active task is observed exactly once");
+});
+
+test("a single failed task observation does not end the stream", async t => {
+  const startedAt = Date.now() - 200;
+  let polls = 0;
+  t.mock.method(globalThis, "fetch", async (input, init) => {
+    const url = new URL(input);
+    if (url.hostname === "workflow.invalid" || url.pathname === "/rpc/event_observe_tasks") {
+      return new Response(null, { status: 500 });
+    }
+    const { operation } = JSON.parse(init.body);
+    if (operation === "start") return Response.json({ status: 200, value: { sequence: "0", startedAt: new Date(startedAt).toISOString() } });
+    polls++;
+    if (operation === "poll") return polls === 1 ? Response.json({ status: 200, value: { overflow: false,
+      items: [{ sequence: "1", event: "consent.revoked" }] } }) :
+      Response.json({ status: 200, value: { overflow: true, items: [] } });
+    assert.equal(operation, "deliver");
+    return Response.json({ status: 200, value: { consentId: "66666666-6666-4666-8666-666666666666" } });
+  });
+  const response = new TestResponse();
+  const identity = reader();
+  await createEventStreams({ ...config, workflowUrl: "http://workflow.invalid", workflowPassword: "unused" })
+    .handle({ method: "GET" }, response, identity, () => identity, url);
+  assert.deepEqual(response.frames, [": connected\n\n",
+    'event: consent.revoked\ndata: {"consentId":"66666666-6666-4666-8666-666666666666"}\n\n']);
+  assert.equal(response.ended, true, "the stream ended with the poll overflow, not the observation failure");
+  assert.ok(polls >= 2);
 });
 
 test("an idle event stream reauthorizes and sends a comment heartbeat", async t => {

@@ -4,11 +4,15 @@
 // database merges capability calls and application events visible to the
 // caller's bound subject, and re-checks that exact visibility for every flag;
 // Core only validates the envelope and asserts the private subject role.
+import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 import { applicationToken } from "../applications/applications.mjs";
 import { HttpError, json, readBody, uuidPattern } from "../../platform/http/http.mjs";
 
 export const SUBJECT_ACCESS_EVENTS_PATH = "/v1/me/data-access";
 const accessIdPattern = /^(capability|app):[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+// The database keeps and sorts full timestamp precision; the cursor key does
+// the same so same-instant entries never fall between pages.
+const accessedAtPattern = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?Z$/;
 const controlPattern = /[\u0000-\u001f\u007f]/u;
 
 async function subjectCommand(config, identity, operation, payload) {
@@ -31,26 +35,45 @@ async function subjectCommand(config, identity, operation, payload) {
   return result;
 }
 
-function decodeCursor(value) {
+// A cursor only pages the caller it was issued to. The raw issuer can be two
+// kilobytes long, so the cursor never carries identity verbatim: it carries a
+// fixed-length fingerprint of the tenant, issuer, login subject and verified
+// subject, signed with the data secret so neither key nor binding can be
+// forged, and fails closed on any mismatch.
+function scopeFingerprint(identity) {
+  return createHash("sha256").update(JSON.stringify({
+    tenant: identity.tenantId, issuer: identity.issuer,
+    login: identity.subject, subject: identity.subjectId,
+  })).digest("base64url");
+}
+
+function decodeCursor(value, identity, secret) {
   try {
-    if (!value || value.length > 1024 || !/^[A-Za-z0-9_-]+$/.test(value)) throw Error();
-    const bytes = Buffer.from(value, "base64url");
-    if (bytes.toString("base64url") !== value) throw Error();
-    const cursor = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
+    if (!value || value.length > 1024) throw Error();
+    const split = value.lastIndexOf(".");
+    if (split <= 0) throw Error();
+    const payload = value.slice(0, split);
+    const mac = value.slice(split + 1);
+    if (!/^[A-Za-z0-9_-]+$/.test(payload) || !/^[A-Za-z0-9_-]+$/.test(mac)) throw Error();
+    const expected = createHmac("sha256", secret).update(payload).digest("base64url");
+    if (mac.length !== expected.length ||
+        !timingSafeEqual(Buffer.from(mac), Buffer.from(expected))) throw Error();
+    const cursor = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(Buffer.from(payload, "base64url")));
     if (!cursor || typeof cursor !== "object" || Array.isArray(cursor) ||
-        Object.keys(cursor).sort().join(",") !== "accessId,accessedAt" ||
-        !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/.test(cursor.accessedAt) ||
-        !Number.isFinite(Date.parse(cursor.accessedAt)) || !accessIdPattern.test(cursor.accessId)) {
+        Object.keys(cursor).sort().join(",") !== "accessId,accessedAt,f" ||
+        !accessedAtPattern.test(cursor.accessedAt) || !Number.isFinite(Date.parse(cursor.accessedAt)) ||
+        !accessIdPattern.test(cursor.accessId) || cursor.f !== scopeFingerprint(identity)) {
       throw Error();
     }
-    return cursor;
+    return { accessedAt: cursor.accessedAt, accessId: cursor.accessId };
   } catch { throw new HttpError(400, "invalid_cursor"); }
 }
 
-function encodeCursor(entry) {
-  return Buffer.from(JSON.stringify({
-    accessedAt: entry.accessedAt, accessId: entry.accessId,
+function encodeCursor(entry, identity, secret) {
+  const payload = Buffer.from(JSON.stringify({
+    accessedAt: entry.accessedAt, accessId: entry.accessId, f: scopeFingerprint(identity),
   })).toString("base64url");
+  return `${payload}.${createHmac("sha256", secret).update(payload).digest("base64url")}`;
 }
 
 async function readJson(request) {
@@ -75,10 +98,10 @@ export async function handleSubjectAccessEvents(request, response, identity, con
     if (!/^\d+$/.test(limit) || Number(limit) < 1 || Number(limit) > 200) throw new HttpError(400, "invalid_query");
     const { value } = await subjectCommand(config, identity, "list", {
       limit: Number(limit),
-      ...(values.has("cursor") ? { after: decodeCursor(values.get("cursor")) } : {}),
+      ...(values.has("cursor") ? { after: decodeCursor(values.get("cursor"), identity, config.dataSecret) } : {}),
     });
     const nextCursor = value.truncated && value.entries.length
-      ? encodeCursor(value.entries.at(-1)) : null;
+      ? encodeCursor(value.entries.at(-1), identity, config.dataSecret) : null;
     return json(response, 200, {
       entries: value.entries, nextCursor, truncated: value.truncated, generatedAt: value.generatedAt,
     });

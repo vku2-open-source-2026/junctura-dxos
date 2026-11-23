@@ -302,12 +302,18 @@ confirmed completions. Use the stored execution and task IDs to reconcile commit
 
 - Migration 042 adds application payloads to the existing tenant audit chain. It preserves historical
   hashes and seals the action, classification and subject visibility at append. Export projects the
-  authorized view under the chain lock and materializes a short-lived snapshot.
+  authorized view under the chain lock and materializes a short-lived snapshot. Direct operational SQL
+  that writes `core.app_records` without identity claims fails closed on the publish trigger, so run
+  such maintenance through the service roles.
 - Migration 043 adds published object metadata, incarnation-bound record links and quotas on bytes.
+  Every upload stages its candidate version before the Filer stores bytes; an internal reconciliation
+  worker measures unmeasured versions from the Filer and cleans staged attempts, and a commit refuses
+  to charge while unmeasured versions remain.
 - Migration 044 queues index updates in the source transaction and checks live authority before returning
   search references. Keep Meilisearch private. Its index can be rebuilt from the authoritative store.
 - Migration 045 adds a short-lived per-tenant notification journal. Deferred triggers publish record
   status changes and consent revocations at commit. Core replicas observe active tasks from Flowable
   and deduplicate them in PostgreSQL. Clients reconnect from the current head.
 - Migration 046 adds separate subject reports and reads application access through the projection
-  introduced in migration 042.
+  introduced in migration 042. The page key keeps full timestamp precision and concurrent writers of
+  the same report or feedback read the winning row instead of failing.

@@ -8,6 +8,10 @@ import { inflateSync } from "node:zlib";
 
 const maxTextLength = 65_536;
 const maxStreams = 64;
+// One stream may decompress to at most this many bytes and the whole document
+// carries a wall-clock budget, so a crafted PDF cannot exhaust resources.
+const maxStreamBytes = 262_144;
+const maxPdfMillis = 1000;
 
 function printable(value) {
   if (!value.length) return null;
@@ -19,18 +23,37 @@ function printable(value) {
   return controls / value.length < 0.05 ? value : null;
 }
 
-function pdfStrings(decoded) {
+// Hexadecimal strings (<48656C6C6F>) are the second PDF text encoding; bytes
+// map to latin-1 characters and an odd trailing digit gains a zero.
+function hexString(body) {
+  const digits = body.replace(/\s+/g, "");
+  const padded = digits.length % 2 ? `${digits}0` : digits;
+  let text = "";
+  for (let index = 0; index + 1 < padded.length; index += 2) {
+    text += String.fromCharCode(parseInt(padded.slice(index, index + 2), 16));
+  }
+  return text;
+}
+
+// Show-text operators inside text blocks: (text) Tj, <hex> Tj, [(a) n (b)]
+// TJ with literal or hex strings, and the quote forms that also break the
+// line. Everything else is ignored. The wall-clock budget is checked inside
+// the token loop, so one synchronous pass over a stream cannot exceed it.
+function pdfStrings(decoded, deadline) {
   const chunks = [];
-  // Show-text operators inside text blocks: (text) Tj, [(a) n (b)] TJ, and the
-  // quote forms that also break the line. Everything else is ignored.
-  const tokens = decoded.matchAll(/\((?:\\.|[^\\()])*\)\s*(?:Tj|')|\[(?:[^\]\\]|\\.)*\]\s*TJ|T\*|Td|TD|ET/gs);
+  const tokens = decoded.matchAll(/\((?:\\.|[^\\()])*\)\s*(?:Tj|')|<(?:[0-9A-Fa-f\s]*)>\s*(?:Tj|')|\[(?:[^\]\\]|\\.)*\]\s*TJ|T\*|Td|TD|ET/gs);
   for (const token of tokens) {
+    if (Date.now() > deadline) break;
     const literal = token[0];
     if (literal === "T*" || literal === "Td" || literal === "TD" || literal === "ET") {
       chunks.push("\n");
       continue;
     }
-    for (const raw of literal.matchAll(/\((?:\\.|[^\\()])*\)/gs)) {
+    for (const raw of literal.matchAll(/\((?:\\.|[^\\()])*\)|<(?:[0-9A-Fa-f\s]*)>/gs)) {
+      if (raw[0][0] === "<") {
+        chunks.push(hexString(raw[0].slice(1, -1)));
+        continue;
+      }
       const body = raw[0].slice(1, -1);
       let text = "";
       for (let index = 0; index < body.length; index++) {
@@ -59,8 +82,12 @@ function pdfStrings(decoded) {
 function pdfText(bytes) {
   const latin = bytes.toString("latin1");
   const chunks = [];
+  let total = 0;
+  const startedAt = Date.now();
+  const deadline = startedAt + maxPdfMillis;
   let start = 0;
   for (let count = 0; count < maxStreams; count++) {
+    if (Date.now() > deadline) break;
     const open = latin.indexOf("stream", start);
     if (open === -1) break;
     const header = latin.slice(Math.max(0, open - 400), open);
@@ -73,14 +100,20 @@ function pdfText(bytes) {
     const stream = bytes.subarray(bodyStart, close);
     if (/FlateDecode/.test(header)) {
       try {
-        chunks.push(pdfStrings(inflateSync(stream).toString("latin1")));
-      } catch { /* A damaged or encrypted stream contributes no text. */ }
+        const chunk = pdfStrings(inflateSync(stream, { maxOutputLength: maxStreamBytes }).toString("latin1"), deadline);
+        chunks.push(chunk);
+        total += chunk.length;
+      } catch { /* A damaged, encrypted or oversized stream contributes no text. */ }
     } else {
-      chunks.push(pdfStrings(stream.toString("latin1")));
+      const chunk = pdfStrings(stream.subarray(0, maxStreamBytes).toString("latin1"), deadline);
+      chunks.push(chunk);
+      total += chunk.length;
     }
+    // The answer is bounded anyway; stop reading streams past a small margin.
+    if (total > 4 * maxTextLength) break;
   }
   const text = chunks.join("").replace(/[ \t]+\n/g, "\n").trim();
-  return text.length ? text : null;
+  return text.length ? text.slice(0, maxTextLength) : null;
 }
 
 function jsonStrings(value, depth = 0) {

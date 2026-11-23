@@ -5,7 +5,10 @@ BEGIN;
 -- row keyed by the visible access event; the audit chain and the management
 -- review stay untouched. Retrying the same reason replays the original report,
 -- a changed reason conflicts, and only events visible to the caller's own
--- bound subject can be reported.
+-- bound subject can be reported. Concurrent writers of the same report or
+-- feedback race through one INSERT and read the winning row, so a loser
+-- replays or conflicts instead of failing. The page key keeps full timestamp
+-- precision so same-instant entries never fall between cursor pages.
 GRANT CREATE ON SCHEMA core TO junctura_app_owner;
 SET LOCAL ROLE junctura_app_owner;
 
@@ -85,6 +88,7 @@ BEGIN
       OR (payload ? 'after' AND (jsonb_typeof(payload->'after') IS DISTINCT FROM 'object'
         OR (payload->'after' - 'accessedAt' - 'accessId') <> '{}'::jsonb
         OR jsonb_typeof(payload->'after'->'accessedAt') IS DISTINCT FROM 'string'
+        OR payload->'after'->>'accessedAt' !~ '^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,6})?Z$'
         OR jsonb_typeof(payload->'after'->'accessId') IS DISTINCT FROM 'string'
         OR payload->'after'->>'accessId' !~ '^(capability|app):[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$')) THEN
       RETURN jsonb_build_object('status', 400, 'error', 'invalid_request');
@@ -95,7 +99,7 @@ BEGIN
       SELECT entry, accessed_at, access_id FROM (
         SELECT jsonb_build_object(
             'source', 'capability', 'accessId', 'capability:' || x.execution_id::text,
-            'executionId', x.execution_id, 'accessedAt', to_char(x.recorded_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'),
+            'executionId', x.execution_id, 'accessedAt', to_char(x.recorded_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"'),
             'purpose', x.purpose, 'flaggedAt', to_char(r.reported_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'),
             'state', e.state, 'emergency', x.emergency, 'review', rv.state,
             'consumer', jsonb_build_object('appId', e.consumer_app_id, 'displayName',
@@ -121,7 +125,7 @@ BEGIN
         UNION ALL
         SELECT jsonb_build_object(
             'source', 'application', 'accessId', 'app:' || s.event_id::text,
-            'accessedAt', to_char(s.occurred_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'),
+            'accessedAt', to_char(s.occurred_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"'),
             'purpose', s.purpose, 'flaggedAt', to_char(r.reported_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'),
             'app', jsonb_build_object('appId', s.app_id, 'displayName',
               (SELECT a.display_name FROM app_private.applications a
@@ -168,21 +172,26 @@ BEGIN
                 WHERE b2.tenant_id=tenant AND b2.issuer=iss AND b2.subject_id=who))))))) INTO visible;
     END IF;
     IF NOT visible THEN RETURN jsonb_build_object('status', 404, 'error', 'not_found'); END IF;
-    SELECT * INTO existing FROM app_private.subject_access_reports
-      WHERE tenant_id=tenant AND access_kind=kind AND access_id=access FOR UPDATE;
+    -- SELECT ... FOR UPDATE cannot lock a row that does not exist yet, so two
+    -- concurrent reports both try one INSERT; the loser reads the winning row
+    -- and answers replay or conflict instead of a unique violation.
+    INSERT INTO app_private.subject_access_reports(tenant_id, access_kind, access_id, reason, reported_by, subject_id, issuer)
+      VALUES (tenant, kind, access, payload->>'reason', who, sid, iss)
+      ON CONFLICT DO NOTHING
+      RETURNING * INTO existing;
     IF FOUND THEN
-      IF existing.reason <> payload->>'reason' THEN
-        RETURN jsonb_build_object('status', 409, 'error', 'resource_conflict',
-          'details', jsonb_build_object('flaggedAt', to_char(existing.reported_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')));
-      END IF;
-      RETURN jsonb_build_object('status', 200, 'value', jsonb_build_object(
+      RETURN jsonb_build_object('status', 201, 'value', jsonb_build_object(
         'accessId', payload->>'accessId',
         'flaggedAt', to_char(existing.reported_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')));
     END IF;
-    INSERT INTO app_private.subject_access_reports(tenant_id, access_kind, access_id, reason, reported_by, subject_id, issuer)
-      VALUES (tenant, kind, access, payload->>'reason', who, sid, iss)
-      RETURNING * INTO existing;
-    RETURN jsonb_build_object('status', 201, 'value', jsonb_build_object(
+    SELECT * INTO existing FROM app_private.subject_access_reports
+      WHERE tenant_id=tenant AND access_kind=kind AND access_id=access;
+    IF NOT FOUND THEN RETURN jsonb_build_object('status', 503, 'error', 'subject_access_unavailable'); END IF;
+    IF existing.reason <> payload->>'reason' THEN
+      RETURN jsonb_build_object('status', 409, 'error', 'resource_conflict',
+        'details', jsonb_build_object('flaggedAt', to_char(existing.reported_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')));
+    END IF;
+    RETURN jsonb_build_object('status', 200, 'value', jsonb_build_object(
       'accessId', payload->>'accessId',
       'flaggedAt', to_char(existing.reported_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')));
   END IF;
@@ -207,22 +216,25 @@ BEGIN
             (x.consent_id IS NOT NULL OR NOT EXISTS (SELECT FROM app_private.subject_bindings b2
               WHERE b2.tenant_id=tenant AND b2.issuer=iss AND b2.subject_id=who))))))) INTO visible;
     IF NOT visible THEN RETURN jsonb_build_object('status', 404, 'error', 'not_found'); END IF;
-    SELECT * INTO feedback FROM app_private.emergency_feedback
-      WHERE tenant_id=tenant AND execution_id=(payload->>'executionId')::uuid FOR UPDATE;
+    -- Same one-INSERT race as the flag: the loser reads the winning row.
+    INSERT INTO app_private.emergency_feedback(tenant_id, execution_id, decision, message, submitted_by, subject_id, issuer)
+      VALUES (tenant, (payload->>'executionId')::uuid, payload->>'decision', payload->>'message', who, sid, iss)
+      ON CONFLICT DO NOTHING
+      RETURNING * INTO feedback;
     IF FOUND THEN
-      IF feedback.decision IS DISTINCT FROM payload->>'decision'
-        OR feedback.message IS DISTINCT FROM NULLIF(payload->>'message', '')::text THEN
-        RETURN jsonb_build_object('status', 409, 'error', 'resource_conflict',
-          'details', jsonb_build_object('submittedAt', to_char(feedback.submitted_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')));
-      END IF;
-      RETURN jsonb_build_object('status', 200, 'value', jsonb_build_object(
+      RETURN jsonb_build_object('status', 201, 'value', jsonb_build_object(
         'executionId', payload->>'executionId',
         'submittedAt', to_char(feedback.submitted_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')));
     END IF;
-    INSERT INTO app_private.emergency_feedback(tenant_id, execution_id, decision, message, submitted_by, subject_id, issuer)
-      VALUES (tenant, (payload->>'executionId')::uuid, payload->>'decision', payload->>'message', who, sid, iss)
-      RETURNING * INTO feedback;
-    RETURN jsonb_build_object('status', 201, 'value', jsonb_build_object(
+    SELECT * INTO feedback FROM app_private.emergency_feedback
+      WHERE tenant_id=tenant AND execution_id=(payload->>'executionId')::uuid;
+    IF NOT FOUND THEN RETURN jsonb_build_object('status', 503, 'error', 'subject_access_unavailable'); END IF;
+    IF feedback.decision IS DISTINCT FROM payload->>'decision'
+      OR feedback.message IS DISTINCT FROM NULLIF(payload->>'message', '')::text THEN
+      RETURN jsonb_build_object('status', 409, 'error', 'resource_conflict',
+        'details', jsonb_build_object('submittedAt', to_char(feedback.submitted_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')));
+    END IF;
+    RETURN jsonb_build_object('status', 200, 'value', jsonb_build_object(
       'executionId', payload->>'executionId',
       'submittedAt', to_char(feedback.submitted_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')));
   END IF;

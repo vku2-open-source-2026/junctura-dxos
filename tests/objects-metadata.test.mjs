@@ -93,6 +93,20 @@ test("multipart rejects broken framing and boundaries", () => {
   assert.doesNotThrow(() => parseMultipart(envelope("B", [[fileHeaders, Buffer.from("x")]], { preamble: "preamble\r\n" }), "B"));
 });
 
+test("the closing delimiter must be a complete line and never absorb extra bytes", () => {
+  const body = envelope("B", [[fileHeaders, Buffer.from("x")]]);
+  const close = body.length - 7; // length of "--B--\r\n"
+  assert.doesNotThrow(() => parseMultipart(body.subarray(0, close + 5), "B")); // close at end of input
+  assert.doesNotThrow(() => parseMultipart(Buffer.concat([body.subarray(0, close + 5),
+    Buffer.from("  \t\r\n")]), "B")); // transport padding then the line break
+  assert.doesNotThrow(() => parseMultipart(Buffer.concat([body.subarray(0, close + 7),
+    Buffer.from("--B\r\nignored epilogue\r\n")]), "B")); // epilogue after a complete close line
+  for (const tail of ["--junk\r\n", "--\rX", "-- x\r\n", "--junk"]) {
+    assert.throws(() => parseMultipart(Buffer.concat([body.subarray(0, close + 5), Buffer.from(tail)]), "B"),
+      undefined, `expected rejection of the close line ending with ${JSON.stringify(tail)}`);
+  }
+});
+
 test("metadata parts must be JSON and only file bytes may be binary", () => {
   const body = envelope("B", [[fileHeaders, Buffer.from("x")], [refHeaders, "not json"]]);
   const parts = parseMultipart(body, "B");
