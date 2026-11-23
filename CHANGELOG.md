@@ -8,9 +8,15 @@ All notable changes to Junctura are recorded here. Versions follow
 
 ## Unreleased
 
+- **Fix:** app-scoped `/v2/objects` uploads accept plain octet-stream clients again by making the
+  `Idempotency-Key` optional (a supplied key must still be a UUID and keeps the 24-hour replay
+  receipt; a keyless upload records no receipt and a retry publishes a new version, matching the
+  keyless record-create compatibility). A malformed key still answers `400 invalid_request`, and the
+  Foundation contract now marks the header optional on `POST /v2/objects` and `PUT /v2/objects/{id}`.
 - **Object metadata and tenant search (issue #67):** `/v2/objects` uploads now accept
   `multipart/form-data` with an owned `recordRef` and up to 20 `tags` beside the octet-stream form,
-  require a UUID `Idempotency-Key` for both create and replace, and preserve omitted metadata on
+  accept a UUID `Idempotency-Key` for both create and replace (optional for compatibility, see the
+  fix above), and preserve omitted metadata on
   replace while explicit `null`/`[]` clears it. The stored link keeps the linked record's incarnation,
   so a deleted or re-created record never presents a stale link, and record links confer no read
   access. A per-app file quota charges the bytes of currently published versions under a per-app lock

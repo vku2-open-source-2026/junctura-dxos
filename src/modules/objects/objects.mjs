@@ -189,13 +189,19 @@ async function uploadObject(request, response, identity, config, url, objectId) 
   if (bytes.length < 1) throw new HttpError(400, "invalid_request");
   if (bytes.length > maxBytes) throw new HttpError(413, "body_too_large");
 
+  // Compatibility with plain octet-stream clients: the key stays optional and a
+  // keyless upload records no receipt, exactly like a keyless record create. A
+  // present key must still be a UUID and replays the first committed result.
   const key = request.headers["idempotency-key"];
-  if (!uuidPattern.test(key ?? "")) throw new HttpError(400, "invalid_request");
+  if (key !== undefined && !uuidPattern.test(key)) throw new HttpError(400, "invalid_request");
   const method = request.method;
   const path = url.pathname;
   const digest = uploadDigest(bytes, recordRef, tags);
-  const replay = await objectCommand(config, identity, "replay", { key, digest, method, path });
-  if (replay.value !== null) return json(response, replay.status, replay.value, method);
+  const receipt = key === undefined ? undefined : { key, digest, method, path };
+  if (receipt !== undefined) {
+    const replay = await objectCommand(config, identity, "replay", receipt);
+    if (replay.value !== null) return json(response, replay.status, replay.value, method);
+  }
 
   const current = (await objectCommand(config, identity, "prepare", {
     id: objectId, ...metadataPayload(recordRef, tags),
@@ -220,17 +226,19 @@ async function uploadObject(request, response, identity, config, url, objectId) 
     let commit;
     try {
       commit = await objectCommand(config, identity, "commit", {
-        id: objectId, version: scope.version, size: bytes.length, key, digest, method, path,
+        id: objectId, version: scope.version, size: bytes.length, ...receipt,
         ...metadataPayload(recordRef, tags),
       });
     } catch (error) {
       // The response may be lost after the database committed. Ask for the
       // receipt instead of deleting bytes that may be referenced now; an
       // attempt that cannot be confirmed stays staged for reconciliation.
-      let receipt = null;
-      try { receipt = await objectCommand(config, identity, "replay", { key, digest, method, path }); }
-      catch { /* The reconciliation task resolves the staged attempt later. */ }
-      if (receipt?.value) return json(response, receipt.status, receipt.value, method);
+      let replayed = null;
+      if (receipt !== undefined) {
+        try { replayed = await objectCommand(config, identity, "replay", receipt); }
+        catch { /* The reconciliation task resolves the staged attempt later. */ }
+      }
+      if (replayed?.value) return json(response, replayed.status, replayed.value, method);
       throw error;
     }
     if (commit.replayed) {

@@ -4585,7 +4585,7 @@
         },
         "parameters": [
           {
-            "$ref": "#/components/parameters/PlannedIdempotencyKey"
+            "$ref": "#/components/parameters/RecordOptionalIdempotencyKey"
           }
         ],
         "x-junctura-source": "src/modules/objects/objects.mjs",
@@ -4725,7 +4725,7 @@
             "$ref": "#/components/parameters/Id"
           },
           {
-            "$ref": "#/components/parameters/PlannedIdempotencyKey"
+            "$ref": "#/components/parameters/RecordOptionalIdempotencyKey"
           }
         ],
         "requestBody": {
