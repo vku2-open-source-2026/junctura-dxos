@@ -83,6 +83,8 @@ jobs:
           docker compose config --quiet
       - name: Build and start the local container
         run: docker compose up --build --detach --wait --wait-timeout 900
+      - name: Provision directory and application identity synchronization
+        run: npm run directory:provision
       - name: Probe host and container endpoints
         run: |
           npm run healthcheck

@@ -19,7 +19,7 @@ async function archiveCommand(config, identity, operation, payload) {
       headers: {
         Authorization: `Bearer ${signInternalToken(config.dataSecret, {
           role: "junctura_record_api", tenant_id: tenantId, iss: issuer, sub: subject, client_id: clientId,
-          resource_writer: roles.includes("core-writer"), display_name: identity.preferredUsername,
+          resource_unit: identity.resourceUnit, human_app_id: identity.humanAppId, resource_writer: roles.includes("core-writer"), display_name: identity.preferredUsername,
           aud: "junctura-data", exp: Math.floor(Date.now() / 1000) + 30,
         })}`,
         "Content-Type": "application/json",

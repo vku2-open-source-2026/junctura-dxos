@@ -74,7 +74,7 @@ A C4A request may carry an optional context:
   that named them: when, purpose, consumer and provider applications, capability and
   state. It never returns inputs, outputs, tickets or operator identities.
 
-### Consent and emergency access (021)
+### Consent and break-glass access (021)
 
 - **Consent.** When the context names a `dataSubject`, the call needs an active consent
   of that person for exactly this consumer application, capability and purpose
@@ -83,7 +83,7 @@ A C4A request may carry an optional context:
   366 days), `GET /v1/me/consents`, `POST /v1/me/consents/{id}/revoke`. Consent is
   checked again when the provider redeems its ticket, so a revocation stops calls that
   were reserved but not yet dispatched.
-- **Emergency (break-glass).** `"emergency": true` with a `justification` (10–500
+- **Break-glass access.** `"emergency": true` with a `justification` (10–500
   characters) and a `dataSubject` skips the consent check. The trust grant is still
   required. The call is sealed as `execution.emergency_access`, shown to the person in
   `GET /v1/me/data-access` (`emergency: true`, `review`), flagged to the provider

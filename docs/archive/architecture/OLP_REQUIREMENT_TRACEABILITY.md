@@ -29,7 +29,7 @@ These classifications follow the [problem's own sections](https://vfossa.vn/tin-
 | M4 / problem §3 | Structured data | VERIFIED tenant/app RLS and API. | Preserve direct service denial and recovery coverage. |
 | M5 / problem §3 | Unstructured data | VERIFIED bytes/ownership/version pointer behavior. | Coordinated full-store recovery and quarantine remain gaps. |
 | M6 / problem §3 | Workflow | VERIFIED tenant lifecycle/ledger/history. | Avoid app-private payloads; no composition claim. |
-| M7 / problem §3 | Layer-2 GUI | IN PROGRESS in separate repositories: junctura-workspace (Layer 2) and the health applications (Layer 3: Clinic, Pharmacy, Hospital, Insurance). | A business user completes a real Core-backed scenario. Console/technical fixture is insufficient. |
+| M7 / problem §3 | Layer-2 GUI | IN PROGRESS in separate repositories: junctura-workspace (Layer 2) and the sector packs and applications (Layer 3). | A business user completes a real Core-backed scenario. Console/technical fixture is insufficient. |
 
 ## Seven broader Layer-1 groups: coverage, not seven installed products
 
@@ -77,7 +77,7 @@ The following summarize [rules/scoring §§participation, schedule, criteria I�
 | R4 / I.4–I.5 | Source build/configuration and dependency disclosure. | Foundation instructions/pins exist; Console image ignores lockfile and is not verified here. Clean environment reproducibility remains release gate. |
 | R5 / I.6 | README, change history, issue tracking, usable docs. | README, CHANGELOG, issue templates and technical docs present. Build requirements name only open-source tools (Docker Engine). |
 | R6 / II | Demonstration and product/community quality. | Foundation technical scenario exists; Layer-2/3 demonstration is being built in separate repositories. |
-| R7 / participation | University registration; ≤3 students/team, lecturer; ≤2 teams/school. | Team eligibility/registration UNVERIFIED; team coordinator owns evidence. |
+| R7 / participation | Registration and team eligibility limits in the competition rules. | Team eligibility/registration UNVERIFIED; team coordinator owns evidence. |
 
 Rules allocate 50 points to project practices and 50 to product presentation.
 Their archive row explicitly includes ZIP among penalized examples; treat that

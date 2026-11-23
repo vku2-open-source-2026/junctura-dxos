@@ -144,23 +144,7 @@ function filesFixture() {
 }
 
 function orgFixture() {
-  return {
-    root: {
-      id: "tenant-test",
-      name: "tenant-test",
-      kind: "platform",
-      children: [
-        { id: "unit-a", name: "Đơn vị tiếp nhận", kind: "application", children: [] },
-        { id: "unit-b", name: "Đơn vị xét duyệt", kind: "organization", children: [] },
-        { id: "unit-c", name: "Đơn vị đề nghị", kind: "application", children: [] },
-      ],
-    },
-    relations: [
-      { from: "unit-a", to: "unit-b", label: "Tóm tắt văn bản" },
-      { from: "unit-b", to: "unit-c", label: "Tra cứu liên hệ" },
-    ],
-    truncated: false,
-  };
+  return { items: [{ unit: "unit-a", unitType: "team", name: "Đơn vị A" }], nextCursor: null };
 }
 
 describe("Task 46 — collection structure", () => {
@@ -332,86 +316,20 @@ describe("Task 46 — folder file manager", () => {
 describe("Task 46 — organisation layout and recovery", () => {
   beforeEach(resetState);
 
-  it.each([375, 768, 1440, 1900])(
-    "renders the full-width tree and relations without a fixed detail column at %ipx",
-    async (width) => {
-      Object.defineProperty(window, "innerWidth", {
-        configurable: true,
-        value: width,
-      });
-      installApiFetch([
-        (url) =>
-          url.includes("/v1/directory/organizations")
-            ? json(200, orgFixture())
-            : undefined,
-      ]);
-      await openScreen("orgs", viStrings.orgs.title);
-      expect(screen.getByText(viStrings.orgs.treeTitle)).toBeInTheDocument();
-      expect(
-        screen.queryByText(viStrings.orgs.detailTitle)
-      ).toBeNull();
-      expect(
-        screen.getByText(viStrings.orgs.relationsTitle)
-      ).toBeInTheDocument();
-      expect(
-        screen.getByRole("button", { name: "Đơn vị tiếp nhận" })
-      ).toBeInTheDocument();
-      expect(
-        screen.getByText("Đơn vị tiếp nhận → Đơn vị xét duyệt")
-      ).toBeInTheDocument();
-    }
-  );
-
-  it("opens a unit note next to the tree and closes it with Escape", async () => {
-    installApiFetch([
-      (url) =>
-        url.includes("/v1/directory/organizations")
-          ? json(200, orgFixture())
-          : undefined,
-    ]);
+  it.each([375, 768, 1440, 1900])("renders the unit tree at %ipx", async (width) => {
+    Object.defineProperty(window, "innerWidth", { configurable: true, value: width });
+    installApiFetch([url => url.includes("/v1/directory/units?") ? json(200, orgFixture()) : undefined]);
     await openScreen("orgs", viStrings.orgs.title);
-
-    const unit = screen.getByRole("button", { name: "Đơn vị tiếp nhận" });
-    fireEvent.click(unit);
-
-    const note = await screen.findByRole("dialog", {
-      name: viStrings.orgs.detailTitle,
-    });
-    expect(within(note).getByText(viStrings.orgs.kindApplication)).toBeInTheDocument();
-    expect(
-      within(note).getByText("Đơn vị tiếp nhận → Đơn vị xét duyệt")
-    ).toBeInTheDocument();
-
-    fireEvent.keyDown(document, { key: "Escape" });
-    expect(
-      screen.queryByRole("dialog", { name: viStrings.orgs.detailTitle })
-    ).toBeNull();
-  });
-
-  it("shows the platform summary note when the root is selected", async () => {
-    installApiFetch([
-      (url) =>
-        url.includes("/v1/directory/organizations")
-          ? json(200, orgFixture())
-          : undefined,
-    ]);
-    await openScreen("orgs", viStrings.orgs.title);
-
-    fireEvent.click(
-      screen.getByRole("button", { name: viStrings.orgs.platformRootName })
-    );
-    const note = await screen.findByRole("dialog", {
-      name: viStrings.orgs.detailTitle,
-    });
-    expect(within(note).getByText(viStrings.orgs.rootDetailDesc)).toBeInTheDocument();
-    expect(within(note).getByText(viStrings.orgs.totalUnits)).toBeInTheDocument();
+    expect(await screen.findByText(viStrings.appAccess.unitTree)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Đơn vị A" })).toBeInTheDocument();
+    expect(screen.queryByText(viStrings.orgs.relationsTitle)).toBeNull();
   });
 
   it("explains an expired session and retries the directory request", async () => {
     let calls = 0;
     installApiFetch([
       (url) => {
-        if (!url.includes("/v1/directory/organizations")) return undefined;
+        if (!url.includes("/v1/directory/units?")) return undefined;
         calls += 1;
         if (calls === 1) return json(401, { error: "token_expired" });
         return json(200, orgFixture());
@@ -425,7 +343,7 @@ describe("Task 46 — organisation layout and recovery", () => {
       screen.getByRole("button", { name: viStrings.common.retry })
     );
     expect(
-      await screen.findByText(viStrings.orgs.treeTitle)
+      await screen.findByText(viStrings.appAccess.unitTree)
     ).toBeInTheDocument();
   });
 });

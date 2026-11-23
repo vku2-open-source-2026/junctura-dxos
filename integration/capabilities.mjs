@@ -728,7 +728,7 @@ test("C4A real two-application OIDC invocation redeems a ticket and completes th
   owner = await verifiedSubject(owner, stranger.id);
   const context = { purpose: "service_delivery", dataSubject: owner.id };
   const unconsented = await c4aStart({ ...executionBody("purpose"), context });
-  assert.deepEqual([unconsented.status, unconsented.body.error], [403, "subject_consent_required"], "naming a person needs their consent");
+  assert.deepEqual([unconsented.status, unconsented.body.error], [403, "consent_required"], "naming a person needs their consent");
   const consentBody = { consumerAppId: c4aConsumer.app.appId, capabilityId: c4aReference.capabilityId, purposes: ["service_delivery"],
     expiresAt: new Date(Date.now() + 86_400_000).toISOString() };
   const consentKey = crypto.randomUUID();
@@ -787,7 +787,7 @@ test("C4A real two-application OIDC invocation redeems a ticket and completes th
   assert.equal(strangerLog.status, 403);
   assert.equal((await strangerLog.json()).error, "verified_subject_required");
   assert.equal((await c4aApi("/v1/capability-executions", c4aConsumer, { ...executionBody(), context: { purpose: "Not valid" } }, { "Idempotency-Key": crypto.randomUUID() })).status, 422);
-  assert.equal((await c4aStart({ ...executionBody("purpose"), context: { ...context, purpose: "marketing" } })).body.error, "subject_consent_required", "consent covers named purposes only");
+  assert.equal((await c4aStart({ ...executionBody("purpose"), context: { ...context, purpose: "marketing" } })).body.error, "consent_required", "consent covers named purposes only");
   const consents = await (await api("/v1/me/consents", owner)).json();
   trustCases.push({ schema: "SubjectConsentList", value: consents });
   assert.ok(consents.consents.some(item => item.consentId === consent.consentId && item.state === "active"));
@@ -796,7 +796,23 @@ test("C4A real two-application OIDC invocation redeems a ticket and completes th
   assert.equal(revokedConsent.status, 200); assert.equal((await revokedConsent.json()).state, "revoked");
   const revokedSecond = await api(`/v1/me/consents/${secondGrantId}/revoke`, owner, {});
   assert.equal(revokedSecond.status, 200, "every active grant of this person is revoked before the next check");
-  assert.equal((await c4aStart({ ...executionBody("purpose"), context })).body.error, "subject_consent_required", "revocation is immediate");
+  const revokedCall = await c4aStart({ ...executionBody("purpose"), context });
+  assert.deepEqual([revokedCall.status, revokedCall.body.error], [403, "consent_revoked"], "revocation is immediate");
+  const expiring = await api("/v1/me/consents", owner, { ...consentBody, purposes: ["record_review"] },
+    { "Idempotency-Key": crypto.randomUUID() });
+  assert.equal(expiring.status, 201);
+  const expiringId = (await expiring.json()).consentId;
+  await sql(`UPDATE execution_private.subject_consents SET created_at=clock_timestamp()-interval '1 minute',
+    expires_at=clock_timestamp()-interval '1 second'
+    WHERE consent_id=${q(expiringId)};`);
+  const expiredCall = await c4aStart({ ...executionBody("purpose"), context: { ...context, purpose: "record_review" } });
+  assert.deepEqual([expiredCall.status, expiredCall.body.error], [403, "consent_expired"]);
+  for (const { body } of [unconsented, revokedCall, expiredCall]) {
+    assert.match(body.requestId, /^[0-9a-f-]{36}$/);
+    const denial = await sql(`SELECT count(*) FROM app_private.audit WHERE event='authorization.denied'
+      AND outcome='denied' AND reason_code=${q(body.error)} AND reason=${q(body.requestId)};`);
+    assert.equal(denial.stdout.trim(), "1");
+  }
 
   // Break-glass: no consent, but a justification; sealed, visible to the person, reviewed.
   const emergencyContext = { purpose: "urgent_response", dataSubject: owner.id, emergency: true, justification: "Person unreachable during an urgent incident" };
@@ -812,7 +828,7 @@ test("C4A real two-application OIDC invocation redeems a ticket and completes th
   trustCases.push({ schema: "EmergencyAccessList", value: reviewList });
   assert.ok(reviewList.reviews.some(item => item.executionId === emergency.body.executionId && item.state === "pending"));
   assert.equal((await api("/v1/emergency-accesses", stranger)).status, 403, "trust.write alone cannot review");
-  const reviewed = await api(`/v1/emergency-accesses/${emergency.body.executionId}/review`, approver, { decision: "justified", note: "Verified with the ER record" });
+  const reviewed = await api(`/v1/emergency-accesses/${emergency.body.executionId}/review`, approver, { decision: "justified", note: "Verified against the access log" });
   assert.equal(reviewed.status, 200); assert.equal((await reviewed.json()).state, "justified");
   assert.equal((await api(`/v1/emergency-accesses/${emergency.body.executionId}/review`, approver, { decision: "unjustified", note: "again" })).status, 409);
   const ownLog = await (await api("/v1/me/data-access", owner)).json();

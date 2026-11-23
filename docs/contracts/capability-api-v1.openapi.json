@@ -104,6 +104,133 @@
           }
         },
         "x-junctura-status": "implemented"
+      },
+      "get": {
+        "operationId": "listApplications",
+        "summary": "List applications",
+        "description": "List visible applications in ascending ID order. Pass nextCursor as cursor with the same filters.",
+        "tags": [
+          "applications"
+        ],
+        "security": [
+          {
+            "oidcBearer": []
+          }
+        ],
+        "x-junctura-query-policy": "declared",
+        "x-junctura-core-roles": [
+          "core-reader"
+        ],
+        "x-junctura-source": "src/modules/applications/management.mjs",
+        "x-junctura-test-suite": "app-access",
+        "responses": {
+          "200": {
+            "description": "List applications",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AppList"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "405": {
+            "$ref": "#/components/responses/MethodNotAllowed"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "412": {
+            "$ref": "#/components/responses/PreconditionFailed"
+          },
+          "413": {
+            "$ref": "#/components/responses/ContentTooLarge"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          },
+          "428": {
+            "$ref": "#/components/responses/PreconditionRequired"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          }
+        },
+        "x-junctura-status": "implemented",
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "description": "Case-insensitive display name substring.",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 120
+            }
+          },
+          {
+            "name": "state",
+            "in": "query",
+            "description": "Application state.",
+            "required": false,
+            "schema": {
+              "enum": [
+                "pending",
+                "active",
+                "suspended",
+                "revoked"
+              ]
+            }
+          },
+          {
+            "name": "unit",
+            "in": "query",
+            "description": "Deployment unit.",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9-]{1,63}$"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Page size.",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 50
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "description": "Cursor returned on the previous page.",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$"
+            }
+          }
+        ]
       }
     },
     "/v1/applications/{appId}": {
@@ -188,6 +315,120 @@
           }
         ],
         "x-junctura-status": "implemented"
+      },
+      "patch": {
+        "operationId": "updateApplication",
+        "summary": "Update application metadata",
+        "description": "Apply supplied fields against the current ETag. Use confirmed directory units. The owning unit is required before partitioning an app. Revoke active assignments for a unit before removing it.",
+        "tags": [
+          "applications"
+        ],
+        "security": [
+          {
+            "oidcBearer": []
+          }
+        ],
+        "x-junctura-query-policy": "closed",
+        "x-junctura-core-roles": [
+          "core-reader"
+        ],
+        "x-junctura-source": "src/modules/applications/management.mjs",
+        "x-junctura-test-suite": "app-access",
+        "responses": {
+          "200": {
+            "description": "Update application metadata",
+            "headers": {
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Application"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "405": {
+            "$ref": "#/components/responses/MethodNotAllowed"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "412": {
+            "$ref": "#/components/responses/PreconditionFailed"
+          },
+          "413": {
+            "$ref": "#/components/responses/ContentTooLarge"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          },
+          "428": {
+            "$ref": "#/components/responses/PreconditionRequired"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          }
+        },
+        "x-junctura-status": "implemented",
+        "parameters": [
+          {
+            "name": "appId",
+            "in": "path",
+            "description": "Application ID.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$"
+            }
+          },
+          {
+            "name": "If-Match",
+            "in": "header",
+            "description": "Current strong application ETag.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AppMetadataPatch"
+              },
+              "example": {
+                "displayName": "App X",
+                "ownerUnit": "unit-a",
+                "deploymentUnits": [
+                  "unit-a",
+                  "unit-b"
+                ]
+              }
+            }
+          }
+        }
       }
     },
     "/v1/applications/{appId}/approve": {
@@ -3037,7 +3278,7 @@
       "post": {
         "operationId": "createCapabilityExecution",
         "summary": "Accept one guarded pinned capability execution",
-        "description": "Opt-in guarded execution. C4B accepts only target and input and pins a published caller-owned composition. Every step rechecks original OIDC authority, active apps and independent same-tenant direct invoke grants; providers authenticate and redeem single-use step-bound tickets. C4B replay returns the durable reservation and never restores a lost lease or retries ambiguous work. Results require original consumer/subject/client and current authority. Success requires validated final output and confirmed Flowable history. No cancellation, resume, delegation or automatic retries. C4A retains its documented untouched-work replay contract. See CAPABILITY_COMPOSITION.md and CAPABILITY_EXECUTION.md. An optional context with purpose, dataSubject and dataSubjectKind declares why the call is made and whose data it concerns; it is bound into the idempotent request, sealed into the audit chain, passed to the provider on ticket redemption and listed for the data subject by GET /v1/me/data-access. When the context names a dataSubject, an active consent of that person for the consumer application, capability and purpose is required (403 subject_consent_required), unless emergency is true with a justification; emergency calls are queued for review and at most five may be pending per consumer (429 emergency_review_backlog).",
+        "description": "Opt-in guarded execution. C4B accepts only target and input and pins a published caller-owned composition. Every step rechecks original OIDC authority, active apps and independent same-tenant direct invoke grants; providers authenticate and redeem single-use step-bound tickets. C4B replay returns the durable reservation and never restores a lost lease or retries ambiguous work. Results require original consumer/subject/client and current authority. Success requires validated final output and confirmed Flowable history. No cancellation, resume, delegation or automatic retries. C4A retains its documented untouched-work replay contract. See CAPABILITY_COMPOSITION.md and CAPABILITY_EXECUTION.md. An optional context with purpose, dataSubject and dataSubjectKind declares why the call is made and whose data it concerns; it is bound into the idempotent request, sealed into the audit chain, passed to the provider on ticket redemption and listed for the data subject by GET /v1/me/data-access. When the context names a dataSubject, an active consent of that person for the consumer application, capability and purpose is required (403 consent_required, consent_revoked or consent_expired), unless emergency is true with a justification; emergency calls are queued for review and at most five may be pending per consumer (429 emergency_review_backlog).",
         "tags": [
           "capability-executions"
         ],
@@ -3145,7 +3386,10 @@
           {
             "oidcBearer": []
           }
-        ]
+        ],
+        "x-junctura-denial-schema": {
+          "$ref": "#/components/schemas/AppAccessDenial"
+        }
       }
     },
     "/v1/capability-executions/{executionId}": {
@@ -3512,7 +3756,10 @@
           {
             "oidcBearer": []
           }
-        ]
+        ],
+        "x-junctura-denial-schema": {
+          "$ref": "#/components/schemas/AppAccessDenial"
+        }
       }
     },
     "/v1/audit-events": {
@@ -4802,8 +5049,8 @@
     "/v1/me/emergency-accesses/{id}/feedback": {
       "post": {
         "operationId": "submitEmergencyAccessFeedback",
-        "summary": "Submit feedback on the subject's own emergency access",
-        "description": "Use the verified token subjectId, tenant and issuer; a supplied subject identifier never selects another person. A missing verified claim returns 403. Use the execution ID from the emergency access entry. Feedback is separate from the management review and the original audit event. Identical retries return the saved receipt; different feedback after submission conflicts. Keep personal content out of message.",
+        "summary": "Submit feedback on the subject's own break-glass access",
+        "description": "Use the verified token subjectId, tenant and issuer; a supplied subject identifier never selects another person. A missing verified claim returns 403. Use the execution ID from the break-glass access entry. Feedback is separate from the management review and the original audit event. Identical retries return the saved receipt; different feedback after submission conflicts. Keep personal content out of message.",
         "tags": [
           "tenant"
         ],
@@ -4928,14 +5175,14 @@
     "/v1/emergency-accesses": {
       "get": {
         "operationId": "listEmergencyAccesses",
-        "summary": "List emergency accesses",
-        "description": "Implemented. Emergency (break-glass) calls in the caller's tenant with justification and review state. Requires trust.approve.",
+        "summary": "List break-glass accesses",
+        "description": "Implemented. Break-glass calls in the caller's tenant with justification and review state. Requires trust.approve.",
         "tags": [
           "audit-events"
         ],
         "responses": {
           "200": {
-            "description": "Emergency accesses",
+            "description": "Break-glass accesses",
             "content": {
               "application/json": {
                 "schema": {
@@ -4977,8 +5224,8 @@
     "/v1/emergency-accesses/{executionId}/review": {
       "post": {
         "operationId": "reviewEmergencyAccess",
-        "summary": "Review an emergency access",
-        "description": "Implemented. Records once whether an emergency access was justified; sealed in the audit chain as execution.emergency_reviewed. Requires trust.approve and core-writer.",
+        "summary": "Review an break-glass access",
+        "description": "Implemented. Records once whether an break-glass access was justified; sealed in the audit chain as execution.emergency_reviewed. Requires trust.approve and core-writer.",
         "tags": [
           "audit-events"
         ],
@@ -5592,6 +5839,455 @@
         "x-junctura-core-roles": [
           "core-reader"
         ]
+      }
+    },
+    "/v1/applications/{appId}/assignments": {
+      "get": {
+        "operationId": "listApplicationAssignments",
+        "summary": "Read application assignments",
+        "description": "List effective and pending assignments for this app.",
+        "tags": [
+          "applications"
+        ],
+        "security": [
+          {
+            "oidcBearer": []
+          }
+        ],
+        "x-junctura-query-policy": "closed",
+        "x-junctura-core-roles": [
+          "core-reader"
+        ],
+        "x-junctura-source": "src/modules/applications/management.mjs",
+        "x-junctura-test-suite": "app-access",
+        "responses": {
+          "200": {
+            "description": "Read application assignments",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AppAssignments"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "405": {
+            "$ref": "#/components/responses/MethodNotAllowed"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "412": {
+            "$ref": "#/components/responses/PreconditionFailed"
+          },
+          "413": {
+            "$ref": "#/components/responses/ContentTooLarge"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          },
+          "428": {
+            "$ref": "#/components/responses/PreconditionRequired"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          }
+        },
+        "x-junctura-status": "implemented",
+        "parameters": [
+          {
+            "name": "appId",
+            "in": "path",
+            "description": "Application ID.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$"
+            }
+          }
+        ]
+      },
+      "post": {
+        "operationId": "assignApplicationAccess",
+        "summary": "Grant application access",
+        "description": "Assign an application role to a directory unit, group or member in a deployment unit. The same grant is safe to retry. Success confirms the Keycloak mapping.",
+        "tags": [
+          "applications"
+        ],
+        "security": [
+          {
+            "oidcBearer": []
+          }
+        ],
+        "x-junctura-query-policy": "closed",
+        "x-junctura-core-roles": [
+          "core-reader"
+        ],
+        "x-junctura-source": "src/modules/applications/management.mjs",
+        "x-junctura-test-suite": "app-access",
+        "responses": {
+          "200": {
+            "description": "Grant application access",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AppAssignment"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "405": {
+            "$ref": "#/components/responses/MethodNotAllowed"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "412": {
+            "$ref": "#/components/responses/PreconditionFailed"
+          },
+          "413": {
+            "$ref": "#/components/responses/ContentTooLarge"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          },
+          "428": {
+            "$ref": "#/components/responses/PreconditionRequired"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          }
+        },
+        "x-junctura-status": "implemented",
+        "parameters": [
+          {
+            "name": "appId",
+            "in": "path",
+            "description": "Application ID.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AppAssignmentInput"
+              },
+              "example": {
+                "unit": "unit-a",
+                "targetType": "group",
+                "target": "reviewers",
+                "role": "viewer"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/applications/{appId}/assignments/{assignmentId}": {
+      "delete": {
+        "operationId": "revokeApplicationAccess",
+        "summary": "Revoke application access",
+        "description": "Remove access in Core and remove the matching role in Keycloak. Retrying the same ID reconciles a pending removal.",
+        "tags": [
+          "applications"
+        ],
+        "security": [
+          {
+            "oidcBearer": []
+          }
+        ],
+        "x-junctura-query-policy": "closed",
+        "x-junctura-core-roles": [
+          "core-reader"
+        ],
+        "x-junctura-source": "src/modules/applications/management.mjs",
+        "x-junctura-test-suite": "app-access",
+        "responses": {
+          "204": {
+            "description": "Revoke application access"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "405": {
+            "$ref": "#/components/responses/MethodNotAllowed"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "412": {
+            "$ref": "#/components/responses/PreconditionFailed"
+          },
+          "413": {
+            "$ref": "#/components/responses/ContentTooLarge"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          },
+          "428": {
+            "$ref": "#/components/responses/PreconditionRequired"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          }
+        },
+        "x-junctura-status": "implemented",
+        "parameters": [
+          {
+            "name": "appId",
+            "in": "path",
+            "description": "Application ID.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$"
+            }
+          },
+          {
+            "name": "assignmentId",
+            "in": "path",
+            "description": "Assignment ID.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/applications/{appId}/oidc-keys": {
+      "get": {
+        "operationId": "listApplicationOidcKeys",
+        "summary": "Read OIDC key rotation history",
+        "description": "List the latest 100 rotation receipts for this app, newest first. Pending receipts have a null appliedAt.",
+        "tags": [
+          "applications"
+        ],
+        "security": [
+          {
+            "oidcBearer": []
+          }
+        ],
+        "x-junctura-query-policy": "closed",
+        "x-junctura-core-roles": [
+          "core-reader"
+        ],
+        "x-junctura-source": "src/modules/applications/management.mjs",
+        "x-junctura-test-suite": "app-access",
+        "responses": {
+          "200": {
+            "description": "Read OIDC key rotation history",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AppKeyRotations"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "405": {
+            "$ref": "#/components/responses/MethodNotAllowed"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "412": {
+            "$ref": "#/components/responses/PreconditionFailed"
+          },
+          "413": {
+            "$ref": "#/components/responses/ContentTooLarge"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          },
+          "428": {
+            "$ref": "#/components/responses/PreconditionRequired"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          }
+        },
+        "x-junctura-status": "implemented",
+        "parameters": [
+          {
+            "name": "appId",
+            "in": "path",
+            "description": "Application ID.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$"
+            }
+          }
+        ]
+      },
+      "post": {
+        "operationId": "rotateApplicationOidcKey",
+        "summary": "Rotate the OIDC client secret",
+        "description": "Stage a new confidential client secret in OpenBao, apply it in Keycloak, and return rotation metadata. Retry an incomplete rotation with the same Idempotency-Key.",
+        "tags": [
+          "applications"
+        ],
+        "security": [
+          {
+            "oidcBearer": []
+          }
+        ],
+        "x-junctura-query-policy": "closed",
+        "x-junctura-core-roles": [
+          "core-reader"
+        ],
+        "x-junctura-source": "src/modules/applications/management.mjs",
+        "x-junctura-test-suite": "app-access",
+        "responses": {
+          "200": {
+            "description": "Rotate the OIDC client secret",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AppKeyRotations"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "405": {
+            "$ref": "#/components/responses/MethodNotAllowed"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "412": {
+            "$ref": "#/components/responses/PreconditionFailed"
+          },
+          "413": {
+            "$ref": "#/components/responses/ContentTooLarge"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          },
+          "428": {
+            "$ref": "#/components/responses/PreconditionRequired"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          }
+        },
+        "x-junctura-status": "implemented",
+        "parameters": [
+          {
+            "name": "appId",
+            "in": "path",
+            "description": "Application ID.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "description": "Client-generated UUID for the rotation.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {},
+                "required": [],
+                "additionalProperties": false
+              },
+              "example": {}
+            }
+          }
+        }
       }
     }
   },
@@ -6637,6 +7333,26 @@
           "digest": {
             "type": "string",
             "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "ownerUnit": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9-]{1,63}$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "deploymentUnits": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9-]{1,63}$"
+            },
+            "uniqueItems": true,
+            "maxItems": 100
           }
         },
         "required": [
@@ -9946,6 +10662,228 @@
             }
           }
         }
+      },
+      "AppAccessDenialCode": {
+        "type": "string",
+        "enum": [
+          "not_assigned_to_app",
+          "capability_not_granted",
+          "consent_required",
+          "consent_revoked",
+          "consent_expired",
+          "unit_mismatch"
+        ]
+      },
+      "AppAccessDenial": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "$ref": "#/components/schemas/AppAccessDenialCode"
+          },
+          "requestId": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$"
+          }
+        },
+        "required": [
+          "error",
+          "requestId"
+        ],
+        "additionalProperties": false
+      },
+      "AppMetadataPatch": {
+        "type": "object",
+        "properties": {
+          "displayName": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120
+          },
+          "ownerUnit": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9-]{1,63}$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "deploymentUnits": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9-]{1,63}$"
+            },
+            "uniqueItems": true,
+            "maxItems": 100
+          }
+        },
+        "required": [],
+        "additionalProperties": false,
+        "minProperties": 1
+      },
+      "AppList": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Application"
+            }
+          },
+          "nextCursor": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "items",
+          "nextCursor"
+        ],
+        "additionalProperties": false
+      },
+      "AppAssignmentInput": {
+        "type": "object",
+        "properties": {
+          "unit": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9-]{1,63}$"
+          },
+          "targetType": {
+            "enum": [
+              "unit",
+              "group",
+              "subject"
+            ]
+          },
+          "target": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9:_-]{1,128}$"
+          },
+          "role": {
+            "enum": [
+              "viewer",
+              "editor",
+              "manager"
+            ]
+          }
+        },
+        "required": [
+          "unit",
+          "targetType",
+          "target",
+          "role"
+        ],
+        "additionalProperties": false
+      },
+      "AppAssignment": {
+        "type": "object",
+        "properties": {
+          "unit": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9-]{1,63}$"
+          },
+          "targetType": {
+            "enum": [
+              "unit",
+              "group",
+              "subject"
+            ]
+          },
+          "target": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9:_-]{1,128}$"
+          },
+          "role": {
+            "enum": [
+              "viewer",
+              "editor",
+              "manager"
+            ]
+          },
+          "assignmentId": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "synchronized": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "unit",
+          "targetType",
+          "target",
+          "role",
+          "assignmentId",
+          "enabled",
+          "synchronized"
+        ],
+        "additionalProperties": false
+      },
+      "AppAssignments": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AppAssignment"
+            }
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "additionalProperties": false
+      },
+      "AppKeyRotations": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "rotationId": {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$"
+                },
+                "createdAt": {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                "appliedAt": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "format": "date-time"
+                }
+              },
+              "required": [
+                "rotationId",
+                "createdAt",
+                "appliedAt"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "additionalProperties": false
       }
     },
     "responses": {
@@ -10009,11 +10947,18 @@
         }
       },
       "Forbidden": {
-        "description": "Sanitized error; see specification for policy and state conditions",
+        "description": "Sanitized error; see specification for policy and state conditions Application access decisions use the documented denial codes and a request ID.",
         "content": {
           "application/json": {
             "schema": {
-              "$ref": "#/components/schemas/Error"
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/Error"
+                },
+                {
+                  "$ref": "#/components/schemas/AppAccessDenial"
+                }
+              ]
             }
           }
         }

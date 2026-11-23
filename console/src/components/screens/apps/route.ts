@@ -2,9 +2,9 @@
 // SPDX-License-Identifier: Apache-2.0
 import { useEffect, useState } from "react";
 
-export type AppTab = "overview" | "settings";
+export type AppTab = "overview" | "access" | "settings";
 
-export const APP_TABS: AppTab[] = ["overview", "settings"];
+export const APP_TABS: AppTab[] = ["overview", "access", "settings"];
 
 export interface AppsRoute {
   appId: string | null;

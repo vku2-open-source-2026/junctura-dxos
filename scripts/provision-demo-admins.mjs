@@ -21,7 +21,7 @@ export const DEMO_ADMINS = [
 
 export const ADMIN_PERMISSIONS = [
   "applications.register", "applications.approve", "trust.write", "trust.approve",
-  "audit.read", "capabilities.write", "capabilities.publish", "capabilities.approve",
+  "audit.read", "directory.write", "capabilities.write", "capabilities.publish", "capabilities.approve",
   "compositions.write", "compositions.publish", "compositions.approve",
 ];
 
@@ -222,6 +222,12 @@ export async function disableLegacyViewer({ admin }, log) {
 
 export async function provisionTenant({ admin, idFrom, group, roles, sql }, { tenant, accounts, existing, resetPasswords, issuer }) {
   const writerRoles = roles.filter(role => role.name !== "core-reader");
+  const consoleClient = (await (await expectStatus(await admin(`clients?clientId=${MANAGEMENT_CLIENT}`),
+    [200], "Read Console client")).json()).find(client => client.clientId === MANAGEMENT_CLIENT);
+  if (!consoleClient) throw new Error("Console client missing");
+  const consoleRoles = await (await expectStatus(await admin(`clients/${consoleClient.id}/roles`),
+    [200], "Read Console access roles")).json();
+
   const created = [];
   const reset = [];
   for (const account of accounts) {
@@ -262,6 +268,13 @@ export async function provisionTenant({ admin, idFrom, group, roles, sql }, { te
     } else {
       await expectStatus(await admin(`users/${id}/role-mappings/realm`, roles), [204], `Assign roles to ${account.username}`);
     }
+    const consoleRole = consoleRoles.find(role => role.name === (account.readOnly ? "console-viewer" : "console-admin"));
+    if (!consoleRole) throw new Error("Console access roles missing. Run directory provisioning first");
+    const mapping = `users/${id}/role-mappings/clients/${consoleClient.id}`;
+    const current = await (await expectStatus(await admin(mapping), [200], "Read Console role bindings")).json();
+    const previous = current.filter(role => /^console-(admin|manager|viewer)$/.test(role.name) && role.id !== consoleRole.id);
+    if (previous.length) await expectStatus(await admin(mapping, previous, "DELETE"), [204], "Remove previous Console roles");
+    await expectStatus(await admin(mapping, [consoleRole], "POST"), [204], "Assign Console access");
     await sql(buildPrincipalStatement({ tenant, issuer, subject: id, profile: account }));
   }
   return { created, reset };

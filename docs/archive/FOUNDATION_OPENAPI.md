@@ -141,7 +141,7 @@ These are placeholders, not working credentials. Default tenant-a/tenant-b
 service fixtures alone do not grant v2 access. The standalone example leaves its
 created records, object and ten-minute share in the application's ownership; it
 prints no credentials/tokens. On a failed POST, reconcile outcomes before rerun.
-Never put backend secrets in a frontend, source repository or shell transcript.
+Never put backend secrets in a frontend, source repository or shell log.
 
 ## Local verification evidence
 

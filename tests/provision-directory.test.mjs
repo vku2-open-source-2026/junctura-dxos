@@ -77,7 +77,9 @@ test("the subjectId profile property is managed and admin-only", () => {
     { name: "tenant_id" }] });
   assert.deepEqual(merged.attributes.find(attribute => attribute.name === "subject_id").permissions,
     { view: ["admin"], edit: ["admin"] }, "an existing user-editable declaration is overridden");
-  assert.equal(merged.attributes.length, 2, "unrelated attributes are preserved");
+  assert.deepEqual(merged.attributes.find(attribute => attribute.name === "tenant_id"), { name: "tenant_id" });
+  assert.deepEqual(merged.attributes.find(attribute => attribute.name === "junctura_unit").permissions,
+    { view: ["admin"], edit: ["admin"] });
 });
 
 test("provisioning creates the sync client, aligns old clients and removes excess authority", async () => {

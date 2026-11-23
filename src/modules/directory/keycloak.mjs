@@ -138,6 +138,11 @@ export function createDirectorySync(config, fetcher = fetch, beforeWrite = async
     membership.path?.startsWith(`${unitGroup.path}/`);
 
   return {
+    call,
+    async groupForAssignment(tenant, unit, group) {
+      const unitGroup = await requireChild(await findNamespace(tenant), unit);
+      return group ? requireChild(unitGroup, group) : unitGroup;
+    },
     // The named login subject must already belong to this tenant: provisioning
     // marks that with membership in the exact tenant root group.
     async verifySubject(tenant, subject) {

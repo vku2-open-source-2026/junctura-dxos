@@ -148,6 +148,10 @@ function requestExample(endpoint: ApiEndpointDef): RequestExample {
             expiresAt: futureIso(60),
           },
         };
+      case "updateApplication":
+        return { contentType, json: { displayName: "App X", ownerUnit: "unit-a", deploymentUnits: ["unit-a", "unit-b"] } };
+      case "assignApplicationAccess":
+        return { contentType, json: { unit: "unit-a", targetType: "group", target: "reviewers", role: "viewer" } };
       case "createApplication":
         return {
           contentType,
@@ -201,6 +205,8 @@ function requestExample(endpoint: ApiEndpointDef): RequestExample {
         return { contentType, json: {} };
     }
   }
+
+  if (endpoint.operationId === "listApplications") return { query: { state: "active", unit: "unit-a", limit: "50" } };
 
   if (endpoint.operationId === "aggregateRecords") return { query: { count: "true" } };
 

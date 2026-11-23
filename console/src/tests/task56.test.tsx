@@ -305,7 +305,9 @@ describe("Task 56b — read-only console", () => {
       (url) =>
         url.includes("/v1/trust/graph") ? json(200, PENDING_GRAPH) : undefined,
       (url) =>
-        url.includes("/v1/applications/")
+        url.includes("/v1/applications?") ? json(200, { items: [APP_FIXTURE], nextCursor: null }) : undefined,
+      (url) =>
+        url.endsWith(`/v1/applications/${APP_FIXTURE.appId}`)
           ? json(200, APP_FIXTURE)
           : undefined,
     ]);

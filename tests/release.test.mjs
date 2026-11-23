@@ -1,9 +1,9 @@
 // SPDX-FileCopyrightText: 2026 Junctura Contributors
 // SPDX-License-Identifier: Apache-2.0
 import assert from "node:assert/strict";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { test } from "node:test";
-import { releaseFiles } from "../scripts/package-release.mjs";
+import { assertRequiredReleaseFiles, releaseFiles } from "../scripts/package-release.mjs";
 
 test("source release allowlist excludes local/private roots and rejects secrets inside public roots", () => {
   assert.deepEqual(releaseFiles(["LICENSE", ".env", ".env.rc-test", ".codex/private.md", "local-data/data", "docs/GETTING_STARTED.md", ".env.example"]), [".env.example", "LICENSE", "docs/GETTING_STARTED.md"]);
@@ -14,6 +14,19 @@ test("source release allowlist excludes local/private roots and rejects secrets 
 // check runs wherever the whole repository is present (host checks and CI).
 const versioned = ["package.json", "console/package.json", "console/package-lock.json", "sdk/node/package.json", "console/src/constants/brand.ts"];
 const wholeRepository = versioned.every(path => existsSync(new URL(`../${path}`, import.meta.url)));
+
+test("release packaging requires each app access migration", { skip: !wholeRepository }, () => {
+  const files = ["LICENSE", "NOTICE", "THIRD-PARTY.md", "CHANGELOG.md", "REUSE.toml", "LICENSES/Apache-2.0.txt",
+    "compose.yaml", ".env.example", "docs/GETTING_STARTED.md", "docs/RELEASE.md", "docs/DEVELOPING.md",
+    ...readdirSync(new URL("../infra/postgres/", import.meta.url)).map(file => `infra/postgres/${file}`)];
+  assertRequiredReleaseFiles(releaseFiles(files));
+  for (const name of ["047-app-access.sql", "048-app-data-units.sql", "049-access-denial-reasons.sql"]) {
+    const path = `infra/postgres/${name}`;
+    assert.throws(() => assertRequiredReleaseFiles(files.filter(file => file !== path)), {
+      message: `Missing release file ${path}`,
+    });
+  }
+});
 
 test("Console, SDK and Console lockfile carry the platform version", { skip: !wholeRepository && "repository sources not present" }, () => {
   const read = path => readFileSync(new URL(`../${path}`, import.meta.url), "utf8");

@@ -24,6 +24,18 @@ services:
   identity:
     image: quay.io/keycloak/keycloak:26.8.1@sha256:79c623a22abacf3fe6c00a5fb30f5b7843d717b234033b80995891c06116d244
     restart: unless-stopped
+    entrypoint:
+      - /bin/bash
+      - -ec
+      - |
+        export APP_SYNC_CLIENT_ENABLED=false
+        if [[ "$$APP_SYNC_CLIENT_ID" == junctura-app-sync && "$$APP_SYNC_CLIENT_SECRET" =~ [^[:space:]] ]]; then
+          export APP_SYNC_CLIENT_ENABLED=true
+        else
+          unset APP_SYNC_CLIENT_SECRET
+        fi
+        exec /opt/keycloak/bin/kc.sh "$$@"
+      - --
     command: [start, --import-realm]
     environment:
       KC_DB: postgres
@@ -43,6 +55,8 @@ services:
       TENANT_B_SECRET: ${TENANT_B_SECRET:?Run npm run setup first}
       READER_SECRET: ${READER_SECRET:?Run npm run setup first}
       SSO_USER_PASSWORD: ${SSO_USER_PASSWORD:?Run npm run setup first}
+      APP_SYNC_CLIENT_ID: ${APP_SYNC_CLIENT_ID:-junctura-app-sync}
+      APP_SYNC_CLIENT_SECRET: ${APP_SYNC_CLIENT_SECRET:-}
     volumes:
       - ./infra/keycloak/realm.json:/opt/keycloak/data/import/realm.json:ro
       - ./infra/keycloak/themes/junctura:/opt/keycloak/themes/junctura:ro
@@ -110,6 +124,9 @@ services:
       - ./infra/postgres/044-search-index-jobs.sql:/migrations/044-search-index-jobs.sql:ro
       - ./infra/postgres/045-authorized-events.sql:/migrations/045-authorized-events.sql:ro
       - ./infra/postgres/046-subject-access-reports.sql:/migrations/046-subject-access-reports.sql:ro
+      - ./infra/postgres/047-app-access.sql:/migrations/047-app-access.sql:ro
+      - ./infra/postgres/048-app-data-units.sql:/migrations/048-app-data-units.sql:ro
+      - ./infra/postgres/049-access-denial-reasons.sql:/migrations/049-access-denial-reasons.sql:ro
     depends_on:
       database:
         condition: service_healthy
@@ -280,6 +297,8 @@ services:
       WORKFLOW_ADMIN_PASSWORD: ${WORKFLOW_ADMIN_PASSWORD:?Run npm run setup first}
       DIRECTORY_SYNC_CLIENT_ID: ${DIRECTORY_SYNC_CLIENT_ID:-junctura-directory-sync}
       DIRECTORY_SYNC_CLIENT_SECRET: ${DIRECTORY_SYNC_CLIENT_SECRET:-}
+      APP_SYNC_CLIENT_ID: ${APP_SYNC_CLIENT_ID:-junctura-app-sync}
+      APP_SYNC_CLIENT_SECRET: ${APP_SYNC_CLIENT_SECRET:-}
       C4A_ENABLED: ${C4A_ENABLED:-false}
       C4A_PROVIDER_ORIGINS: ${C4A_PROVIDER_ORIGINS:-[]}
       C4B_ENABLED: ${C4B_ENABLED:-false}

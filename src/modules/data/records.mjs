@@ -1,7 +1,6 @@
 // SPDX-FileCopyrightText: 2026 Junctura Contributors
 // SPDX-License-Identifier: Apache-2.0
-import { randomUUID } from "node:crypto";
-import { HttpError, json, jsonObject, logicalRequestDigest, readRecordJson, requireWriter, uuidPattern } from "../../platform/http/http.mjs";
+import { HttpError, requestIdFor, json, jsonObject, logicalRequestDigest, readRecordJson, requireWriter, uuidPattern } from "../../platform/http/http.mjs";
 import { signInternalToken } from "../../platform/security/internal-token.mjs";
 import { collectionPattern, fieldPattern, parseCollectionSchema, uniqueKeyPattern } from "./schema/collection.mjs";
 
@@ -57,7 +56,7 @@ export async function recordCommand(config, identity, operation, payload) {
   if (!config.dataUrl) throw new HttpError(503, "data_unavailable");
   try {
     const token = signInternalToken(config.dataSecret, { role: "junctura_record_api", tenant_id: tenantId,
-      iss: issuer, sub: subject, client_id: clientId, resource_writer: roles.includes("core-writer"),
+      iss: issuer, sub: subject, client_id: clientId, resource_unit: identity.resourceUnit, human_app_id: identity.humanAppId, resource_writer: roles.includes("core-writer"),
       display_name: identity.preferredUsername, aud: "junctura-data", exp: Math.floor(Date.now() / 1000) + 30 });
     const upstream = await fetch(`${config.dataUrl}/rpc/record_command`, {
       method: "POST",
@@ -87,7 +86,7 @@ const legacyErrors = new Set([
 ]);
 
 export async function presentRecordRequest(request, response, run, compatibility = false) {
-  const requestId = randomUUID();
+  const requestId = requestIdFor(request);
   response.setHeader("X-Request-Id", requestId);
   try { return await run(); }
   catch (error) {

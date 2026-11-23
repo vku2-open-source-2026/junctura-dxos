@@ -84,31 +84,7 @@ function recentFixture() {
 }
 
 function directoryFixture() {
-  return {
-    root: {
-      id: "tenant-test",
-      name: "tenant-test",
-      kind: "platform",
-      children: [
-        {
-          id: "app-1",
-          name: "Đơn vị tiếp nhận",
-          kind: "application",
-          children: [],
-        },
-        {
-          id: "app-2",
-          name: "Đơn vị đề nghị An Khang",
-          kind: "application",
-          children: [],
-        },
-      ],
-    },
-    relations: [
-      { from: "app-1", to: "app-2", label: "văn bản" },
-    ],
-    truncated: false,
-  };
+  return { items: [{ unit: "unit-a", unitType: "team", name: "Đơn vị A" }], nextCursor: null };
 }
 
 function principalsFixture() {
@@ -315,7 +291,7 @@ describe("Task 34 — users and organisations from the directory API", () => {
   it("shows a friendly permission message when organisations return 403", async () => {
     installApiFetch([
       (url) =>
-        url.includes("/v1/directory/organizations")
+        url.includes("/v1/directory/units?")
           ? json(403, { error: "forbidden" })
           : undefined,
     ]);
@@ -328,7 +304,7 @@ describe("Task 34 — users and organisations from the directory API", () => {
   it("draws the organisation tree and opens a node detail card", async () => {
     installApiFetch([
       (url) =>
-        url.includes("/v1/directory/organizations")
+        url.includes("/v1/directory/units?")
           ? json(200, directoryFixture())
           : undefined,
     ]);
@@ -337,16 +313,8 @@ describe("Task 34 — users and organisations from the directory API", () => {
       level: 1,
       name: viStrings.orgs.title,
     });
-    expect(
-      await screen.findByRole("button", { name: "Junctura" })
-    ).toBeInTheDocument();
-    expect(screen.queryByText("tenant-test")).toBeNull();
-    fireEvent.click(
-      await screen.findByRole("button", { name: "Đơn vị tiếp nhận" })
-    );
-    expect(
-      (await screen.findAllByText("văn bản")).length
-    ).toBeGreaterThan(0);
-    expect(screen.queryByText("app-1")).toBeNull();
+    fireEvent.click(await screen.findByRole("button", { name: "Đơn vị A" }));
+    expect(await screen.findByRole("heading", { name: viStrings.appAccess.members })).toBeInTheDocument();
+    expect(await screen.findByText(viStrings.appAccess.noUnitApps)).toBeInTheDocument();
   });
 });

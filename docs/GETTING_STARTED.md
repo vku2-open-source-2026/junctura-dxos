@@ -22,7 +22,7 @@ npm run local:demo
 npm run healthcheck
 ```
 
-Setup generates twelve independent 256-bit secrets from the committed environment
+Setup generates independent 256-bit secrets from the committed environment
 template. It refuses to overwrite an existing `.env`. Preserve that file and the
 database volumes; editing a password does not rotate an existing database account
 or Keycloak realm. On Windows, keep the repository on a private user account and
@@ -34,7 +34,7 @@ their secret values. Optional Python/OpenSSL diagnostics concern integration tes
 not the ordinary installation. C4A/C4B should both report disabled.
 
 `local:demo` runs `setup` only when `.env` is missing, then `local:up` (build,
-start, migrations, wait up to 300 seconds), `env:provision`, `demo:seed` and
+start, migrations, wait up to 300 seconds), `directory:provision`, `env:provision`, `demo:seed` and
 `demo:console`, and prints the Console URL. Provisioning creates the read-only
 `demo` account in tenant `demo` and `admin1`–`admin3` plus the read-only judge
 `giamkhao` in tenant `production`; passwords are generated at run time, never

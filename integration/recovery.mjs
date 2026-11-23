@@ -174,6 +174,17 @@ test("pg_dump/pg_restore preserves real data and tenant RLS in an isolated tempo
           'app_private.emergency_feedback'::regclass);`]);
     assert.equal(eventAcl.stdout.trim(), "t|t|f|f|f|t|f|9|t",
       "Restore preserves private audit, event, quota and search authorities");
+    const appAccessAcl = await docker(["exec", target, "psql", "-U", "junctura_admin", "-d", "recovered", "-Atc",
+      `SELECT count(*), bool_and(c.relrowsecurity AND c.relforcerowsecurity),
+        bool_and(NOT has_table_privilege('junctura_app_api',c.oid,'SELECT, INSERT, UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER, MAINTAIN')
+          AND NOT has_table_privilege('junctura_app_access_api',c.oid,'SELECT, INSERT, UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER, MAINTAIN')),
+        has_function_privilege('junctura_app_api','core.application_management(text,jsonb)','EXECUTE'),
+        has_function_privilege('junctura_app_access_api','core.app_access_check(jsonb)','EXECUTE'),
+        has_function_privilege('junctura_api','core.app_access_check(jsonb)','EXECUTE')
+        FROM pg_class c WHERE c.oid IN ('app_private.app_assignments'::regclass,
+          'app_private.app_sync_leases'::regclass, 'app_private.app_oidc_rotations'::regclass);`]);
+    assert.equal(appAccessAcl.stdout.trim(), "3|t|t|t|t|f",
+      "Restore preserves forced RLS and RPC-only application access");
     const capabilityAcl=await docker(['exec',target,'psql','-U','junctura_admin','-d','recovered','-Atc',
       "SELECT has_function_privilege('junctura_capability_api','core.capability_command(text,jsonb)','EXECUTE'),has_function_privilege('junctura_capability_api','core.application_command(text,jsonb)','EXECUTE'),has_table_privilege('junctura_capability_api','app_private.capability_versions','SELECT');"]);
     assert.equal(capabilityAcl.stdout.trim(),'t|f|f','Restore preserves capability registry role separation');

@@ -9,6 +9,8 @@ import { PageHeader } from "../../layout/PageHeader";
 import { Button } from "../../common/Button";
 import { AppStateBadge } from "./AppStateBadge";
 import { OverviewTab } from "./OverviewTab";
+import { AccessTab } from "./AccessTab";
+import { AppConfiguration } from "./AppConfiguration";
 import { SettingsTab } from "./SettingsTab";
 import { buildAppDetailModel } from "./appDetailModel";
 import { useAppRelated } from "./useAppRelated";
@@ -24,6 +26,7 @@ interface AppDetailProps {
   onApprove: () => void;
   onReject: () => void;
   onRevoke: () => void;
+  onUpdated: () => void;
 }
 
 export const AppDetail: React.FC<AppDetailProps> = ({
@@ -36,10 +39,12 @@ export const AppDetail: React.FC<AppDetailProps> = ({
   onApprove,
   onReject,
   onRevoke,
+  onUpdated,
 }) => {
   const { t } = useI18n();
   const a = t.applications;
-  const { can } = useSession();
+  const { can, user } = useSession();
+  const canManage = can("applications.write") || user?.roles.includes("console-manager") === true;
   const canDecide = can("applications.approve");
   const related = useAppRelated(application);
 
@@ -65,6 +70,7 @@ export const AppDetail: React.FC<AppDetailProps> = ({
 
   const labels: Record<AppTab, string> = {
     overview: a.tabOverview,
+    access: t.appAccess.title,
     settings: a.tabSettings,
   };
 
@@ -90,7 +96,7 @@ export const AppDetail: React.FC<AppDetailProps> = ({
     <div className="space-y-6">
       <PageHeader
         title={application.displayName}
-        subtitle={a.detailOwnerUnit + ": " + (model.ownerUnit ?? "—")}
+        subtitle={a.detailOwnerUnit + ": " + (application.ownerUnit ?? "—")}
         badges={<AppStateBadge state={application.state} />}
         actions={
           <Button
@@ -145,12 +151,17 @@ export const AppDetail: React.FC<AppDetailProps> = ({
           onReject={onReject}
         />
       )}
+      {tab === "access" && <AccessTab key={application.appId} app={application} canManage={canManage} />}
       {tab === "settings" && (
+        <>
+        <AppConfiguration key={`${application.appId}-${application.revision}`} app={application}
+          canManage={canManage} onUpdated={onUpdated} />
         <SettingsTab
           application={application}
           canDecide={canDecide}
           onRevoke={onRevoke}
         />
+        </>
       )}
     </div>
   );

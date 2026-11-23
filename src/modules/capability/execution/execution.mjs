@@ -5,7 +5,7 @@ import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { createAuthorizer } from "../../../platform/auth/auth.mjs";
 import { assertManifest, canonicalize, manifestDigest } from "../registry/manifest.mjs";
 import { validatePayload } from "../registry/payload.mjs";
-import { HttpError, requireWriter, uuidPattern } from "../../../platform/http/http.mjs";
+import { accessDenialCodes, HttpError, requireWriter, uuidPattern } from "../../../platform/http/http.mjs";
 import { signInternalToken } from "../../../platform/security/internal-token.mjs";
 import { evaluateCapabilityEligibility } from "../trust/trust.mjs";
 
@@ -196,7 +196,7 @@ export async function redeemProviderTicket(config, provider, body, leases) {
   let context;
   try { ({ value: context } = await executionCommand(config, provider, "ticket_context", payload)); }
   catch (error) {
-    if (error instanceof HttpError && [403, 404].includes(error.status)) return { active: false };
+    if (error instanceof HttpError && [403, 404].includes(error.status) && !accessDenialCodes.has(error.message)) return { active: false };
     throw error;
   }
   if (!context.active) return { active: false };
@@ -206,7 +206,7 @@ export async function redeemProviderTicket(config, provider, body, leases) {
       return value.active === true ? value : { active: false };
     });
   } catch (error) {
-    if (error instanceof HttpError && error.status !== 503) return { active: false };
+    if (error instanceof HttpError && error.status !== 503 && !accessDenialCodes.has(error.message)) return { active: false };
     throw error;
   }
 }

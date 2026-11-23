@@ -1,9 +1,10 @@
 // SPDX-FileCopyrightText: 2026 Junctura Contributors
 // SPDX-License-Identifier: Apache-2.0
 import React, { useCallback, useEffect, useState } from "react";
-import type { Application, TrustGraph } from "../../types";
+import type { Application, ApplicationState, TrustGraph } from "../../types";
 import { ApiError, api } from "../../services/apiClient";
 import { useI18n } from "../../locales/i18n";
+import { useSession } from "../../services/session";
 import { useToast } from "../common/Toast";
 import { LoadingSkeleton } from "../common/LoadingSkeleton";
 import { ErrorState } from "../common/ErrorState";
@@ -23,7 +24,13 @@ export const ApplicationsScreen: React.FC = () => {
   const { showToast } = useToast();
   const a = t.applications;
   const route = useAppsRoute();
+  const { user } = useSession();
 
+  const [applications, setApplications] = useState<Application[]>([]);
+  const [query, setQuery] = useState("");
+  const [stateFilter, setStateFilter] = useState<ApplicationState | "all">("all");
+  const [cursor, setCursor] = useState<string>();
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [graph, setGraph] = useState<TrustGraph | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -48,23 +55,39 @@ export const ApplicationsScreen: React.FC = () => {
   const [isSubmittingRevoke, setIsSubmittingRevoke] = useState(false);
   const [revokeError, setRevokeError] = useState<string | null>(null);
 
-  const loadApplications = useCallback(async () => {
+  const [listNonce, setListNonce] = useState(0);
+  const loadApplications = useCallback(() => setListNonce(value => value + 1), []);
+
+  useEffect(() => {
+    if (route.appId) return;
+    let current = true;
     setIsLoading(true);
     setLoadError(null);
     setLoadForbidden(false);
-    try {
-      setGraph(await api.getTrustGraph());
-    } catch (failure) {
-      setLoadForbidden(failure instanceof ApiError && failure.status === 403);
-      setLoadError(a.loadListFailed);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [a.loadListFailed]);
+    void api.listApplications({ q: query.trim(), state: stateFilter === "all" ? undefined : stateFilter, cursor })
+      .then(page => {
+        if (!current) return;
+        setApplications(page.items);
+        setNextCursor(page.nextCursor);
+      })
+      .catch(failure => {
+        if (!current) return;
+        setLoadForbidden(failure instanceof ApiError && failure.status === 403);
+        setApplications([]);
+        setNextCursor(null);
+        setLoadError(a.loadListFailed);
+      })
+      .finally(() => { if (current) setIsLoading(false); });
+    return () => { current = false; };
+  }, [route.appId, query, stateFilter, cursor, listNonce, a.loadListFailed]);
 
   useEffect(() => {
-    void loadApplications();
-  }, [loadApplications]);
+    if (!route.appId) return;
+    let current = true;
+    void api.getTrustGraph().then(value => { if (current) setGraph(value); })
+      .catch(() => { if (current) setGraph(null); });
+    return () => { current = false; };
+  }, [route.appId, detailNonce]);
 
   useEffect(() => {
     if (!route.appId) {
@@ -113,7 +136,7 @@ export const ApplicationsScreen: React.FC = () => {
   const refreshDetail = async () => {
     if (!detailApp) return;
     setDetailNonce((value) => value + 1);
-    await loadApplications();
+    loadApplications();
   };
 
   const openApproval = (decision: AppDecision) => {
@@ -208,7 +231,7 @@ export const ApplicationsScreen: React.FC = () => {
   };
 
   if (route.appId) {
-    if (detailLoading && !detailApp) {
+    if (detailLoading && detailApp?.appId !== route.appId) {
       return (
         <div className="space-y-6">
           <p className="sr-only">{a.loadingList}</p>
@@ -243,6 +266,7 @@ export const ApplicationsScreen: React.FC = () => {
           language={language}
           onBack={backToList}
           onTabChange={changeTab}
+          onUpdated={refreshDetail}
           onApprove={() => openApproval("approve")}
           onReject={() => openApproval("deny")}
           onRevoke={openRevoke}
@@ -277,7 +301,13 @@ export const ApplicationsScreen: React.FC = () => {
     <>
       {loadForbidden && <ForbiddenNotice />}
       <AppList
-        applications={graph?.nodes ?? []}
+        applications={applications.map(app => ({ ...app, owned: app.ownerSubject === user?.id }))}
+        query={query}
+        stateFilter={stateFilter}
+        onSearchChange={value => { setCursor(undefined); setQuery(value); }}
+        onStateChange={value => { setCursor(undefined); setStateFilter(value); }}
+        onNext={nextCursor ? () => setCursor(nextCursor) : undefined}
+        onFirst={cursor ? () => setCursor(undefined) : undefined}
         isLoading={isLoading && !loadForbidden}
         error={loadForbidden ? null : loadError}
         onOpen={openApp}

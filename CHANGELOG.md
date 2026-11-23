@@ -8,6 +8,13 @@ All notable changes to Junctura are recorded here. Versions follow
 
 ## Unreleased
 
+- **Application management and access (issue #72):** added filtered, paginated application listing,
+  revision-checked metadata and deployment settings, unit/group/person assignments, and OIDC client
+  secret rotation via OpenBao with receipt history. Keycloak checks the client role during user sign-in,
+  and Core checks current access on every request. Migrations 047–049 add tenant-protected management
+  RPCs, unit isolation on records and objects, and reason codes for authorization denials.
+  Console now has separate organization and application connection screens plus the app's access tab.
+
 - **Object metadata and tenant search (issue #67):** `/v2/objects` uploads now accept
   `multipart/form-data` with an owned `recordRef` and up to 20 `tags` beside the octet-stream form,
   require a UUID `Idempotency-Key` for both create and replace, and preserve omitted metadata on
@@ -184,7 +191,7 @@ All notable changes to Junctura are recorded here. Versions follow
 ## 0.2.0 — Console on live APIs (2026-11-11)
 
 - **Junctura sign-in page for applications (issue #30):** applications that sign in
-  through Keycloak (Clinic, Hospital, ...) now show a Junctura-branded page instead of the
+  through Keycloak now show a Junctura-branded page instead of the
   default one: the Junctura mark, a centred card on the pattern background, light and dark
   colours, Vietnamese by default with English available. The theme
   (`infra/keycloak/themes/junctura/login/`) only adds styles and messages on top of Keycloak's
@@ -199,14 +206,14 @@ All notable changes to Junctura are recorded here. Versions follow
   reference, security details) keep technical names. No behavior or i18n key
   changes.
 
-- **Domain-neutral workflow samples (issue #28):** the three medical BPMN
+- **Domain-neutral workflow samples (issue #28):** the three example BPMN
   workflows in `src/modules/workflow/definitions/` are replaced by "Phê duyệt
-  yêu cầu", "Xác minh hồ sơ" and "Đối soát chứng từ" (each has three named steps
+  yêu cầu", "Xác minh hồ sơ" and "Đối soát dữ liệu" (each has three named steps
   assigned to a unit). `workflow.mjs`, `summary.mjs`, the Console diagrams and
   i18n (vi/en), the API docs and the tests use the new process keys
   (`junctura_phe_duyet_yeu_cau`, `junctura_xac_minh_ho_so`,
   `junctura_doi_soat_chung_tu`). Workflow behavior is unchanged; Layer 1 no longer
-  carries medical terms or data.
+  carries sector-specific examples.
 
 - **Layer 1 no longer seeds health data (removed):** `npm run seed:health`, its
   `scripts/lib/seed-health-*` helpers and tests, and the old `npm run demo:seed` are
@@ -292,7 +299,7 @@ All notable changes to Junctura are recorded here. Versions follow
   the in-memory request counters by product feature and `GET /v1/workflows/summary`
   returns a read-only dashboard of business workflows (owning product, steps,
   running/completed/cancelled counts). Both require `audit.read`; neither can start,
-  approve or stop anything and neither exposes patient data.
+  approve or stop anything and neither exposes subject data.
 - **Console data, file and workflow overviews:** the Dữ liệu screen now reads
   `GET /v1/storage/summary` and shows per-application collection counts, total
   records and update times without exposing record content or write forms. A new
@@ -315,13 +322,13 @@ All notable changes to Junctura are recorded here. Versions follow
   execution of the caller tenant, newest first, with `limit` (1–100) and
   `status=running|completed|cancelled`. Each row carries the real definition,
   status, timestamps, a safe business title, the active step and candidate
-  groups for running executions; patient names, identifiers and workflow
+  groups for running executions; subject names, identifiers and workflow
   variables are excluded. The route requires `audit.read` through the private
   `junctura_workflow_audit_api` role.
 
 - **Business workflow definitions:** the local workflow initializer now deploys
-  fictional Vietnamese processes "Chuyển tuyến bệnh nhân", "Xác minh đơn thuốc"
-  and "Xác minh chi phí bảo hiểm" with named steps and assigned units.
+  fictional Vietnamese processes "Chuyển yêu cầu", "Xác minh bản ghi"
+  and "Xác minh chi phí" with named steps and assigned units.
   `npm run seed:health` refreshes those definitions, starts pending and completed
   executions for them, and distributes records and files across the scenario
   applications. Its ClamAV check submits the harmless EICAR test string; the
@@ -397,10 +404,8 @@ All notable changes to Junctura are recorded here. Versions follow
   action. The `junctura-console` Keycloak client enables the password grant for internal
   environments only; production realms should disable `directAccessGrantsEnabled`.
 
-- **Health context seed:** `npm run seed:health` enrolls or reuses the five Layer-2
-  health applications, publishes their example capabilities, and now creates the
-  five provider→consumer trust relationships (referral summary, prescription
-  verification, claim verification, pre-visit summary, vaccination history)
+- **Context fixtures:** the example seed enrolls applications, publishes
+  example capabilities, and creates five provider-to-consumer trust relationships
   through the real propose/approve/activate Trust API with separate owner and
   approver identities. It then writes deterministic, entirely fictional
   `benh-nhan`, `chuyen-tuyen`, `don-thuoc` records and referral objects through

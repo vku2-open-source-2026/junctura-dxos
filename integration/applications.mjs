@@ -254,6 +254,55 @@ test("private SQL roles and forced RLS prevent generic data APIs from administer
   assert.equal((await api(path(),serviceToken)).status,403);
 });
 
+test("partitioned app owners can manage their apps and re-grant after revocation sync", async () => {
+  const unit = prefix;
+  const lease = randomUUID();
+  const id = randomUUID();
+  const client = app.oauthClientId;
+  const ownerClaims = JSON.stringify({ tenant_id: owner.tenant, iss: issuer, sub: owner.id, client_id: client });
+  const outsiderClaims = JSON.stringify({ ...JSON.parse(ownerClaims), sub: stranger.id });
+  const access = (target) => q(JSON.stringify({ managementAppId: target, requestId: randomUUID(), write: true }));
+  const assignment = { unit, targetType: "unit", target: unit, role: "viewer", appId: app.appId, lease };
+  const payload = q(JSON.stringify(assignment));
+  const result = await sql(`BEGIN;
+    INSERT INTO app_private.directory_unit_types(tenant_id,unit_type,name,generation)
+      VALUES (${q(owner.tenant)},${q(unit)},'Fixture type',1);
+    INSERT INTO app_private.directory_units(tenant_id,unit,unit_type,name,generation,confirmed_value)
+      VALUES (${q(owner.tenant)},${q(unit)},${q(unit)},'Fixture unit',1,'{}'::jsonb);
+    UPDATE app_private.applications SET owner_unit=${q(unit)},deployment_units=ARRAY[${q(unit)}]
+      WHERE tenant_id=${q(owner.tenant)} AND app_id=${q(app.appId)};
+    INSERT INTO app_private.principals(tenant_id,issuer,subject,management_client,permissions)
+      VALUES (${q(owner.tenant)},${q(issuer)},${q(owner.id)},${q(client)},ARRAY['applications.register']);
+    INSERT INTO app_private.app_assignments(tenant_id,app_id,unit,target_type,target,app_role,assignment_id,enabled,synchronized)
+      VALUES (${q(owner.tenant)},${q(app.appId)},${q(unit)},'unit',${q(unit)},'viewer',${q(id)},false,false);
+    SET LOCAL ROLE junctura_app_access_api;
+    SELECT set_config('request.jwt.claims',${q(outsiderClaims)},true);
+    SELECT 'outsider:'||(core.app_access_check(${access(app.appId)})->>'status');
+    SELECT set_config('request.jwt.claims',${q(ownerClaims)},true);
+    SELECT 'gateway:'||(core.app_access_check(${access(null)})->>'status');
+    SELECT 'owner:'||(core.app_access_check(${access(app.appId)})->>'status');
+    SELECT 'other-app:'||(core.app_access_check(${access(randomUUID())})->>'status');
+    RESET ROLE;
+    SET LOCAL ROLE junctura_app_api;
+    SELECT core.application_management('lease',${payload});
+    SELECT 'pending:'||core.application_management('assignment_put',${payload})::text;
+    SELECT core.application_management('assignment_confirm',
+      ${q(JSON.stringify({ ...assignment, assignmentId: id, enabled: false }))});
+    SELECT 'regrant:'||core.application_management('assignment_put',${payload})::text;
+    ROLLBACK;`);
+  const lines = result.stdout.trim().split(/\r?\n/);
+  assert.ok(lines.includes("outsider:403"));
+  assert.ok(lines.includes("gateway:200"));
+  assert.ok(lines.includes("owner:200"));
+  assert.ok(lines.includes("other-app:403"));
+  const read = prefix => JSON.parse(lines.find(line => line.startsWith(prefix)).slice(prefix.length));
+  assert.deepEqual(read("pending:"), { status: 409, error: "resource_conflict" });
+  const granted = read("regrant:");
+  assert.equal(granted.status, 200);
+  assert.equal(granted.value.enabled, true);
+  assert.notEqual(granted.value.assignmentId, id);
+});
+
 test('registered backends own private records and objects; browser and unenrolled contexts fail closed',async()=>{
   resourceA=await resourceBackend('resource-a');resourceB=await resourceBackend('resource-b');
   const foreignApprover=await human('foreign-approver','tenant-b',['applications.register','applications.approve','trust.approve']);

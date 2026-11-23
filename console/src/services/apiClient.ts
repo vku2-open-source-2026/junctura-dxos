@@ -6,6 +6,12 @@ import type {
   IdentityState,
   UserIdentity,
   Application,
+  ApiPage,
+  AppAssignment,
+  AppAssignmentInput,
+  AppKeyRotation,
+  DirectoryUnit,
+  DirectoryMember,
   ApplicationStats,
   ApplicationStatsEntry,
   ApplicationState,
@@ -468,6 +474,60 @@ export class ApiClient {
   public async getApplicationNodes(): Promise<TrustGraphNode[]> {
     const graph = await this.getTrustGraph();
     return graph.nodes;
+  }
+
+  private async applicationJson<T>(path: string, init?: RequestInit): Promise<T> {
+    const response = await this.send(path, init);
+    if (!response.ok) await this.fail(response, "application_lookup_failed");
+    return response.json() as Promise<T>;
+  }
+
+  public listApplications(filters: { q?: string; state?: ApplicationState; unit?: string; cursor?: string } = {}) {
+    const query = new URLSearchParams({ limit: "50" });
+    for (const [name, value] of Object.entries(filters)) if (value) query.set(name, value);
+    return this.applicationJson<ApiPage<Application>>(`/v1/applications?${query}`);
+  }
+
+  public updateApplication(app: Application, metadata: { displayName: string; ownerUnit: string | null; deploymentUnits: string[] }) {
+    return this.applicationJson<Application>(`/v1/applications/${encodeURIComponent(app.appId)}`, {
+      method: "PATCH", headers: { "Content-Type": "application/json", "If-Match": `"application-${app.appId}-${app.revision}"` },
+      body: JSON.stringify(metadata),
+    });
+  }
+
+  public listApplicationAssignments(appId: string) {
+    return this.applicationJson<{ items: AppAssignment[] }>(`/v1/applications/${encodeURIComponent(appId)}/assignments`);
+  }
+
+  public assignApplicationAccess(appId: string, body: AppAssignmentInput) {
+    return this.applicationJson<AppAssignment>(`/v1/applications/${encodeURIComponent(appId)}/assignments`, {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+    });
+  }
+
+  public async revokeApplicationAccess(appId: string, assignmentId: string): Promise<void> {
+    const response = await this.send(`/v1/applications/${encodeURIComponent(appId)}/assignments/${encodeURIComponent(assignmentId)}`, { method: "DELETE" });
+    if (!response.ok) await this.fail(response, "application_lookup_failed");
+  }
+
+  public listApplicationOidcKeys(appId: string) {
+    return this.applicationJson<{ items: AppKeyRotation[] }>(`/v1/applications/${encodeURIComponent(appId)}/oidc-keys`);
+  }
+
+  public rotateApplicationOidcKey(appId: string, key: string) {
+    return this.applicationJson<{ items: AppKeyRotation[] }>(`/v1/applications/${encodeURIComponent(appId)}/oidc-keys`, {
+      method: "POST", headers: { "Content-Type": "application/json", "Idempotency-Key": key }, body: "{}",
+    });
+  }
+
+  public listDirectoryUnits(cursor?: string) {
+    const query = new URLSearchParams({ limit: "100", ...(cursor ? { cursor } : {}) });
+    return this.applicationJson<ApiPage<DirectoryUnit>>(`/v1/directory/units?${query}`);
+  }
+
+  public listDirectoryMembers(unit: string, cursor?: string) {
+    const query = new URLSearchParams({ limit: "100", ...(cursor ? { cursor } : {}) });
+    return this.applicationJson<ApiPage<DirectoryMember>>(`/v1/directory/units/${encodeURIComponent(unit)}/members?${query}`);
   }
 
   public async getApplication(appId: string): Promise<Application | null> {

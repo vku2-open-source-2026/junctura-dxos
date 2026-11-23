@@ -19,7 +19,7 @@ Two kinds of approval are kept apart:
 
 | Approval | Examples | Layer |
 | --- | --- | --- |
-| Platform access | Register an application, publish a capability, share or revoke access, review emergency access | Layer 1 (identity, security and zero-trust duties) |
+| Platform access | Register an application, publish a capability, share or revoke access, review break-glass access | Layer 1 (identity, security and zero-trust duties) |
 | Business decision | Approve a request, verify a document, complete a workflow step | Layer 2 shared administrative processes and Layer 3 sector business rules; Core only provides the execution and authorization mechanisms |
 
 The Junctura Console is the operator interface of Layer 1, comparable to Supabase Studio or the Directus Data Studio. It views platform state and decides platform access only; it never starts, completes, cancels or approves business work. Core runs fully without it (Compose profile `console`).
@@ -32,7 +32,7 @@ Layer 2 is [junctura-workspace](https://github.com/vku2-open-source-2026/junctur
 
 ## Layer 3 — Sector packs and business applications
 
-Layer 3 carries sector business rules as pluggable packs and applications. [junctura-health](https://github.com/vku2-open-source-2026/junctura-health) is the health pack: versioned capability contracts, medical BPMN workflows, units, data schemas, shared catalogues, seed data and the shared UI kit `@junctura/health-ui`. The Clinic, Pharmacy, Hospital, Insurance and MyHealth applications use the pack and live in the `vku2-open-source-2026` organization.
+Layer 3 carries sector rules. Sector packs and applications live in separate repositories.
 
 Applications own their business rules, data and screens. They use Layer 2 APIs, call Layer 1 within the limits in [TIER_MODEL.md](TIER_MODEL.md), and exchange with other Layer 3 applications only through one-time Layer 1 capability tickets under capability contracts, consent and audit. Removing Layer 3 leaves Layers 1 and 2 running. Applications are migrating their data to Layer 1. When complete, Layer 2 and Layer 3 applications must store business state through the Core API; removing an application container then keeps its data, and the Console can see the structure of the migrated data.
 

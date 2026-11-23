@@ -37,7 +37,7 @@ Junctura DX-OS chia hệ thống thành ba tầng để mỗi tầng giữ một
 - Ghi cứng tên ngành, tên ứng dụng hoặc quy tắc nghiệp vụ chuyên ngành.
 - Tự quyết định nghiệp vụ thay cho ứng dụng Tầng 3.
 
-**Repo trong org:** `junctura-workspace` — không gian làm việc chung, gói mẫu Giáo dục và thư viện `@junctura/ui`. Repo đang được dựng.
+**Repo trong org:** `junctura-workspace` — không gian làm việc chung, thư viện `@junctura/ui`. Repo đang được dựng.
 
 ## Tầng 3 — Nền tảng kinh doanh số
 
@@ -53,9 +53,7 @@ Junctura DX-OS chia hệ thống thành ba tầng để mỗi tầng giữ một
 - Dùng API quản trị của Tầng 1.
 - Giữ cơ sở dữ liệu riêng hoặc ghi tệp cục bộ; dữ liệu nghiệp vụ phải nằm ở Tầng 1.
 
-**Repo trong org**
-- `junctura-health` — gói ngành Y tế: hợp đồng năng lực, quy trình BPMN, đơn vị, lược đồ dữ liệu, danh mục dùng chung, dữ liệu mẫu và `@junctura/health-ui`.
-- `junctura-clinic`, `junctura-hospital`, `junctura-pharmacy`, `junctura-insurance`, `junctura-myhealth` — ứng dụng trạm y tế, bệnh viện, nhà thuốc, giám định bảo hiểm và cổng người bệnh.
+Các gói ngành và ứng dụng ở repo riêng.
 
 ## Nguyên tắc lưu trữ
 
@@ -88,18 +86,18 @@ Sơ đồ dưới đây mô tả hướng phụ thuộc dự kiến giữa các 
 ```text
 @junctura/server-client (Tầng 1)
   └── @junctura/ui (Tầng 2)
-        └── @junctura/health-ui, @junctura/health-contracts (Tầng 3)
+        └── Các gói ngành và ứng dụng ở repo riêng (Tầng 3)
 ```
 
-Manifest hiện tại của `@junctura/health-ui` và `@junctura/health-contracts` chưa khai báo `@junctura/ui` là phụ thuộc. Ứng dụng Tầng 3 dùng `@junctura/ui` và các gói của gói ngành; không tự dựng lại thành phần giao diện đã có ở Tầng 2.
+Ứng dụng Tầng 3 dùng `@junctura/ui` và các gói của gói ngành; không tự dựng lại thành phần giao diện đã có ở Tầng 2.
 
 ## Sơ đồ
 
 ```mermaid
 flowchart TB
   subgraph L3["Tầng 3 · Nền tảng kinh doanh số"]
-    PACK["junctura-health<br/>gói ngành Y tế"]
-    HEALTH_APPS["Clinic · Hospital · Pharmacy<br/>Insurance · MyHealth"]
+    PACK["Các gói ngành"]
+    SECTOR_APPS["Các ứng dụng ở repo riêng"]
     OTHER_SECTOR_APP["Ứng dụng Tầng 3 khác"]
   end
 
@@ -111,8 +109,8 @@ flowchart TB
     CORE["junctura-dxos<br/>định danh · dữ liệu · tệp · quy trình<br/>năng lực · kiểm toán"]
   end
 
-  HEALTH_APPS -->|"API"| WS
-  HEALTH_APPS -->|"giới hạn"| CORE
+  SECTOR_APPS -->|"API"| WS
+  SECTOR_APPS -->|"giới hạn"| CORE
   OTHER_SECTOR_APP -->|"API"| WS
   OTHER_SECTOR_APP -->|"giới hạn"| CORE
   WS --> CORE
@@ -123,13 +121,13 @@ flowchart TB
 ## Ba mức demo
 
 1. **Chỉ Tầng 1:** chạy `junctura-dxos` với lõi và Console; chứng minh định danh, cổng API, dữ liệu, tệp, quy trình, chia sẻ năng lực và kiểm toán.
-2. **Tầng 1 + Tầng 2:** thêm `junctura-workspace` và gói Giáo dục; sau đó đổi sang gói Y tế mà không sửa mã. Tiêu chí đạt mức 2 là có ít nhất một ứng dụng H–P–D–I dùng Core trong một luồng đầu cuối.
-3. **Đủ ba tầng:** thêm danh mục dùng chung và năm ứng dụng Y tế (`Clinic`, `Hospital`, `Pharmacy`, `Insurance`, `MyHealth`).
+2. **Tầng 1 + Tầng 2:** thêm `junctura-workspace` và một gói ngành, sau đó đổi gói qua cấu hình. Tiêu chí đạt mức 2 là có ít nhất một ứng dụng H–P–D–I dùng Core trong một luồng đầu cuối.
+3. **Đủ ba tầng:** thêm danh mục dùng chung và các ứng dụng ở repo riêng.
 
 ## Trạng thái hiện tại
 
 - **Tầng 1:** đã chạy và được kiểm thử trong repo này.
-- **Tầng 2:** đang dựng; giao diện dùng chung và gói mẫu Giáo dục chưa hoàn thiện.
-- **Tầng 3:** gói ngành Y tế và các ứng dụng đang chuyển dữ liệu về Tầng 1; mức demo thứ ba là dự kiến.
+- **Tầng 2:** đang dựng; giao diện dùng chung đang hoàn thiện.
+- **Tầng 3:** các gói ngành và ứng dụng ở repo riêng đang chuyển dữ liệu về Tầng 1; mức demo thứ ba là dự kiến.
 
 Các mục chưa xong được ghi rõ là "đang" hoặc "dự kiến"; không coi tài liệu thiết kế là tính năng đã chạy.

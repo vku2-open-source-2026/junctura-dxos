@@ -253,8 +253,8 @@ test("demo:seed connects, prepares management and seeds trust before app data", 
 });
 
 test("local:demo plans setup only for a missing env file", () => {
-  assert.deepEqual(planSteps({ envExists: false }), ["setup", "local:up", "env:provision", "demo:seed", "demo:console"]);
-  assert.deepEqual(planSteps({ envExists: true }), ["local:up", "env:provision", "demo:seed", "demo:console"]);
+  assert.deepEqual(planSteps({ envExists: false }), ["setup", "local:up", "directory:provision", "env:provision", "demo:seed", "demo:console"]);
+  assert.deepEqual(planSteps({ envExists: true }), ["local:up", "directory:provision", "env:provision", "demo:seed", "demo:console"]);
 });
 
 test("Console URLs follow the published port, including the standard HTTP port", () => {
@@ -284,6 +284,6 @@ test("local:demo stops on the first failure and does not print a success message
     run: async script => { calls.push(script); if (script === "env:provision") throw new Error("step failed"); },
     locateConsole: () => assert.fail("should not resolve the Console after failure"), log: message => messages.push(message),
   }), /step failed/);
-  assert.deepEqual(calls, ["local:up", "env:provision"]);
+  assert.deepEqual(calls, ["local:up", "directory:provision", "env:provision"]);
   assert.ok(messages.every(message => !message.includes("pre-filled")));
 });

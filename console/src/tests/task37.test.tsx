@@ -27,41 +27,6 @@ async function openScreen(hash: string) {
   fireEvent(window, new HashChangeEvent("hashchange"));
 }
 
-function orgFixture() {
-  return {
-    root: {
-      id: "tenant-test",
-      name: "tenant-test",
-      kind: "platform",
-      children: [
-        {
-          id: "app-1",
-          name: "Đơn vị tiếp nhận",
-          kind: "application",
-          children: [],
-        },
-        {
-          id: "app-2",
-          name: "Đơn vị xét duyệt",
-          kind: "organization",
-          children: [],
-        },
-        {
-          id: "app-3",
-          name: "Đơn vị đề nghị",
-          kind: "application",
-          children: [],
-        },
-      ],
-    },
-    relations: [
-      { from: "app-1", to: "app-2", label: "Tóm tắt văn bản" },
-      { from: "app-2", to: "app-3", label: "Tra cứu liên hệ" },
-    ],
-    truncated: false,
-  };
-}
-
 function principal(overrides: Record<string, unknown>) {
   return {
     subject: "subject",
@@ -80,56 +45,23 @@ function principal(overrides: Record<string, unknown>) {
 describe("Task 37 — organisation tree", () => {
   beforeEach(resetState);
 
-  it("shows the platform summary and highlights a unit's relations", async () => {
+  it("loads the selected unit's members and deployed applications from the API", async () => {
     installApiFetch([
-      (url) =>
-        url.includes("/v1/directory/organizations")
-          ? json(200, orgFixture())
-          : undefined,
+      url => url.includes("/v1/directory/units?") ? json(200, {
+        items: [{ unit: "unit-a", unitType: "team", name: "Đơn vị A" }], nextCursor: null,
+      }) : undefined,
+      url => url.includes("/v1/directory/units/unit-a/members?") ? json(200, {
+        items: [{ subject: "member-a", groups: ["reviewers"] }], nextCursor: null,
+      }) : undefined,
+      url => url.includes("/v1/applications?") && url.includes("unit=unit-a") ? json(200, {
+        items: [{ appId: "app-x", displayName: "App X" }], nextCursor: null,
+      }) : undefined,
     ]);
     await openScreen("orgs");
-    await screen.findByRole("heading", {
-      level: 1,
-      name: viStrings.orgs.title,
-    });
-
-    expect(screen.queryByText(viStrings.orgs.totalUnits)).toBeNull();
-    expect(screen.queryByText(viStrings.orgs.noIncoming)).toBeNull();
-
-    fireEvent.click(
-      screen.getByRole("button", { name: viStrings.orgs.platformRootName })
-    );
-    expect(screen.getByText(viStrings.orgs.totalUnits)).toBeInTheDocument();
-    expect(screen.getByText(viStrings.orgs.totalRelations)).toBeInTheDocument();
-    expect(
-      screen.getByText(viStrings.orgs.totalCapabilities)
-    ).toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole("button", { name: "Đơn vị tiếp nhận" }));
-    expect(
-      screen.getAllByText("Tóm tắt văn bản").length
-    ).toBeGreaterThan(0);
-    expect(screen.getByText(viStrings.orgs.noIncoming)).toBeInTheDocument();
-
-    fireEvent.keyDown(document, { key: "Escape" });
-    expect(
-      screen.queryByRole("dialog", { name: viStrings.orgs.detailTitle })
-    ).toBeNull();
-  });
-
-  it("lists every relation between units with both names", async () => {
-    installApiFetch([
-      (url) =>
-        url.includes("/v1/directory/organizations")
-          ? json(200, orgFixture())
-          : undefined,
-    ]);
-    await openScreen("orgs");
-    await screen.findByText(viStrings.orgs.relationsTitle);
-    expect(
-      await screen.findByText("Đơn vị tiếp nhận → Đơn vị xét duyệt")
-    ).toBeInTheDocument();
-    expect(screen.getByText("Đơn vị xét duyệt → Đơn vị đề nghị")).toBeInTheDocument();
+    fireEvent.click(await screen.findByRole("button", { name: "Đơn vị A" }));
+    expect(await screen.findByText("member-a")).toBeInTheDocument();
+    expect(await screen.findByRole("link", { name: "App X" })).toHaveAttribute("href", "#/apps/app-x");
+    expect(screen.queryByText(viStrings.orgs.relationsTitle)).toBeNull();
   });
 });
 

@@ -41,6 +41,9 @@ function stubFetch(options: FetchStubOptions = {}) {
       }
       if (url.includes("/protocol/openid-connect/token")) {
         if (options.tokenReject) throw new TypeError("network down");
+        if (typeof options.tokenBody === "string") {
+          return new Response(options.tokenBody, { status: options.tokenStatus, headers: { "Content-Type": "text/html" } });
+        }
         return jsonResponse(
           options.tokenStatus ?? 200,
           options.tokenBody ?? { access_token: "fixture-token" }
@@ -92,6 +95,21 @@ describe("LoginScreen", () => {
     expect(screen.queryByLabelText(/Tài khoản có sẵn/)).not.toBeInTheDocument();
   });
 
+  it.each([
+    [401, { error: "not_assigned_to_app" }],
+    [401, '<p role="alert" data-error-code="not_assigned_to_app">Your account has not been assigned access to this application.</p>'],
+    [403, { error: "invalid_grant", error_description: "not_assigned_to_app" }],
+    [400, { error: "invalid_grant", error_description: "Your account has not been assigned access to this application." }],
+    [401, { error: "invalid_grant", error_description: "Tài khoản của bạn chưa được cấp quyền vào ứng dụng này." }],
+  ])("shows the localized reason for an unassigned Console account (HTTP %i)", async (tokenStatus, tokenBody) => {
+    stubFetch({ tokenStatus, tokenBody });
+    renderLogin();
+    await screen.findByDisplayValue("admin1");
+    fireEvent.click(screen.getByRole("button", { name: viStrings.login.submit }));
+    expect(await screen.findByText(viStrings.appAccess.signInDenied)).toBeInTheDocument();
+    expect(api.getToken()).toBeNull();
+  });
+
   it("exchanges the form credentials at the Keycloak token endpoint", async () => {
     const fetchMock = stubFetch();
     renderLogin();
@@ -122,7 +140,7 @@ describe("LoginScreen", () => {
   });
 
   it("explains invalid credentials on a 401 response", async () => {
-    stubFetch({ tokenStatus: 401, tokenBody: { error: "invalid_grant" } });
+    stubFetch({ tokenStatus: 401, tokenBody: { error: "invalid_grant", error_description: "Invalid user credentials" } });
     renderLogin();
     await findLoginHeading();
     await screen.findByDisplayValue("admin1");

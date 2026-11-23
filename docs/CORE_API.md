@@ -20,21 +20,22 @@ Operator database, filer and engine interfaces and `/internal/auth` are not publ
 Authorization boundaries apply independently of schema validation:
 
 - Core verifies live OIDC issuer, audience, expiry, roles and tenant membership. Caller app/tenant/client/owner headers confer no authority.
-- V2 resolves an active registration and exact operator-enrolled backend subject server-side. Only owners write;
-  an owner-approved share permits reading one resource until expiry/revocation, with no write or delegation rights.
-- Inactive consumers lose v2 entry; suspended/revoked owners block shared reads. In-flight work may finish.
-  Keycloak client administration is separate from application state.
-- Browsers use an application backend, which owns human and domain authorization. Forwarded human headers and descriptors grant no impersonation. On-behalf-of delegation is a design direction; Core does not support it yet.
+- V2 resolves an active registration and the enrolled backend subject or a current human assignment.
+  Record and object access in a deployed app also requires a verified unit. Owners write within their authorized unit
+  and an owner-approved share permits reading its resource subject to the same boundary.
+- Inactive consumers lose v2 entry and suspended or revoked owners block shared reads. In-flight work may finish.
+- Browser sign-in uses the application OIDC client. Core recognizes the application role and unit supplied by live assignment checks.
+  Applications define their own domain authorization. Forwarded human headers and descriptors confer no authority.
 - V1 data/objects are a deprecated, separate tenant namespace behind `LEGACY_RESOURCE_CLIENTS`
   (empty by default outside Compose). They never read v2 tables or bytes; migrate deliberately without guessed ownership or fallback.
 - Workflows and their variables remain tenant-scoped; do not put application-private content in variables.
 
-Record lists accept `limit` 1–100 (default 100), `order=asc|desc` (default `asc`) and an opaque `cursor`;
-`/v1/applications` has no GET operation.
+Record lists accept `limit` 1–100 (default 100), `order=asc|desc` (default `asc`) and an opaque `cursor`.
+Application lists have their own filters and cursor.
 Workflow definition listing is capped at 100 without public pagination. Foundation JSON writes are limited to 64 KiB;
 object uploads to 1 byte–5 MiB; Nginx separately bounds request bodies at 10 MiB. Smaller limits can apply to extensions.
 Core errors use `{error: code}`; control-plane handlers also include `requestId` and set `X-Request-Id`.
-Gateway denials may use Nginx HTML or JSON without a JSON request ID. HEAD has no response body.
+Application access refusals use `{error, requestId}` at the gateway and Core. HEAD has no response body.
 Nginx can append a second `nosniff` value; the contract accepts it. Revision tags are opaque.
 Registration administration uses enrolled permissions, not a blanket writer role.
 OpenAPI cannot prove live ownership, independent human approval, origin control, relative expiry, workflow depth
@@ -63,6 +64,7 @@ Run live suites **sequentially** against an isolated local development stack; in
 ```sh
 docker compose config --quiet
 docker compose up --build --detach --wait --wait-timeout 240
+npm run directory:provision
 npm run test:integration
 npm run test:applications
 npm run test:flowable-worker
@@ -98,6 +100,9 @@ Methods are included with each family; action suffixes are described in the link
 | `/v2/secrets/{name}` (GET, PUT, DELETE) | Secret metadata/write/delete; GET never returns plaintext | Active bound backend; writer for PUT/DELETE | [OPERATIONS.md](OPERATIONS.md) |
 | `/v1/workflows/*` (GET, POST, DELETE) | Definitions and execution lifecycle/oversight | Writer for lifecycle mutations; management `audit.read` for list/summary | Workflow engine; Storage summary and workflow history below |
 | `/v1/applications` (POST), `/{appId}` (GET), `/{appId}/approve`, `/{appId}/state` (POST) | Register through authorized setup tooling, inspect, activate and change application state | Enrolled owner/admin visibility, `audit.read` reads any (read-only); `applications.register` / `applications.approve` | [CAPABILITIES.md](CAPABILITIES.md) |
+| `/v1/applications` (GET), `/{appId}` (PATCH) | Filter visible applications and update deployment metadata | Enrolled owner or management role | Application deployment and access below |
+| `/v1/applications/{appId}/assignments` (GET/POST), `/{assignmentId}` (DELETE) | Read, assign and revoke application access | Read follows application visibility. Writes require owner or management authority. | Application deployment and access below |
+| `/v1/applications/{appId}/oidc-keys` (GET/POST) | Inspect rotation receipts and rotate the OIDC client secret | Enrolled owner or management authority | Application deployment and access below |
 | `/v1/applications/stats` (GET) | Tenant application counts, activity timestamps and IDs | Management `audit.read`; verified client ID | Application statistics below |
 | `/v1/approvals` (POST), `/{approvalId}` (GET), `/{approvalId}/revoke` (POST) | Application, capability, grant and enabled composition decisions | Resource-specific independent approval/visibility; grant writes also require writer | [CAPABILITIES.md](CAPABILITIES.md) |
 | `/v1/capabilities` (GET), `/{capabilityId}/versions/*` (GET, POST, PUT) | Registry and authorized discovery | Management `capabilities.write` / `capabilities.publish`; `audit.read` reads every version (read-only); consumers need exact discover grant | [CAPABILITIES.md](CAPABILITIES.md) |
@@ -108,13 +113,13 @@ Methods are included with each family; action suffixes are described in the link
 | `/v1/compositions` and `/*` (GET, POST, PUT) | Opt-in C4B registry/lifecycle | `config.compositionRuntime`; management `compositions.write` / `compositions.publish` | [CAPABILITIES.md](CAPABILITIES.md) |
 | `/v1/me/consents` (GET, POST), `/{consentId}/revoke` (POST) | Manage the caller's own consents | Own authenticated login with a matching binding if the token supplies `subjectId` | [SECURITY.md](SECURITY.md) |
 | `/v1/me/data-access` (GET), `/{accessId}/flag` (POST) | Merged access history naming the caller as data subject; flag a visible entry for review | Verified client and own tenant, issuer and subject | [SECURITY.md](SECURITY.md) |
-| `/v1/me/emergency-accesses/{executionId}/feedback` (POST) | The subject's feedback on their own emergency access | Verified client and own tenant, issuer and subject | [SECURITY.md](SECURITY.md) |
-| `/v1/emergency-accesses` (GET), `/{executionId}/review` (POST) | Review emergency invocations | List: management `trust.approve` or `audit.read`; review: `trust.approve` and writer | [SECURITY.md](SECURITY.md) |
+| `/v1/me/emergency-accesses/{executionId}/feedback` (POST) | The subject's feedback on their own break-glass access | Verified client and own tenant, issuer and subject | [SECURITY.md](SECURITY.md) |
+| `/v1/emergency-accesses` (GET), `/{executionId}/review` (POST) | Review break-glass invocations | List: management `trust.approve` or `audit.read`; review: `trust.approve` and writer | [SECURITY.md](SECURITY.md) |
 | `/v1/events` (GET) | Live task, record status and consent references over SSE | Bearer with `core-reader` and current resource authorization | Live events below |
 | `/v1/audit-events` (GET, POST), `/v1/audit-events:export` (GET), `/v1/audit-events/verify` (POST) | Append, query, export and verify the tenant audit chain | Active app writer for append. App self, assigned regulator or management `audit.read` for reads. Management `audit.read` for verify. | Application audit log below and [SECURITY.md](SECURITY.md) |
 | `/v1/metrics/traffic`, `/requests`, `/features` (GET) | Per-tenant, process-local traffic observations | Management `audit.read`; verified client ID | Traffic metrics below |
 | `/v1/directory/principals`, `/organizations` (GET) | Tenant principal/application directory | Management `audit.read` | Tenant directory below |
-| `/v1/directory/unit-types`, `/units`, `/units/{unit}/groups`, `/units/{unit}/members` (GET), item PUT/DELETE | Directory management desired state | Management `directory.write`; writer for mutations | Tenant directory below |
+| `/v1/directory/unit-types`, `/units`, `/units/{unit}/groups`, `/units/{unit}/members` (GET), item PUT/DELETE | Directory management desired state | Management `directory.write`; writer for mutations. Console roles can list units, groups and members. | Tenant directory below |
 | `/v1/storage/summary`, `/files`, `/collections` (GET) | Storage aggregates and reduced metadata | Management `audit.read` | Storage summary and workflow history below |
 
 Nginx proxies all `^/v[12]/` paths after authentication. With both `config.executionRuntime` and
@@ -500,7 +505,7 @@ All three require a verified client ID after OIDC validation and management `aud
 Unknown/repeated/noninteger/out-of-range parameters return `400`; other methods return `405` with `Allow: GET`; responses use `no-store`.
 Minute buckets are chronological, including zero minutes; totals cover the returned window. Each tenant's recent log holds 200 entries. At most 256 tenant stores are retained; adding another drops the least recently written store. Only normalized paths are retained: no query/fragment, headers, bodies or identity claims; UUID/numeric/token-like segments are replaced.
 Features use fixed whole-segment prefixes: data, files, workflows, approvals, sharing (trust/shares), capabilities
-(registry/executions/compositions), applications, consents (including access/emergency), secrets and audit.
+(registry/executions/compositions), applications, consents and break-glass access, secrets and audit.
 Directory, identity, metrics and unrecognized paths map to `other`; only observed features appear. See
 [metrics.mjs](../src/modules/metrics/metrics.mjs) for the exact mapping. These views never change workflow state.
 
@@ -536,6 +541,86 @@ referenced conflicts with `409 resource_conflict`. Previously issued tokens can 
 until they are renewed. The provider realm keeps organization groups under a per-tenant namespace, so verified
 group paths are `/{tenant}/{unit}/{group}` upstream and `/unit/group` in Core responses; tenant membership
 itself is proven only by the exact root group path `/{tenant}`.
+## Application deployment and access
+
+`GET /v1/applications` filters the visible registrations by `q` (case-insensitive display-name substring),
+`state` and deployment `unit`. It sorts by application ID and returns `{items, nextCursor}`. The default
+page size is 50 and the maximum is 100. Pass the returned `nextCursor` as `cursor` with the same filters.
+A null cursor ends the list. Enrolled owners see their apps. Console viewers and management readers see
+registrations for their tenant and issuer.
+
+`PATCH /v1/applications/{appId}` accepts `displayName`, `ownerUnit` and `deploymentUnits` and checks the
+current `If-Match`. Deployment units and the owning unit reference confirmed directory units. An owning
+unit is required when any deployment unit is set. Revoke the unit's assignments before removing it.
+The revision advances on changes. An approval made for a prior revision must be renewed. The approved
+OIDC client ID and origin follow the enrollment and lifecycle contract.
+
+`POST /v1/applications/{appId}/assignments` takes `unit`, `targetType`, `target` and `role`. A unit
+assignment repeats the unit ID in `target`. Use a directory group ID or a member's login subject for
+the other types. For example, App X can grant `viewer` to `reviewers` in `unit-a`. `viewer` can read
+records and objects, `editor` can also write, and `manager` can additionally register record schemas.
+The `GET` endpoint lists assignments and their synchronization state. `DELETE` makes revocation effective
+in Core before removing the Keycloak role. Retry the same request when synchronization is unavailable.
+A Core worker retries pending role changes and removes assignments whose directory target was deleted.
+While a revocation is pending (`enabled: false`, `synchronized: false`), reassigning the same unit,
+target type, target and role returns `409 resource_conflict`. Wait for that pending assignment to
+disappear from `GET /v1/applications/{appId}/assignments`, then retry the same `POST` with backoff.
+A successful re-grant has a new assignment ID. The assignee needs a new token to use the grant.
+
+Keycloak binds the browser and enabled direct-grant flows to a client-specific access role. Use an
+exact registered redirect URI with S256 PKCE for browser access. Provider roles and unit membership
+come from the verified token, and Core checks them against PostgreSQL on each request. For people with
+eligible assignments in one unit, that unit is selected. People with assignments in multiple units need
+an operator-set `junctura_unit` attribute in Keycloak. A service account of a partitioned app also needs
+this attribute. Keys, body fields and headers supplied by the caller confer no unit authority. Core
+restricts deployed-app tokens to identity, records, objects and search. Enrolled owners with
+`applications.register` can also list their registrations and manage their own app metadata,
+assignments and OIDC keys. A principal with `applications.approve` can manage those resources within
+the same tenant and issuer. PostgreSQL restricts row access to the selected unit. Pre-existing rows
+without a unit become invisible to unit-scoped tokens. Migrate
+them with an explicit owner-approved mapping. Scoped rows stay isolated from legacy unpartitioned callers.
+
+Console requires an explicit `console-admin`, `console-manager` or `console-viewer` client role. Grant
+these roles on the Console client to the allowed people. A new local realm imports the service account
+and its roles. The default `junctura-app-sync` client is enabled on import when the operator supplies
+`APP_SYNC_CLIENT_SECRET`. The service account uses its own `APP_SYNC_CLIENT_ID` and
+`APP_SYNC_CLIENT_SECRET`. On an existing local realm or with a custom client ID,
+`npm run directory:provision` installs the managed unit attribute and aligns the Console flows. Set the
+new app sync credential in the operator's deployment configuration, and assign explicit Console client
+roles before enabling the new gateway checks. Core caches live Console role mappings for up to three
+seconds. After the cache expires, current roles are required even for an unexpired token. Managed
+clients issue short-lived access tokens, and the browser can start another authorization flow when needed.
+
+OIDC rotation uses `POST /v1/applications/{appId}/oidc-keys` with `{}` and a UUID `Idempotency-Key`.
+Core stages a random secret in the server-composed OpenBao KV path
+`secret/tenants/<tenant>/oidc-clients/<appId>/<rotationId>`, applies and verifies the Keycloak client
+secret, and saves a receipt. Retrieve the new secret through the operator's OpenBao access to that
+path. HTTP returns rotation IDs and timestamps. If a rotation is interrupted, retry with the same key
+`rotationId`. `GET` shows the latest 100 receipts, including pending rotations with null `appliedAt`.
+
+Application access refusals return HTTP 403 with `{error, requestId}`. The audit event
+`authorization.denied` stores the code in `reasonCode` and the request ID in `reason`.
+Keycloak logs a denied sign-in and shows the localized reason in its login theme.
+
+| Code | Condition |
+| --- | --- |
+| `not_assigned_to_app` | The current client role and assignment do not grant access to the application. |
+| `capability_not_granted` | The caller lacks the role for the requested operation or the grant to invoke the capability. |
+| `consent_required` | A capability call requires the named subject's consent for this purpose. |
+| `consent_revoked` | The matching consent was revoked. |
+| `consent_expired` | The matching consent passed its expiry. |
+| `unit_mismatch` | The selected unit is invalid, or a directly addressed resource belongs to a different unit. |
+
+To exercise the live HTTP and browser flow, run `npm run test:app-access` against an isolated stack
+with the migrations and application sync installed. Provide `BASE`, `ADMIN_TOKEN`,
+`APP_ID`, `CLIENT_SECRET`, `REDIRECT_URI`, `UNIT_A`, `UNIT_B`, `GROUP_B`, `USER_A`, `USER_B`,
+`PASSWORD_A`, `PASSWORD_B`, `SUBJECT_A` and `SUBJECT_B` with the `APP_ACCESS_TEST_` prefix.
+Use a `USER_A` with valid credentials and no Console access role.
+Use a disposable active confidential app without prior assignments and a second app in the same tenant
+for the pagination check. The administrator needs app management and audit read. The users each belong
+to their named unit and the second user belongs to the named group. The suite changes the test app's
+deployment, adds records and rotates its secret.
+
 
 ## Application statistics
 
@@ -626,7 +711,7 @@ JUNCTURA_GRANTEE_APP_ID=<different active same-tenant registered app UUID>
 Optional `JUNCTURA_GRANTEE_CLIENT_ID` and `JUNCTURA_GRANTEE_CLIENT_SECRET` must be supplied together to test the recipient read.
 The tenant-a/tenant-b fixtures alone do not grant v2 access. The CLI leaves its records, object and expiring share owned
 by the backend and prints IDs without credentials/tokens. Reconcile failed POST outcomes before rerunning;
-keep backend secrets out of frontends, repositories and shell transcripts.
+keep backend secrets out of frontends, repositories and shell logs.
 
 ## Planned APIs (not yet implemented)
 
@@ -753,7 +838,7 @@ enrolled backend service-account subject.
   cursor bound to the caller. Restricted actions and unresolved outcomes stay invisible. The page is
   re-checked against the live bindings on every request.
 - `POST /v1/me/emergency-accesses/{id}/feedback` records the data subject's feedback on their own
-  emergency access. `POST /v1/me/data-access/{id}/flag` flags a visible access event using its
+  break-glass access. `POST /v1/me/data-access/{id}/flag` flags a visible access event using its
   `accessId`; retrying with the same reason replays the original report and a changed reason answers
   `409 resource_conflict`. Both store a separate report keyed by the access event, never overwrite the
   audit chain or the management review, and answer `404` for entries outside the caller's own visible

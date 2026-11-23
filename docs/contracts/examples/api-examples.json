@@ -318,7 +318,7 @@
       "purpose": "urgent_response",
       "dataSubject": "8f14e45f-ceea-4672-9a2b-1f3c5d7e9a01",
       "emergency": true,
-      "justification": "Tình huống khẩn cấp cần truy cập ngay"
+      "justification": "Cần truy cập ngoại lệ trong thời gian xử lý sự cố"
     }
   },
   "subjectConsentCreate": {
@@ -362,7 +362,7 @@
           "state": "pending",
           "accessedAt": "2026-11-05T02:10:00.000Z",
           "purpose": "urgent_response",
-          "justification": "Tình huống khẩn cấp cần truy cập ngay",
+          "justification": "Cần truy cập ngoại lệ trong thời gian xử lý sự cố",
           "executionState": "succeeded",
           "consumer": {
             "appId": "9b1f3c2a-4d5e-4f60-8a71-0c2d3e4f5a6b",
@@ -386,7 +386,7 @@
     "schema": "EmergencyReviewCreate",
     "value": {
       "decision": "justified",
-      "note": "Đã đối chiếu hồ sơ cấp cứu"
+      "note": "Đã đối chiếu nhật ký truy cập ngoại lệ"
     }
   },
   "directoryPrincipals": {

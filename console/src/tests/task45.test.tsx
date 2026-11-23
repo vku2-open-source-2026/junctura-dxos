@@ -169,6 +169,7 @@ describe("Task 45 — application detail", () => {
     appId: "app-provider",
     tenantId: "tenant-test",
     ownerSubject: "owner-1",
+    ownerUnit: "Đơn vị tiếp nhận",
     displayName: "Đơn vị tiếp nhận",
     oauthClientId: "don-vi-tiep-nhan-client",
     providerOrigin: "https://don-vi-tiep-nhan.example",
@@ -182,8 +183,9 @@ describe("Task 45 — application detail", () => {
 
   function routes() {
     return [
+      (url: string) => url.includes("/v1/applications?") ? json(200, { items: [application], nextCursor: null }) : undefined,
       (url: string) =>
-        url.includes("/v1/applications/app-provider")
+        url.endsWith("/v1/applications/app-provider")
           ? json(200, application)
           : undefined,
       (url: string) =>
@@ -293,8 +295,7 @@ describe("Task 45 — application detail", () => {
     );
 
     await screen.findByRole("heading", { level: 1, name: "Đơn vị tiếp nhận" });
-    expect(await screen.findByText("Đơn vị tiếp nhận")).toBeInTheDocument();
-    expect(screen.getByText("Chị Hoa")).toBeInTheDocument();
+    expect(await screen.findByText("Chị Hoa")).toBeInTheDocument();
     expect(screen.getByText("Anh Minh")).toBeInTheDocument();
     expect(screen.getByText("Tóm tắt văn bản")).toBeInTheDocument();
     expect(screen.getByText(viStrings.applications.technicalDetails)).toBeInTheDocument();
@@ -304,6 +305,30 @@ describe("Task 45 — application detail", () => {
       })
     ).toBeNull();
   });
+  it("shows current access assignments and sends changes through the API", async () => {
+    let granted = false;
+    const fetcher = installApiFetch([
+      url => url.endsWith("/v1/applications/app-provider")
+        ? json(200, { ...application, deploymentUnits: ["unit-a"] }) : undefined,
+      (url, init) => {
+        if (!url.endsWith("/v1/applications/app-provider/assignments")) return;
+        const item = { assignmentId: "assignment-a", unit: "unit-a", targetType: "unit", target: "unit-a",
+          role: "viewer", enabled: true, synchronized: true };
+        if (init?.method === "POST") {
+          granted = true;
+          expect(JSON.parse(String(init.body))).toEqual({ unit: "unit-a", targetType: "unit", target: "unit-a", role: "viewer" });
+          return json(200, item);
+        }
+        return json(200, { items: granted ? [item] : [] });
+      },
+    ]);
+    await openScreen("apps/app-provider?tab=access", application.displayName);
+    await screen.findByText(viStrings.appAccess.empty);
+    fireEvent.click(screen.getByRole("button", { name: viStrings.appAccess.assign }));
+    expect(await screen.findByText(viStrings.appAccess.synchronized)).toBeInTheDocument();
+    expect(fetcher.mock.calls.some(([, init]) => init?.method === "POST")).toBe(true);
+  });
+
 });
 
 describe("Task 45 — read-only oversight pages", () => {

@@ -6,7 +6,7 @@ import { pathToFileURL } from "node:url";
 import { step } from "./lib/demo-stack.mjs";
 
 export function planSteps({ envExists }) {
-  return [...(envExists ? [] : ["setup"]), "local:up", "env:provision", "demo:seed", "demo:console"];
+  return [...(envExists ? [] : ["setup"]), "local:up", "directory:provision", "env:provision", "demo:seed", "demo:console"];
 }
 
 function runStep(script) {

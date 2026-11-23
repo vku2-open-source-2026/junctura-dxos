@@ -2925,7 +2925,7 @@
     "method": "POST",
     "operationId": "createApplication",
     "summary": "Create application",
-    "description": "Live operator-enrolled human principal, exact issuer/subject/management-client/tenant binding. Baseline core-reader suffices; core-writer is not administrative authority. Core errors include requestId; Gateway auth errors may be HTML or JSON without requestId. Exact owner/client/origin enrollment required; duplicate client binding conflicts even after revocation. No POST retry guarantee.",
+    "description": "Live operator-enrolled human principal, exact issuer/subject/management-client/tenant binding. Baseline core-reader suffices; core-writer is not administrative authority. Core errors include requestId; Application access refusals include a reason and request ID. Exact owner/client/origin enrollment required; duplicate client binding conflicts even after revocation. No POST retry guarantee.",
     "tags": [
       "application-admin"
     ],
@@ -2957,6 +2957,99 @@
     "queryParameters": [],
     "headerParameters": [],
     "successStatus": "201",
+    "successContentType": "application/json",
+    "successHasBody": true
+  },
+  {
+    "path": "/v1/applications",
+    "method": "GET",
+    "operationId": "listApplications",
+    "summary": "List applications",
+    "description": "List visible applications in ascending ID order. Pass nextCursor as cursor with the same filters.",
+    "tags": [
+      "application-admin"
+    ],
+    "security": [
+      {
+        "coreBearer": []
+      }
+    ],
+    "responses": [
+      "200",
+      "400",
+      "401",
+      "403",
+      "404",
+      "405",
+      "409",
+      "412",
+      "413",
+      "415",
+      "428",
+      "429",
+      "502",
+      "503",
+      "504"
+    ],
+    "hasRequestBody": false,
+    "requestContentTypes": [],
+    "pathParameters": [],
+    "queryParameters": [
+      {
+        "name": "q",
+        "required": false,
+        "schema": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "description": "Case-insensitive display name substring."
+      },
+      {
+        "name": "state",
+        "required": false,
+        "schema": {
+          "enum": [
+            "pending",
+            "active",
+            "suspended",
+            "revoked"
+          ]
+        },
+        "description": "Application state."
+      },
+      {
+        "name": "unit",
+        "required": false,
+        "schema": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]{1,63}$"
+        },
+        "description": "Deployment unit."
+      },
+      {
+        "name": "limit",
+        "required": false,
+        "schema": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100,
+          "default": 50
+        },
+        "description": "Page size."
+      },
+      {
+        "name": "cursor",
+        "required": false,
+        "schema": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        },
+        "description": "Cursor returned on the previous page."
+      }
+    ],
+    "headerParameters": [],
+    "successStatus": "200",
     "successContentType": "application/json",
     "successHasBody": true
   },
@@ -2999,7 +3092,7 @@
     "method": "GET",
     "operationId": "getApplication",
     "summary": "Get application",
-    "description": "Live operator-enrolled human principal, exact issuer/subject/management-client/tenant binding. Baseline core-reader suffices; core-writer is not administrative authority. Core errors include requestId; Gateway auth errors may be HTML or JSON without requestId. Owner or independent administrator; foreign/unauthorized IDs hidden.",
+    "description": "Live operator-enrolled human principal, exact issuer/subject/management-client/tenant binding. Baseline core-reader suffices; core-writer is not administrative authority. Core errors include requestId; Application access refusals include a reason and request ID. Owner or independent administrator; foreign/unauthorized IDs hidden.",
     "tags": [
       "application-admin"
     ],
@@ -3035,6 +3128,67 @@
     ],
     "queryParameters": [],
     "headerParameters": [],
+    "successStatus": "200",
+    "successContentType": "application/json",
+    "successHasBody": true
+  },
+  {
+    "path": "/v1/applications/{appId}",
+    "method": "PATCH",
+    "operationId": "updateApplication",
+    "summary": "Update application metadata",
+    "description": "Apply supplied fields against the current ETag. Use confirmed directory units. The owning unit is required before partitioning an app. Revoke active assignments for a unit before removing it.",
+    "tags": [
+      "application-admin"
+    ],
+    "security": [
+      {
+        "coreBearer": []
+      }
+    ],
+    "responses": [
+      "200",
+      "400",
+      "401",
+      "403",
+      "404",
+      "405",
+      "409",
+      "412",
+      "413",
+      "415",
+      "428",
+      "429",
+      "502",
+      "503",
+      "504"
+    ],
+    "hasRequestBody": true,
+    "requestContentTypes": [
+      "application/json"
+    ],
+    "pathParameters": [
+      {
+        "name": "appId",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        },
+        "description": "Application ID."
+      }
+    ],
+    "queryParameters": [],
+    "headerParameters": [
+      {
+        "name": "If-Match",
+        "required": true,
+        "schema": {
+          "type": "string"
+        },
+        "description": "Current strong application ETag."
+      }
+    ],
     "successStatus": "200",
     "successContentType": "application/json",
     "successHasBody": true
@@ -3878,6 +4032,279 @@
     "headerParameters": [],
     "successStatus": "200",
     "successContentType": "text/html",
+    "successHasBody": true
+  },
+  {
+    "path": "/v1/applications/{appId}/assignments",
+    "method": "GET",
+    "operationId": "listApplicationAssignments",
+    "summary": "Read application assignments",
+    "description": "List effective and pending assignments for this app.",
+    "tags": [
+      "application-admin"
+    ],
+    "security": [
+      {
+        "coreBearer": []
+      }
+    ],
+    "responses": [
+      "200",
+      "400",
+      "401",
+      "403",
+      "404",
+      "405",
+      "409",
+      "412",
+      "413",
+      "415",
+      "428",
+      "429",
+      "502",
+      "503",
+      "504"
+    ],
+    "hasRequestBody": false,
+    "requestContentTypes": [],
+    "pathParameters": [
+      {
+        "name": "appId",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        },
+        "description": "Application ID."
+      }
+    ],
+    "queryParameters": [],
+    "headerParameters": [],
+    "successStatus": "200",
+    "successContentType": "application/json",
+    "successHasBody": true
+  },
+  {
+    "path": "/v1/applications/{appId}/assignments",
+    "method": "POST",
+    "operationId": "assignApplicationAccess",
+    "summary": "Grant application access",
+    "description": "Assign an application role to a directory unit, group or member in a deployment unit. The same grant is safe to retry. Success confirms the Keycloak mapping.",
+    "tags": [
+      "application-admin"
+    ],
+    "security": [
+      {
+        "coreBearer": []
+      }
+    ],
+    "responses": [
+      "200",
+      "400",
+      "401",
+      "403",
+      "404",
+      "405",
+      "409",
+      "412",
+      "413",
+      "415",
+      "428",
+      "429",
+      "502",
+      "503",
+      "504"
+    ],
+    "hasRequestBody": true,
+    "requestContentTypes": [
+      "application/json"
+    ],
+    "pathParameters": [
+      {
+        "name": "appId",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        },
+        "description": "Application ID."
+      }
+    ],
+    "queryParameters": [],
+    "headerParameters": [],
+    "successStatus": "200",
+    "successContentType": "application/json",
+    "successHasBody": true
+  },
+  {
+    "path": "/v1/applications/{appId}/assignments/{assignmentId}",
+    "method": "DELETE",
+    "operationId": "revokeApplicationAccess",
+    "summary": "Revoke application access",
+    "description": "Remove access in Core and remove the matching role in Keycloak. Retrying the same ID reconciles a pending removal.",
+    "tags": [
+      "application-admin"
+    ],
+    "security": [
+      {
+        "coreBearer": []
+      }
+    ],
+    "responses": [
+      "204",
+      "400",
+      "401",
+      "403",
+      "404",
+      "405",
+      "409",
+      "412",
+      "413",
+      "415",
+      "428",
+      "429",
+      "502",
+      "503",
+      "504"
+    ],
+    "hasRequestBody": false,
+    "requestContentTypes": [],
+    "pathParameters": [
+      {
+        "name": "appId",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        },
+        "description": "Application ID."
+      },
+      {
+        "name": "assignmentId",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        },
+        "description": "Assignment ID."
+      }
+    ],
+    "queryParameters": [],
+    "headerParameters": [],
+    "successStatus": "204",
+    "successContentType": null,
+    "successHasBody": false
+  },
+  {
+    "path": "/v1/applications/{appId}/oidc-keys",
+    "method": "GET",
+    "operationId": "listApplicationOidcKeys",
+    "summary": "Read OIDC key rotation history",
+    "description": "List the latest 100 rotation receipts for this app, newest first. Pending receipts have a null appliedAt.",
+    "tags": [
+      "application-admin"
+    ],
+    "security": [
+      {
+        "coreBearer": []
+      }
+    ],
+    "responses": [
+      "200",
+      "400",
+      "401",
+      "403",
+      "404",
+      "405",
+      "409",
+      "412",
+      "413",
+      "415",
+      "428",
+      "429",
+      "502",
+      "503",
+      "504"
+    ],
+    "hasRequestBody": false,
+    "requestContentTypes": [],
+    "pathParameters": [
+      {
+        "name": "appId",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        },
+        "description": "Application ID."
+      }
+    ],
+    "queryParameters": [],
+    "headerParameters": [],
+    "successStatus": "200",
+    "successContentType": "application/json",
+    "successHasBody": true
+  },
+  {
+    "path": "/v1/applications/{appId}/oidc-keys",
+    "method": "POST",
+    "operationId": "rotateApplicationOidcKey",
+    "summary": "Rotate the OIDC client secret",
+    "description": "Stage a new confidential client secret in OpenBao, apply it in Keycloak, and return rotation metadata. Retry an incomplete rotation with the same Idempotency-Key.",
+    "tags": [
+      "application-admin"
+    ],
+    "security": [
+      {
+        "coreBearer": []
+      }
+    ],
+    "responses": [
+      "200",
+      "400",
+      "401",
+      "403",
+      "404",
+      "405",
+      "409",
+      "412",
+      "413",
+      "415",
+      "428",
+      "429",
+      "502",
+      "503",
+      "504"
+    ],
+    "hasRequestBody": true,
+    "requestContentTypes": [
+      "application/json"
+    ],
+    "pathParameters": [
+      {
+        "name": "appId",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        },
+        "description": "Application ID."
+      }
+    ],
+    "queryParameters": [],
+    "headerParameters": [
+      {
+        "name": "Idempotency-Key",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        },
+        "description": "Client-generated UUID for the rotation."
+      }
+    ],
+    "successStatus": "200",
+    "successContentType": "application/json",
     "successHasBody": true
   }
 ]

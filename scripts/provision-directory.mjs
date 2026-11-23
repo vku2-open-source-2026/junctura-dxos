@@ -7,6 +7,7 @@
 // running it again changes nothing. Development stacks.
 import { parseArgs } from "node:util";
 import { pathToFileURL } from "node:url";
+import { createApplicationProvider } from "../src/modules/applications/keycloak.mjs";
 
 export const DEFAULT_CLIENTS = ["junctura-console", "junctura-local", "tenant-a", "tenant-b", "reader"];
 
@@ -82,6 +83,10 @@ export function subjectIdProfilePatch(current) {
   }
   const property = { name: "subject_id", displayName: "Verified subject ID", permissions: { view: ["admin"], edit: ["admin"] },
     validations: {}, annotations: {} };
+  const unit = { name: "junctura_unit", displayName: "Application unit", permissions: { view: ["admin"], edit: ["admin"] } };
+  const unitIndex = profile.attributes.findIndex(attribute => attribute?.name === unit.name);
+  if (unitIndex >= 0) profile.attributes[unitIndex] = { ...profile.attributes[unitIndex], ...unit };
+  else profile.attributes.push(unit);
   const index = profile.attributes.findIndex(attribute => attribute?.name === "subject_id");
   if (index >= 0) profile.attributes[index] = { ...profile.attributes[index], ...property };
   else profile.attributes.push(property);
@@ -155,7 +160,7 @@ export async function main(args = process.argv.slice(2), {
     first += page.length;
   }
 
-  async function configureSync(clientId, secret, existing) {
+  async function configureSync(clientId, secret, existing, permissions = DIRECTORY_SYNC_ROLES) {
     const policy = { clientId, protocol: "openid-connect", publicClient: false, serviceAccountsEnabled: true,
       standardFlowEnabled: false, directAccessGrantsEnabled: false, enabled: false };
     if (!existing) {
@@ -171,8 +176,8 @@ export async function main(args = process.argv.slice(2), {
     const management = clients.find(client => client.clientId === "realm-management");
     const mapping = `users/${account.id}/role-mappings/clients/${management.id}`;
     const assigned = await read(mapping, "Read sync roles");
-    const extra = assigned.filter(role => !DIRECTORY_SYNC_ROLES.includes(role.name));
-    const missing = DIRECTORY_SYNC_ROLES.filter(name => !assigned.some(role => role.name === name));
+    const extra = assigned.filter(role => !permissions.includes(role.name));
+    const missing = permissions.filter(name => !assigned.some(role => role.name === name));
     const policyDrift = Object.entries(policy).some(([key, value]) => key !== "enabled" && existing[key] !== value);
     const storedSecret = secret && (await read(`${path}/client-secret`, "Read current sync secret")).value;
     const needsUpdate = !secret || !existing.enabled || policyDrift || extra.length > 0 ||
@@ -199,6 +204,16 @@ export async function main(args = process.argv.slice(2), {
   const formerSync = clients.find(client => client.clientId === DIRECTORY_SYNC_CLIENT);
   if (formerSync && syncClientId !== DIRECTORY_SYNC_CLIENT) await configureSync(DIRECTORY_SYNC_CLIENT, undefined, formerSync);
   await configureSync(syncClientId, syncSecret, clients.find(client => client.clientId === syncClientId));
+  const appSyncClientId = env.APP_SYNC_CLIENT_ID || "junctura-app-sync";
+  const appSyncSecret = env.APP_SYNC_CLIENT_SECRET?.trim();
+  if (appSyncSecret) {
+    if (appSyncClientId === syncClientId) throw new Error("Use distinct directory and application sync clients");
+    await configureSync(appSyncClientId, appSyncSecret, clients.find(client => client.clientId === appSyncClientId),
+      [...DIRECTORY_SYNC_ROLES, "manage-clients", "manage-realm"]);
+    await createApplicationProvider({ identityUrl: `${base}/identity/realms/junctura`,
+      appSyncClientId, appSyncSecret }).configure("junctura-console", "junctura-console");
+  }
+
 
   for (const client of clients.filter(client => client.protocol === "openid-connect" || namedClients.has(client.clientId))) {
     const { id, clientId } = client;

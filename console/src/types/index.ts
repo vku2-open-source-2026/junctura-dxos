@@ -35,6 +35,7 @@ export interface UserIdentity {
   clientId?: string;
   issuer?: string;
   preferredUsername?: string;
+  consoleRole?: "admin" | "manager" | "viewer";
 }
 
 export type IdentityStatus =
@@ -67,6 +68,46 @@ export interface Application {
   createdAt: string;
   updatedAt: string;
   lastApprovalId?: string;
+  ownerUnit?: string | null;
+  deploymentUnits?: string[];
+}
+
+export type AppAccessRole = "viewer" | "editor" | "manager";
+export type AppAccessTarget = "unit" | "group" | "subject";
+
+export interface AppAssignmentInput {
+  unit: string;
+  targetType: AppAccessTarget;
+  target: string;
+  role: AppAccessRole;
+}
+
+export interface AppAssignment extends AppAssignmentInput {
+  assignmentId: string;
+  enabled: boolean;
+  synchronized: boolean;
+}
+
+export interface AppKeyRotation {
+  rotationId: string;
+  createdAt: string;
+  appliedAt: string | null;
+}
+
+export interface ApiPage<T> {
+  items: T[];
+  nextCursor: string | null;
+}
+
+export interface DirectoryUnit {
+  unit: string;
+  unitType: string;
+  name: string;
+}
+
+export interface DirectoryMember {
+  subject: string;
+  groups: string[];
 }
 
 export interface Approval {

@@ -144,6 +144,38 @@ export function createJuncturaClient({ baseUrl, clientId, clientSecret, timeoutM
   };
   const client = {
     request,
+    async listApplications({ limit, cursor, q, state, unit, userToken } = {}) {
+      const query = new URLSearchParams();
+      for (const [name, value] of Object.entries({ limit, cursor, q, state, unit })) {
+        if (value !== undefined) query.set(name, value);
+      }
+      return (await request(`/v1/applications?${query}`, { bearer: userToken })).json();
+    },
+    async getApplication(appId, { userToken } = {}) {
+      const response = await request(`/v1/applications/${segment(appId)}`, { bearer: userToken });
+      return { application: await response.json(), etag: response.headers.get("etag") };
+    },
+    async updateApplication(appId, metadata, { ifMatch, userToken } = {}) {
+      const response = await request(`/v1/applications/${segment(appId)}`, { method: "PATCH", json: metadata, ifMatch, bearer: userToken });
+      return { application: await response.json(), etag: response.headers.get("etag") };
+    },
+    async listApplicationAssignments(appId, { userToken } = {}) {
+      return (await request(`/v1/applications/${segment(appId)}/assignments`, { bearer: userToken })).json();
+    },
+    async assignApplicationAccess(appId, assignment, { userToken } = {}) {
+      return (await request(`/v1/applications/${segment(appId)}/assignments`, { method: "POST", json: assignment, bearer: userToken })).json();
+    },
+    async revokeApplicationAccess(appId, assignmentId, { userToken } = {}) {
+      await finish(await request(`/v1/applications/${segment(appId)}/assignments/${segment(assignmentId)}`, { method: "DELETE", bearer: userToken }));
+    },
+    async listApplicationOidcKeys(appId, { userToken } = {}) {
+      return (await request(`/v1/applications/${segment(appId)}/oidc-keys`, { bearer: userToken })).json();
+    },
+    async rotateApplicationOidcKey(appId, { idempotencyKey = randomUUID(), userToken } = {}) {
+      return (await request(`/v1/applications/${segment(appId)}/oidc-keys`, {
+        method: "POST", json: {}, idempotencyKey, bearer: userToken,
+      })).json();
+    },
     async identity() { return (await request("/v1/identity")).json(); },
     async createRecord(collection, data) { return (await request(`/v2/data/${segment(collection)}`, { method: "POST", json: { data } })).json(); },
     async getRecord(collection, id) { return (await request(`/v2/data/${segment(collection)}/${segment(id)}`)).json(); },

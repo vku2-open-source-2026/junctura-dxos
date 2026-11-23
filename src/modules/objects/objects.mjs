@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Junctura Contributors
 // SPDX-License-Identifier: Apache-2.0
 import { createHash, randomUUID } from "node:crypto";
-import { HttpError, json, logicalRequestDigest, parseRecordJson, readBody, requireWriter, uuidPattern } from "../../platform/http/http.mjs";
+import { HttpError, json, requestIdFor, logicalRequestDigest, parseRecordJson, readBody, requireWriter, uuidPattern } from "../../platform/http/http.mjs";
 import { resourceCommand, resourceRequest } from "../resources/resources.mjs";
 import { requireCleanObject } from "./malware-scan.mjs";
 import { boundaryOf, parseMultipart } from "./multipart.mjs";
@@ -313,7 +313,7 @@ async function listObjects(request, response, identity, config, url) {
 }
 
 export async function handleObjects(request, response, identity, config, url) {
-  const requestId = randomUUID();
+  const requestId = requestIdFor(request);
   response.setHeader("X-Request-Id", requestId);
   try {
     return await serveObjects(request, response, identity, config, url);

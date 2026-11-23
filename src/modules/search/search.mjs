@@ -57,7 +57,7 @@ async function workerRpc(config, tenantId, operation, payload) {
 function fingerprint(query, identity, scope) {
   return createHash("sha256").update(JSON.stringify({
     q: query, tenant: identity.tenantId, iss: identity.issuer,
-    sub: identity.subject, client: identity.clientId,
+    sub: identity.subject, client: identity.clientId, unit: identity.resourceUnit,
     scope: { management: scope?.management ?? [], shares: scope?.shares ?? [] },
   })).digest("base64url");
 }

@@ -8,6 +8,13 @@ export const OIDC_SESSION_KEY = "junctura_oidc_session";
 export const OIDC_ERROR_KEY = "junctura_oidc_error";
 export const SESSION_EXPIRED_KEY = "junctura_session_expired";
 
+// Match the Keycloak theme's exact messages when an OAuth response uses localized descriptions.
+const unassignedDescriptions = [
+  "not_assigned_to_app",
+  "Your account has not been assigned access to this application.",
+  "Tài khoản của bạn chưa được cấp quyền vào ứng dụng này.",
+];
+
 // Renew the access token shortly before it expires so a reader session never
 // dies in the middle of a page load.
 const RENEW_BEFORE_MS = 30_000;
@@ -23,7 +30,7 @@ export type OidcCallbackResult =
   | { status: "success" }
   | { status: "error"; error: OidcErrorCode };
 
-export type PasswordSignInErrorCode = "invalid_credentials" | "login_failed";
+export type PasswordSignInErrorCode = "invalid_credentials" | "login_failed" | "not_assigned_to_app";
 
 export class PasswordSignInError extends Error {
   code: PasswordSignInErrorCode;
@@ -381,11 +388,19 @@ export async function signInWithPassword(
     throw new PasswordSignInError("login_failed");
   }
 
-  if (response.status === 401) {
-    throw new PasswordSignInError("invalid_credentials");
-  }
   if (!response.ok) {
-    throw new PasswordSignInError("login_failed");
+    if ([400, 401, 403].includes(response.status)) {
+      const failure = await response.text().catch(() => "");
+      let error: unknown;
+      try { error = JSON.parse(failure); } catch { /* Keycloak also returns an HTML challenge. */ }
+      if (isRecord(error)
+        ? error.error === "not_assigned_to_app" || (typeof error.error_description === "string" &&
+          unassignedDescriptions.includes(error.error_description.trim()))
+        : failure.includes('data-error-code="not_assigned_to_app"')) {
+        throw new PasswordSignInError("not_assigned_to_app");
+      }
+    }
+    throw new PasswordSignInError(response.status === 401 ? "invalid_credentials" : "login_failed");
   }
 
   const payload: unknown = await response.json().catch(() => null);
