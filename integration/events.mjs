@@ -58,9 +58,9 @@ test("gateway delivers committed live events across concurrent connections and r
     await sql(`INSERT INTO core.app_records(tenant_id,id,owner_app_id,collection,data) VALUES
       ('tenant-a',${q(id)},${q(writer.appId)},'entries','{"status":"old"}'),
       ('tenant-a',${q(barrier)},${q(writer.appId)},'entries','{}');
-      INSERT INTO app_private.resource_shares(tenant_id,owner_app_id,grantee_app_id,resource_type,resource_id,expires_at)
-      VALUES('tenant-a',${q(writer.appId)},${q(peer.appId)},'record',${q(id)},now()+interval '5 minutes'),
-            ('tenant-a',${q(writer.appId)},${q(peer.appId)},'record',${q(barrier)},now()+interval '5 minutes');
+      INSERT INTO app_private.resource_shares(tenant_id,owner_app_id,grantee_app_id,resource_type,resource_id,action,expires_at)
+      VALUES('tenant-a',${q(writer.appId)},${q(peer.appId)},'record',${q(id)},'read',now()+interval '5 minutes'),
+            ('tenant-a',${q(writer.appId)},${q(peer.appId)},'record',${q(barrier)},'read',now()+interval '5 minutes');
       INSERT INTO execution_private.subject_consents(tenant_id,consent_id,issuer,data_subject,consumer_app_id,
         capability_id,purposes,expires_at)
       VALUES('tenant-a',${q(consent)},${q(issuer)},${q(writer.subject)},${q(peer.appId)},
