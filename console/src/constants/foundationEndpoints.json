@@ -1512,6 +1512,43 @@
     "successHasBody": true
   },
   {
+    "path": "/v1/token-exchange",
+    "method": "POST",
+    "operationId": "exchangeUserToken",
+    "summary": "Exchange a user's login token for a delegated Core bearer",
+    "description": "Authenticate as an active deployed application's enrolled service account. Send a user access token issued to that same client and tenant. Core validates the current user assignment and pins its selected unit. The result carries the user's sub and application's act, expires within 60 seconds and within both input token lifetimes, and has no refresh token. Each delegated request checks Keycloak, deployment and assignment again. Write access requires both input tokens to carry core-writer and the current app role to allow the operation.",
+    "tags": [
+      "tenant"
+    ],
+    "security": [
+      {
+        "coreBearer": []
+      }
+    ],
+    "responses": [
+      "200",
+      "400",
+      "401",
+      "403",
+      "413",
+      "415",
+      "429",
+      "502",
+      "503",
+      "504"
+    ],
+    "hasRequestBody": true,
+    "requestContentTypes": [
+      "application/json"
+    ],
+    "pathParameters": [],
+    "queryParameters": [],
+    "headerParameters": [],
+    "successStatus": "200",
+    "successContentType": "application/json",
+    "successHasBody": true
+  },
+  {
     "path": "/v1/data/{collection}",
     "method": "GET",
     "operationId": "v1ListRecords",

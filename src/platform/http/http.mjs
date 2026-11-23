@@ -13,7 +13,7 @@ export class HttpError extends Error {
 const requestIds = new WeakMap();
 export const accessDenialCodes = new Set([
   "not_assigned_to_app", "capability_not_granted", "consent_required",
-  "consent_revoked", "consent_expired", "unit_mismatch",
+  "consent_revoked", "consent_expired", "unit_mismatch", "delegation_not_allowed",
 ]);
 
 export function requestIdFor(request) {
