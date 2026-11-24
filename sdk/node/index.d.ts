@@ -200,7 +200,14 @@ export type WorkflowHistoryEntry = {
 
 export function inputDigest(input: Json): string;
 export class JuncturaError extends Error { status: number; code: string; requestId?: string; }
-export function createJuncturaClient(options: { baseUrl: string; clientId: string; clientSecret: string; timeoutMs?: number; fetcher?: typeof fetch }): Readonly<{
+export type AppConnectionBundle = Readonly<{
+  appId: string; tenantId: string; baseUrl: string; issuer: string; realm: string;
+  clientId: string; clientSecret: string; tokenEndpoint: string; discoveryEndpoint: string;
+}>;
+export function createAppBootstrap(options: {
+  url: string; roleId: string; secretId: string; cacheMs?: number; timeoutMs?: number; fetcher?: typeof fetch;
+}): (options?: { refresh?: boolean }) => Promise<AppConnectionBundle>;
+export function createJuncturaClient(options: { baseUrl: string; issuer?: string; clientId: string; clientSecret: string; timeoutMs?: number; fetcher?: typeof fetch }): Readonly<{
   request(path: string, options?: RequestOptions): Promise<Response>;
   identity(): Promise<VerifiedIdentity>;
   listDirectoryUnitTypes(page?: { limit?: number; cursor?: string }): Promise<DirectoryPage>;

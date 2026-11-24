@@ -1,17 +1,18 @@
 // SPDX-FileCopyrightText: 2026 Junctura Contributors
 // SPDX-License-Identifier: Apache-2.0
-// Executable server-side HTTP example, not an SDK. Never run with browser secrets.
+// Bootstrap via the SDK, then demonstrate calls using plain HTTP.
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { pathToFileURL } from 'node:url';
+import { createAppBootstrap } from '../sdk/node/index.mjs';
 
-export async function foundationExample({ base, clientId, clientSecret, granteeAppId,
+export async function foundationExample({ base, issuer = `${base}/identity/realms/junctura`, clientId, clientSecret, granteeAppId,
   granteeClientId, granteeClientSecret, fetcher = fetch }) {
   assert.ok(base && clientId && clientSecret && granteeAppId, 'An active enrolled backend and grantee are required');
   assert.ok(Boolean(granteeClientId) === Boolean(granteeClientSecret), 'Grantee client ID and secret must be supplied together');
 
   async function authenticate(enrolledClientId, enrolledSecret) {
-    const issued = await fetcher(`${base}/identity/realms/junctura/protocol/openid-connect/token`, {
+    const issued = await fetcher(`${issuer}/protocol/openid-connect/token`, {
       method: 'POST', body: new URLSearchParams({ grant_type: 'client_credentials', client_id: enrolledClientId, client_secret: enrolledSecret }),
       redirect: 'error', signal: AbortSignal.timeout(15000),
     });
@@ -93,15 +94,21 @@ export async function foundationExample({ base, clientId, clientSecret, granteeA
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   try {
-    const result = await foundationExample({ base: process.env.PUBLIC_URL ?? 'http://127.0.0.1:8080',
-      clientId: process.env.JUNCTURA_APP_CLIENT_ID, clientSecret: process.env.JUNCTURA_APP_CLIENT_SECRET,
-      granteeAppId: process.env.JUNCTURA_GRANTEE_APP_ID,
-      granteeClientId: process.env.JUNCTURA_GRANTEE_CLIENT_ID,
-      granteeClientSecret: process.env.JUNCTURA_GRANTEE_CLIENT_SECRET });
+    const url = process.env.JUNCTURA_OPENBAO_URL;
+    const loadBundle = (roleId, secretId) => createAppBootstrap({ url, roleId, secretId })();
+    const { baseUrl: base, issuer, clientId, clientSecret } = await loadBundle(
+      process.env.JUNCTURA_OPENBAO_ROLE_ID, process.env.JUNCTURA_OPENBAO_SECRET_ID);
+    const granteeRoleId = process.env.JUNCTURA_GRANTEE_OPENBAO_ROLE_ID;
+    const granteeSecretId = process.env.JUNCTURA_GRANTEE_OPENBAO_SECRET_ID;
+    const grantee = granteeRoleId || granteeSecretId ? await loadBundle(granteeRoleId, granteeSecretId) : undefined;
+    if (grantee) assert.equal(grantee.issuer, issuer, 'Both apps must use the same issuer');
+    const result = await foundationExample({ base, issuer, clientId, clientSecret,
+      granteeAppId: grantee?.appId ?? process.env.JUNCTURA_GRANTEE_APP_ID,
+      granteeClientId: grantee?.clientId, granteeClientSecret: grantee?.clientSecret });
     console.log(`recordId=${result.recordId} objectId=${result.objectId} shareId=${result.shareId} executionId=${result.executionId}`);
     console.log('HTTP example succeeded. Created resources and expiring share remain owned by the backend; credentials and tokens withheld.');
-  } catch {
-    console.error('HTTP example failed. Check enrollment, active app state and the local stack. POST outcomes may be ambiguous; do not blindly rerun.');
+  } catch (error) {
+    console.error(`HTTP example failed (${error.code ?? 'configuration_or_response_error'}). See docs/DEVELOPING.md.`);
     process.exitCode = 1;
   }
 }

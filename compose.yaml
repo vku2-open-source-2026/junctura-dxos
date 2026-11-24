@@ -223,6 +223,7 @@ services:
       - openbao-operator:/operator
       - openbao-init:/token
       - ./scripts/init-openbao.sh:/scripts/init-openbao.sh:ro
+      - ./scripts/provision-app-bootstrap.sh:/scripts/provision-app-bootstrap.sh:ro
       - ./infra/openbao/junctura-core.hcl:/policy/junctura-core.hcl:ro
     depends_on:
       secrets:

@@ -20,13 +20,14 @@ npm install @junctura/server-client
 ## Use as a consumer
 
 ```js
-import { createJuncturaClient } from "@junctura/server-client";
+import { createAppBootstrap, createJuncturaClient } from "@junctura/server-client";
 
-const junctura = createJuncturaClient({
-  baseUrl: process.env.JUNCTURA_URL,
-  clientId: process.env.JUNCTURA_APP_CLIENT_ID,
-  clientSecret: process.env.JUNCTURA_APP_CLIENT_SECRET,
+const loadBundle = createAppBootstrap({
+  url: process.env.JUNCTURA_OPENBAO_URL,
+  roleId: process.env.JUNCTURA_OPENBAO_ROLE_ID,
+  secretId: process.env.JUNCTURA_OPENBAO_SECRET_ID,
 });
+const junctura = createJuncturaClient(await loadBundle());
 
 // Call a capability another application shares, stating why and for whom.
 const subjectId = "<person's identity-provider subject>";
@@ -36,6 +37,26 @@ const execution = await junctura.execute(target, { requestId: "R-001" }, undefin
 });
 const result = await junctura.waitForExecution(execution.executionId);
 ```
+
+Core stores the app's Gateway origin, OIDC issuer and endpoints, and client credentials
+in OpenBao. Get the app's private AppRole settings from your operator. The loader caches the
+bundle in memory for 30 seconds by default. Use `cacheMs: 0` for a fresh login and
+read on each load. After a confirmed rotation, create a new client using
+`createJuncturaClient(await loadBundle({ refresh: true }))`.
+
+### Bootstrap errors
+
+| `JuncturaError.code` | Condition |
+| --- | --- |
+| `openbao_unavailable` | The OpenBao connection failed, timed out, hit a rate limit or returned a server error. |
+| `openbao_login_failed` | AppRole login was rejected. Check the role, SecretID expiry and auth mount. |
+| `connection_bundle_forbidden` | OpenBao rejected the KV read. Check the AppRole policy and token lifetime. |
+| `connection_bundle_missing` | The KV entry is missing. Check app activation and the configured mount. |
+| `invalid_openbao_response` | The response body or AppRole login metadata was invalid. |
+| `invalid_connection_bundle` | Bundle fields, app identity or OIDC endpoints failed validation. |
+
+Invalid local options throw a `TypeError`. Keep the returned bundle and bootstrap
+credentials out of logs and frontend code.
 
 `dataSubject` is the person's identity-provider subject. Junctura checks that person's
 consent, seals the call into the audit chain and shows it to them later. Emergency
@@ -121,4 +142,4 @@ Use a management `userToken` with `listApplications`, `getApplication`, `updateA
 Pass the ETag from `getApplication` as `ifMatch` when updating metadata.
 Use `listApplicationOidcKeys` for rotation history and `rotateApplicationOidcKey` to rotate.
 Pass the original `idempotencyKey` to retry a rotation. Rotation responses contain receipts,
-and the replacement secret is stored in OpenBao.
+and the app can reload its updated connection bundle from OpenBao.

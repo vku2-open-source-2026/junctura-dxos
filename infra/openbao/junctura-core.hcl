@@ -17,3 +17,7 @@ path "sys/health" {
 path "secret/data/tenants/+/oidc-clients/+/+" {
   capabilities = ["create", "read"]
 }
+
+path "secret/data/tenants/+/connections/+" {
+  capabilities = ["create", "update", "read"]
+}

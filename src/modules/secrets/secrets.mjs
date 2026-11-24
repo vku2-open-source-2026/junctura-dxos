@@ -55,8 +55,37 @@ export async function bao(config, method, path, body) {
   if (response.status === 403) throw new HttpError(403, "secrets_forbidden");
   if (!response.ok) throw new HttpError(503, "secrets_unavailable");
   if (response.status === 204) return null;
-  const text = await response.text();
-  return text ? JSON.parse(text) : null;
+  try {
+    const text = await response.text();
+    return text ? JSON.parse(text) : null;
+  } catch {
+    throw new HttpError(503, "secrets_unavailable");
+  }
+}
+
+/** Internal KV entry outside the application-managed /v2/secrets namespace. */
+export async function writeConnectionBundle(config, tenantId, appId, clientId, clientSecret, renew) {
+  const mount = config.secretsMount || "secret";
+  if (!/^[a-z][a-z0-9_-]*$/.test(mount) || !/^[a-z][a-z0-9-]{0,62}$/.test(tenantId ?? "") || !uuidPattern.test(appId)) {
+    throw new HttpError(503, "secrets_unavailable");
+  }
+  const issuer = new URL(config.issuer);
+  const realm = issuer.pathname.split("/").at(-1);
+  const data = {
+    appId, tenantId, baseUrl: issuer.origin, issuer: issuer.href, realm, clientId, clientSecret,
+    tokenEndpoint: `${issuer.href}/protocol/openid-connect/token`,
+    discoveryEndpoint: `${issuer.href}/.well-known/openid-configuration`,
+  };
+  const path = `${mount}/data/tenants/${tenantId}/connections/${appId}`;
+  const current = await bao(config, "GET", path).catch(error => {
+    if (error.status !== 404) throw error;
+    return null;
+  });
+  if (Object.entries(data).every(([key, value]) => current?.data?.data?.[key] === value)) return;
+  const version = current === null ? 0 : current.data?.metadata?.version;
+  if (!Number.isSafeInteger(version) || version < 0) throw new HttpError(503, "secrets_unavailable");
+  await renew();
+  await bao(config, "POST", path, { options: { cas: version }, data });
 }
 
 export async function checkSecretsReadiness(config, request = fetch) {

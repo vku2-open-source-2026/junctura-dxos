@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 import { randomBytes, randomUUID } from "node:crypto";
 import { HttpError, json, jsonObject, readRecordJson, uuidPattern } from "../../platform/http/http.mjs";
-import { bao } from "../secrets/secrets.mjs";
+import { bao, writeConnectionBundle } from "../secrets/secrets.mjs";
 import { createApplicationProvider } from "./keycloak.mjs";
 
 const unitPattern = /^[a-z][a-z0-9-]{1,63}$/;
@@ -58,11 +58,11 @@ async function readObject(request) {
 export async function withProvider(config, command, appId, run) {
   const lease = randomUUID();
   const fenced = (operation, payload = {}) => command(operation, { appId, lease, ...payload });
-  const renew = async () => (await fenced("lease")).value;
+  const renew = async () => (await fenced("lease", { renew: true })).value;
   const provider = createApplicationProvider(config, renew);
   if (!provider) throw new HttpError(503, "app_provider_unavailable");
-  const target = await renew();
-  try { return await run(fenced, provider, target.oauthClientId, target.providerReady); }
+  const { value: target } = await fenced("lease");
+  try { return await run(fenced, provider, target.oauthClientId, target.providerReady, renew); }
   catch (error) {
     if (error instanceof HttpError) throw error;
     if (error.message === "oidc_secret_unsupported") throw new HttpError(409, error.message);
@@ -128,11 +128,12 @@ export async function handleApplicationManagement(request, response, identity, c
       const rotationId = request.headers["idempotency-key"];
       if (typeof rotationId !== "string" || !uuidPattern.test(rotationId)) throw new HttpError(400, "invalid_idempotency_key");
       if (Object.keys(await readObject(request)).length) invalid();
-      await withProvider(config, command, appId, async (fenced, provider, clientId) => {
+      await withProvider(config, command, appId, async (fenced, provider, clientId, _ready, renew) => {
         const replaceSecret = await provider.prepareRotation(clientId);
         if ((await fenced("rotation_start", { rotationId })).value.applied) return;
         const secret = await stageKey(config, identity.tenantId, appId, rotationId);
         await replaceSecret(secret);
+        await writeConnectionBundle(config, identity.tenantId, appId, clientId, secret, renew);
         await fenced("rotation_confirm", { rotationId });
       });
     }

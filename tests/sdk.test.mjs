@@ -2,13 +2,83 @@
 // SPDX-License-Identifier: Apache-2.0
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { createJuncturaClient, inputDigest, JuncturaError } from "../sdk/node/index.mjs";
+import { createAppBootstrap, createJuncturaClient, inputDigest, JuncturaError } from "../sdk/node/index.mjs";
 import { canonicalize } from "../src/modules/capability/registry/manifest.mjs";
 import { createHash } from "node:crypto";
 
 const json = (value, status = 200, headers = {}) => new Response(JSON.stringify(value), { status, headers });
 const auth = () => json({ access_token: "synthetic-token", token_type: "Bearer", expires_in: 300 });
 const options = { baseUrl: "http://127.0.0.1:8080", clientId: "synthetic-client", clientSecret: "synthetic-secret" };
+
+const appId = "11111111-1111-4111-8111-111111111111";
+const bundlePath = `secret/data/tenants/tenant-a/connections/${appId}`;
+const bundleIssuer = `${options.baseUrl}/identity/realms/technical`;
+const bundle = {
+  ...options, appId, tenantId: "tenant-a", issuer: bundleIssuer, realm: "technical",
+  tokenEndpoint: `${bundleIssuer}/protocol/openid-connect/token`,
+  discoveryEndpoint: `${bundleIssuer}/.well-known/openid-configuration`,
+};
+const bootstrapOptions = { url: "https://bao.invalid", roleId: "synthetic-role", secretId: "synthetic-bootstrap-secret" };
+const openBaoAuth = (path = bundlePath) => json({ auth: { client_token: "bao-token", metadata: { junctura_bundle: path } } });
+
+test("AppRole bootstrap coalesces reads, caches the bundle and can refresh after rotation", async t => {
+  t.mock.timers.enable({ apis: ["Date"], now: 0 });
+  let logins = 0, reads = 0, secret = bundle.clientSecret;
+  const load = createAppBootstrap({ ...bootstrapOptions, cacheMs: 100, fetcher: async (url, init) => {
+    assert.equal(url.origin, bootstrapOptions.url);
+    assert.equal(init.redirect, "error");
+    if (url.pathname === "/v1/auth/approle/login") {
+      logins++;
+      assert.equal(init.method, "POST");
+      assert.deepEqual(JSON.parse(init.body), { role_id: bootstrapOptions.roleId, secret_id: bootstrapOptions.secretId });
+      return openBaoAuth();
+    }
+    reads++;
+    assert.equal(url.pathname, `/v1/${bundlePath}`);
+    assert.equal(init.headers["X-Vault-Token"], "bao-token");
+    return json({ data: { data: { ...bundle, clientSecret: secret } } });
+  } });
+  const [first, concurrent] = await Promise.all([load(), load()]);
+  assert.equal(first, concurrent);
+  assert.deepEqual(first, bundle);
+  assert.ok(Object.isFrozen(first));
+  secret = "rotated-synthetic";
+  assert.equal(await load(), first);
+  assert.equal((await load({ refresh: true })).clientSecret, secret);
+  t.mock.timers.tick(101);
+  assert.notEqual(await load(), first);
+  assert.deepEqual([logins, reads], [3, 3]);
+
+  const client = createJuncturaClient({ ...await load(), fetcher: async (url, init) => {
+    if (init.method === "POST") {
+      assert.equal(url.href, bundle.tokenEndpoint);
+      assert.equal(init.body.get("client_secret"), secret);
+      return auth();
+    }
+    return json({ subject: "technical" });
+  } });
+  assert.deepEqual(await client.identity(), { subject: "technical" });
+});
+
+test("AppRole bootstrap rejects unsafe URLs and reports sanitized login, policy and bundle errors", async () => {
+  assert.throws(() => createAppBootstrap({ ...bootstrapOptions, url: "http://remote.invalid" }), TypeError);
+  assert.throws(() => createAppBootstrap({ ...bootstrapOptions, secretId: "" }), TypeError);
+  const scenarios = [
+    [() => { throw Error("private transport detail"); }, "openbao_unavailable", 0],
+    [() => json({ errors: ["private rejection"] }, 400), "openbao_login_failed", 400],
+    [() => openBaoAuth("../sys"), "invalid_openbao_response", 502],
+    [() => json({}, 503), "openbao_unavailable", 503],
+    [(_url, init) => init.method === "POST" ? openBaoAuth() : json({}, 403), "connection_bundle_forbidden", 403],
+    [(_url, init) => init.method === "POST" ? openBaoAuth() : json({}, 404), "connection_bundle_missing", 404],
+    [(_url, init) => init.method === "POST" ? openBaoAuth() : json({ data: { data: { ...bundle, issuer: "https://elsewhere.invalid" } } }),
+      "invalid_connection_bundle", 502],
+  ];
+  for (const [fetcher, code, status] of scenarios) {
+    const load = createAppBootstrap({ ...bootstrapOptions, fetcher });
+    await assert.rejects(load(), error => error instanceof JuncturaError && error.code === code &&
+      error.status === status && !String(error).includes("private"));
+  }
+});
 
 test("SDK shares memory-only authentication and sends only public API requests", async () => {
   let issued = 0; const paths = [];

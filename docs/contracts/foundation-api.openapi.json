@@ -5840,7 +5840,7 @@
       "post": {
         "operationId": "approveApplication",
         "summary": "Approve application",
-        "description": "Live operator-enrolled human principal, exact issuer/subject/management-client/tenant binding. Baseline core-reader suffices; core-writer is not administrative authority. Core errors include requestId; Gateway auth errors may be HTML or JSON without requestId. Different human approver; matching fresh approval is single-use and digest/revision bound. Same approver consumes it.",
+        "description": "Live operator-enrolled human principal, exact issuer/subject/management-client/tenant binding. Baseline core-reader suffices; core-writer is not administrative authority. Core errors include requestId; Gateway auth errors may be HTML or JSON without requestId. Different human approver; matching fresh approval is single-use and digest/revision bound. Same approver consumes it. When Keycloak synchronization and OpenBao are configured, approval publishes the confidential client's application-scoped connection bundle to OpenBao before activation.",
         "tags": [
           "application-admin"
         ],
@@ -8057,7 +8057,7 @@
       "post": {
         "operationId": "rotateApplicationOidcKey",
         "summary": "Rotate the OIDC client secret",
-        "description": "Stage a new confidential client secret in OpenBao, apply it in Keycloak, and return rotation metadata. Retry an incomplete rotation with the same Idempotency-Key.",
+        "description": "Stage a new confidential client secret in OpenBao, apply and verify it in Keycloak, then update the application-scoped connection bundle in OpenBao. The response contains rotation receipts only. Retry an incomplete rotation with the same Idempotency-Key.",
         "tags": [
           "application-admin"
         ],

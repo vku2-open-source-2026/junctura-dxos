@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { parseEnv } from "node:util";
 import { parseArgs, renderEnv } from "../scripts/enroll-app.mjs";
 
 test("app:enroll derives a client id and default https origin", () => {
@@ -25,9 +26,10 @@ test("app:enroll rejects unsafe names, origins and options", () => {
   assert.equal(parseArgs(["--help"]).help, true);
 });
 
-test("app:enroll writes only the app's own settings", () => {
-  const text = renderEnv({ baseUrl: "http://127.0.0.1:8080", tenant: "tenant-a", appId: "00000000-0000-4000-8000-000000000000", clientId: "app-x", clientSecret: "s" });
-  assert.match(text, /^JUNCTURA_APP_CLIENT_ID=app-x$/m);
-  assert.match(text, /^JUNCTURA_APP_CLIENT_SECRET=s$/m);
-  assert.doesNotMatch(text, /KEYCLOAK|POSTGRES|ADMIN/);
+test("app:enroll writes only the app's OpenBao bootstrap settings", () => {
+  const url = "http://127.0.0.1:18200";
+  const credentials = { JUNCTURA_OPENBAO_ROLE_ID: "synthetic-role", JUNCTURA_OPENBAO_SECRET_ID: "synthetic-secret" };
+  assert.deepEqual(parseEnv(renderEnv(url, { ...credentials, JUNCTURA_APP_CLIENT_SECRET: "other-secret" })),
+    { JUNCTURA_OPENBAO_URL: url, ...credentials });
+  assert.throws(() => renderEnv(url, {}), /did not issue bootstrap credentials/);
 });

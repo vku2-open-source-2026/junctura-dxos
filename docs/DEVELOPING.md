@@ -296,15 +296,12 @@ or `npm test`.
 For operator enrollment/`resource_subject` binding see [Capabilities](CAPABILITIES.md); for resource authorization see [Security](SECURITY.md).
 
 Run [examples/foundation-http.mjs](../examples/foundation-http.mjs) with an active enrolled backend and
-grantee on a running stack. Keep credentials server-side; `PUBLIC_URL` defaults to `http://127.0.0.1:8080`.
+grantee on a running stack. Supply the backend's private settings from
+[Application bootstrap](GETTING_STARTED.md#bootstrap-a-server-side-application).
 
 ```sh
-JUNCTURA_APP_CLIENT_ID='<enrolled-backend-client>' \
-JUNCTURA_APP_CLIENT_SECRET='<backend-secret>' \
 JUNCTURA_GRANTEE_APP_ID='<second-enrolled-app-uuid>' \
-JUNCTURA_GRANTEE_CLIENT_ID='<grantee-client>' \
-JUNCTURA_GRANTEE_CLIENT_SECRET='<grantee-secret>' \
-node --env-file=.env examples/foundation-http.mjs
+node --env-file=.env.app.lichhop.local examples/foundation-http.mjs
 ```
 
 1. Authenticate with OIDC client credentials; `/v1/identity` returns verified subject, tenant and roles.
@@ -313,7 +310,11 @@ node --env-file=.env examples/foundation-http.mjs
 4. Start, inspect and complete the operator-installed `junctura_checkpoint` workflow.
 5. Create a ten-minute record read share; with grantee credentials, confirm access succeeds afterward.
 
-Grantee credentials are optional but must be paired; omitting them skips before/after checks.
+To check the grantee's access before and after the share, use its
+`JUNCTURA_GRANTEE_OPENBAO_ROLE_ID` and `JUNCTURA_GRANTEE_OPENBAO_SECRET_ID`.
+The example takes the grantee app ID from that bundle.
+Run `./scripts/dev-stack.sh test test:app-bootstrap` on the isolated stack to check
+AppRole isolation and OIDC rotation with real OpenBao and Keycloak.
 Run `npm run test:workflow-tasks` on the isolated Compose test stack to exercise business workflow policy,
 claims and outbox reconciliation against the pinned Flowable engine. The suite creates and removes its own
 BPMN deployment, identity fixtures and directory bindings.

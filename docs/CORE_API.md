@@ -652,12 +652,17 @@ roles before enabling the new gateway checks. Core caches live Console role mapp
 seconds. After the cache expires, current roles are required even for an unexpired token. Managed
 clients issue short-lived access tokens, and the browser can start another authorization flow when needed.
 
+On approval, Core with Keycloak synchronization and OpenBao configured writes the confidential
+client's connection bundle before activating the application. The bundle lives at
+`<mount>/data/tenants/<tenant>/connections/<appId>` in the OpenBao KV v2 API. The operator issues an
+AppRole scoped to that exact path. The application reads it directly using OpenBao.
+See [Application bootstrap](GETTING_STARTED.md#bootstrap-a-server-side-application).
+
 OIDC rotation uses `POST /v1/applications/{appId}/oidc-keys` with `{}` and a UUID `Idempotency-Key`.
-Core stages a random secret in the server-composed OpenBao KV path
-`secret/tenants/<tenant>/oidc-clients/<appId>/<rotationId>`, applies and verifies the Keycloak client
-secret, and saves a receipt. Retrieve the new secret through the operator's OpenBao access to that
-path. HTTP returns rotation IDs and timestamps. If a rotation is interrupted, retry with the same key
-`rotationId`. `GET` shows the latest 100 receipts, including pending rotations with null `appliedAt`.
+Core stages a random secret at `<mount>/data/tenants/<tenant>/oidc-clients/<appId>/<rotationId>`,
+applies and verifies it in Keycloak, updates the connection bundle, and confirms the rotation.
+HTTP returns rotation IDs and timestamps. After an interruption, retry with the same key.
+`GET` shows the latest 100 receipts, including pending rotations with null `appliedAt`.
 
 Application access refusals return HTTP 403 with `{error, requestId}`. The audit event
 `authorization.denied` stores the code in `reasonCode` and the request ID in `reason`.
@@ -749,22 +754,23 @@ are not served. [CAPABILITIES.md](CAPABILITIES.md) documents registration, trust
 
 ## Tested backend HTTP example
 
-[foundation-http.mjs](../examples/foundation-http.mjs) uses ordinary HTTP for confidential authentication, private record
-creation, binary upload/download, a ten-minute read share and technical checkpoint start/inspect/completion.
-It puts no private content in workflow variables and never automatically retries POST. `npm run test:applications` executes this example with uniquely named, independently approved backend fixtures,
-using the local Keycloak administrator credential for provisioning. Credentials stay in memory; tests verify shared read
-and denied update, run the standalone CLI with private environment variables, and clean up their resource fixtures.
+[foundation-http.mjs](../examples/foundation-http.mjs) loads the connection bundle and uses ordinary HTTP
+for authentication, private records, binary upload/download, a ten-minute read share and a technical
+checkpoint workflow. `npm run test:applications` runs the HTTP workflow with independently approved
+fixtures and checks shared read and denied update. `npm run test:app-bootstrap` checks connection bundle
+isolation and rotation, and runs the standalone SDK example with AppRole credentials.
 
 For an already operator-enrolled active backend, set these environment variables privately and run `npm run example:foundation`:
 
 ```text
-PUBLIC_URL=http://127.0.0.1:8080
-JUNCTURA_APP_CLIENT_ID=<registered confidential backend client>
-JUNCTURA_APP_CLIENT_SECRET=<privately provisioned credential>
+JUNCTURA_OPENBAO_URL=<OpenBao origin>
+JUNCTURA_OPENBAO_ROLE_ID=<application role ID>
+JUNCTURA_OPENBAO_SECRET_ID=<privately provisioned secret ID>
 JUNCTURA_GRANTEE_APP_ID=<different active same-tenant registered app UUID>
 ```
 
-Optional `JUNCTURA_GRANTEE_CLIENT_ID` and `JUNCTURA_GRANTEE_CLIENT_SECRET` must be supplied together to test the recipient read.
+To test the recipient read, supply its `JUNCTURA_GRANTEE_OPENBAO_ROLE_ID` and
+`JUNCTURA_GRANTEE_OPENBAO_SECRET_ID` together. The recipient bundle supplies its app ID.
 The tenant-a/tenant-b fixtures alone do not grant v2 access. The CLI leaves its records, object and expiring share owned
 by the backend and prints IDs without credentials/tokens. Reconcile failed POST outcomes before rerunning;
 keep backend secrets out of frontends, repositories and shell logs.

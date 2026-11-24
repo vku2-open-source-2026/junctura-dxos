@@ -1,13 +1,14 @@
 // SPDX-FileCopyrightText: 2026 Junctura Contributors
 // SPDX-License-Identifier: Apache-2.0
-import { createJuncturaClient } from "../sdk/node/index.mjs";
+import { createAppBootstrap, createJuncturaClient } from "../sdk/node/index.mjs";
 
-const client = createJuncturaClient({
-  baseUrl: process.env.PUBLIC_URL ?? "http://127.0.0.1:8080",
-  clientId: process.env.JUNCTURA_APP_CLIENT_ID ?? "tenant-a",
-  clientSecret: process.env.JUNCTURA_APP_CLIENT_SECRET ?? process.env.TENANT_A_SECRET,
-});
 try {
+  const loadBundle = createAppBootstrap({
+    url: process.env.JUNCTURA_OPENBAO_URL,
+    roleId: process.env.JUNCTURA_OPENBAO_ROLE_ID,
+    secretId: process.env.JUNCTURA_OPENBAO_SECRET_ID,
+  });
+  const client = createJuncturaClient(await loadBundle());
   const identity = await client.identity();
   console.log(JSON.stringify({ subject: identity.subject, tenantId: identity.tenantId, roles: identity.roles }));
   if (process.argv.includes("--enrolled")) {
