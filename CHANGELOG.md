@@ -61,7 +61,9 @@ All notable changes to Junctura are recorded here. Versions follow
 
 - Business workflows now bind tasks to directory units and candidate groups. The task inbox supports
   execution and per-step deadlines, parallel tasks, and expiring claims. Workflow completion accepts
-  optional app-owned records with a durable outbox and replays the original `202`. The Flowable worker
+  optional app-owned records with a durable outbox and replays the original `202`, plus an optional
+  business `output` object up to 64 KiB whose keys become process variables beside the primitive
+  `variables` (structured values are stored as JSON strings, key collisions answer `400`). The Flowable worker
   confirms each task before publishing its actor, decision and reason in history. Migrations 039–041
   add workflow policies, execution state and cancellation recovery. The SDK requires a caller-provided
   completion key for safe retries, and the Console API reference covers the new operations.

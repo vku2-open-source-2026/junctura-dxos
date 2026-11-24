@@ -53,6 +53,7 @@
     "test:app-group-shares": "node --env-file=.env --test integration/app-group-shares.mjs",
     "test:directory": "node --env-file=.env --test integration/directory.mjs",
     "test:workflow-tasks": "node --env-file=.env --test integration/workflow-tasks.mjs",
+    "test:workflow-task-output": "node --env-file=.env --test integration/workflow-task-output.mjs",
     "test:applications": "node --env-file=.env --test integration/applications.mjs",
     "test:capabilities": "node --env-file=.env --test integration/capabilities.mjs",
     "test:compositions": "node --env-file=.env --test integration/compositions.mjs",

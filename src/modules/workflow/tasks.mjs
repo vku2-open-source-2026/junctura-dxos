@@ -229,10 +229,11 @@ export async function handleClaim(request, response, identity, config, taskId, a
 }
 
 export async function completeTask(request, response, identity, config, executionId, body, readExecution) {
-  const { taskId, variables = {}, records } = body;
+  const { taskId, variables = {}, records, output } = body;
   const requestKey = request.headers["idempotency-key"];
   if (typeof requestKey !== "string" || !uuidPattern.test(requestKey)) throw new HttpError(400, "uuid_idempotency_key_required");
-  if (typeof taskId !== "string" || !engineId.test(taskId) || Object.keys(body).some(key => !["taskId", "variables", "records"].includes(key)) ||
+  if (typeof taskId !== "string" || !engineId.test(taskId) ||
+      Object.keys(body).some(key => !["taskId", "variables", "records", "output"].includes(key)) ||
       !jsonObject(variables) || Object.entries(variables).some(([name, value]) =>
         !variableName.test(name) || name === "input" || name === markerName ||
         !(typeof value === "string" || typeof value === "boolean" || Number.isFinite(value))) ||
@@ -241,6 +242,18 @@ export async function completeTask(request, response, identity, config, executio
     throw new HttpError(400, "invalid_request");
   }
   if (Buffer.byteLength(JSON.stringify(variables)) > 4096) throw new HttpError(413, "body_too_large");
+  let merged = variables;
+  if (output !== undefined) {
+    if (!jsonObject(output) || Object.keys(output).some(name =>
+          !variableName.test(name) || name === "input" || name === markerName || Object.hasOwn(variables, name)) ||
+        [["decision", 120], ["reason", 500]].some(([name, max]) => Object.hasOwn(output, name) &&
+          (typeof output[name] !== "string" || output[name].length === 0 || [...output[name]].length > max))) {
+      throw new HttpError(400, "invalid_request");
+    }
+    if (Buffer.byteLength(JSON.stringify(output)) > 65536) throw new HttpError(413, "body_too_large");
+    merged = { ...variables, ...Object.fromEntries(Object.entries(output).map(([name, value]) =>
+      [name, typeof value === "object" ? JSON.stringify(value) : value])) };
+  }
   let operations;
   if (records !== undefined) {
     if (!Array.isArray(records) || records.length < 1 || records.length > 10 ||
@@ -249,7 +262,7 @@ export async function completeTask(request, response, identity, config, executio
     }
     operations = parseRecordBatch({ operations: records.map(record => ({ ...record, op: "create" })) }).operations;
   }
-  const payload = { taskId, executionId, variables, records: operations, requestKey, digest: logicalRequestDigest({ body }) };
+  const payload = { taskId, executionId, variables: merged, records: operations, requestKey, digest: logicalRequestDigest({ body }) };
   const receipt = await workflowCommand(config, identity, "task", "complete", payload);
   if (receipt.status !== 200) return sendRecordResult(response, receipt);
   const execution = await readExecution();
