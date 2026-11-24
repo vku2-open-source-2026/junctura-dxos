@@ -8,6 +8,12 @@ All notable changes to Junctura are recorded here. Versions follow
 
 ## Unreleased
 
+- **Capability catalog and access requests (issue #49)** adds a cursor-paged catalog of latest
+  visible published versions with caller access status and discover-gated manifests. Migration 061
+  adds tenant-scoped requests with audited withdrawal, decline and acceptance. Acceptance creates
+  a pending direct grant that follows the existing independent approval and activation flow. The
+  Capability API contract and Node SDK expose the new routes.
+
 - **Application management and access (issue #72):** added filtered, paginated application listing,
   revision-checked metadata and deployment settings, unit/group/person assignments, and OIDC client
   secret rotation via OpenBao with receipt history. Keycloak checks the client role during user sign-in,

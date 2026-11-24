@@ -586,6 +586,13 @@ def capability_contract(cases=None):
     for schema in spec['components']['schemas'].values():
         Draft202012Validator.check_schema(schema)
     supplied = cases if cases is not None else list(json.loads((contract.parent / 'examples/api-examples.json').read_text(encoding='utf-8')).values())
+    if cases is None:
+        for path in spec['paths'].values():
+            for operation in (op for method, op in path.items() if method in METHODS):
+                if operation.get('x-junctura-test-suite') == 'access-requests' and 'requestBody' in operation:
+                    media = operation['requestBody']['content']['application/json']
+                    require('example' in media, operation['operationId'] + ': request example missing')
+                    supplied.append({'schema': media['schema']['$ref'].rsplit('/', 1)[-1], 'value': media['example']})
     require(bool(supplied), 'Capability contract observations are empty')
     for item in supplied:
         validator = Draft202012Validator({'$ref': contract.as_uri() + '#/components/schemas/' + item['schema']}, registry=registry, format_checker=FORMATS)

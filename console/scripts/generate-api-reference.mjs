@@ -72,6 +72,7 @@ function sample(input, spec, depth = 0, seen = new Set(), hint = "") {
   if (depth > 6) return null;
   const { value: schema, spec: document } = deref(input, spec, seen);
   if (!schema || typeof schema !== "object") return null;
+  if (Array.isArray(schema.examples) && schema.examples.length) return schema.examples[0];
   if (schema.oneOf || schema.anyOf) {
     return sample((schema.oneOf ?? schema.anyOf)[0], document, depth + 1, seen, hint);
   }

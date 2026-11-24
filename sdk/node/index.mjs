@@ -137,6 +137,8 @@ export function createJuncturaClient({ baseUrl, clientId, clientSecret, timeoutM
   };
   const finish = response => response.body?.cancel();
   const workflowPath = id => `/v1/workflows/executions/${segment(id)}`;
+  const accessRequestsPath = "/v1/trust/access-requests";
+  const accessRequestPath = id => `${accessRequestsPath}/${segment(id)}`;
   const filteredRead = (path, filters, options) => {
     const query = new URLSearchParams(Object.entries(filters)
       .filter(([, value]) => value !== undefined).map(([key, value]) => [key, String(value)]));
@@ -409,6 +411,27 @@ export function createJuncturaClient({ baseUrl, clientId, clientSecret, timeoutM
       if (limit !== undefined) query.set("limit", String(limit));
       if (cursor !== undefined) query.set("cursor", cursor);
       return (await request(`/v1/capabilities${query.size ? `?${query}` : ""}`)).json();
+    },
+    async listCapabilityCatalog({ limit, cursor, userToken } = {}) {
+      return (await filteredRead("/v1/capabilities/catalog", { limit, cursor }, { bearer: userToken })).json();
+    },
+    async createCapabilityAccessRequest(body, idempotencyKey = randomUUID()) {
+      return (await request(accessRequestsPath, { method: "POST", json: body, idempotencyKey })).json();
+    },
+    async listCapabilityAccessRequests({ direction, state, limit, cursor, userToken } = {}) {
+      return (await filteredRead(accessRequestsPath, { direction, state, limit, cursor }, { bearer: userToken })).json();
+    },
+    async getCapabilityAccessRequest(requestId, { userToken } = {}) {
+      return (await request(accessRequestPath(requestId), { bearer: userToken })).json();
+    },
+    async withdrawCapabilityAccessRequest(requestId) {
+      return (await request(`${accessRequestPath(requestId)}/withdraw`, { method: "POST" })).json();
+    },
+    async declineCapabilityAccessRequest(requestId, reason, { userToken } = {}) {
+      return (await request(`${accessRequestPath(requestId)}/decline`, { method: "POST", json: { reason }, bearer: userToken })).json();
+    },
+    async acceptCapabilityAccessRequest(requestId, { userToken } = {}) {
+      return (await request(`${accessRequestPath(requestId)}/accept`, { method: "POST", bearer: userToken })).json();
     },
     // context: optional { purpose, dataSubject, emergency?, justification? } — why the call is made and whose data it concerns.
     async execute(target, input, idempotencyKey = randomUUID(), context) {

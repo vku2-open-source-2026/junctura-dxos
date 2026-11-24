@@ -24,6 +24,7 @@ import { handleSecrets } from "./modules/secrets/secrets.mjs";
 import { handleSubjectAccessEvents, SUBJECT_ACCESS_EVENTS_PATH } from "./modules/subject-access/subject-access.mjs";
 import { isStoragePath, handleStorage } from "./modules/storage/storage.mjs";
 import { TRUST_GRAPH_PATH, handleTrust, handleTrustGraph } from "./modules/capability/trust/trust.mjs";
+import { ACCESS_REQUESTS_PATH, handleCapabilityAccessRequests } from "./modules/capability/trust/access-requests.mjs";
 import { handleMetrics, isMetricsPath, recordRequest } from "./modules/metrics/metrics.mjs";
 
 const tenantOf = new WeakMap();
@@ -278,11 +279,13 @@ export function createApi(config) {
           { error: error instanceof HttpError ? error.message : "trust_unavailable", requestId });
       }
     }
-    if (path === "/v1/trust/grants" || path?.startsWith("/v1/trust/grants/")) {
+    const accessRequest = path === ACCESS_REQUESTS_PATH || path?.startsWith(`${ACCESS_REQUESTS_PATH}/`);
+    if (accessRequest || path === "/v1/trust/grants" || path?.startsWith("/v1/trust/grants/")) {
       const requestId = requestIdFor(request);
       response.setHeader("X-Request-Id", requestId);
       try {
-        return await handleTrust(request, response, await authorize(request, true), config, new URL(request.url, "http://core"));
+        const handler = accessRequest ? handleCapabilityAccessRequests : handleTrust;
+        return await handler(request, response, await authorize(request, true), config, new URL(request.url, "http://core"));
       } catch (error) {
         if (error.status === 413) response.setHeader("Connection", "close");
         return json(response, error instanceof HttpError ? error.status : 503,

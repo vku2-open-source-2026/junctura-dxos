@@ -8,7 +8,7 @@ import {
   parseManifestText,
   validateManifest,
 } from "./manifest.mjs";
-import { HttpError, json, jsonObject, parseRecordJson, readBody, readFlatJsonObject, uuidPattern } from "../../../platform/http/http.mjs";
+import { HttpError, json, jsonObject, parseRecordJson, readBody, readCursorPage, readFlatJsonObject, uuidPattern } from "../../../platform/http/http.mjs";
 import { trustCommand, validateGrantApproval } from "../trust/trust.mjs";
 
 const CAPABILITY_PATH = /^\/v1\/capabilities\/([^/]+)\/versions(?:\/([^/]+))?(?:\/(validate|publish|deprecate|revoke|visibility))?$/;
@@ -43,9 +43,14 @@ export function validateVisibilityBody(body) {
 export async function handleCapabilities(request, response, identity, config, url) {
   if (!config.dataUrl) throw new HttpError(503, "capabilities_unavailable");
   if (!identity.clientId) throw new HttpError(403, "verified_client_required");
-  if (url.pathname === "/v1/capabilities") {
+  if (url.pathname === "/v1/capabilities" || url.pathname === "/v1/capabilities/catalog") {
     if (request.method !== "GET") throw new HttpError(405, "method_not_allowed");
-    return listCapabilities(request, response, identity, config, url);
+    const payload = readCursorPage(url.searchParams, "invalid_capability_query", "invalid_capability_cursor");
+    const catalog = url.pathname.endsWith("/catalog");
+    const value = await command(config, identity, "junctura_capability_api",
+      catalog ? "capability_catalog" : "capability_command", catalog ? undefined : "list", payload);
+    if (catalog) response.setHeader("Cache-Control", "no-store");
+    return json(response, 200, value);
   }
   const match = url.pathname.match(CAPABILITY_PATH);
   if (!match) throw new HttpError(400, "invalid_capability_path");
@@ -173,28 +178,6 @@ export async function handleApprovals(request, response, identity, config, url) 
     }
   }
   return approvalCommand(response, 200, result);
-}
-
-async function listCapabilities(request, response, identity, config, url) {
-  const payload = {};
-  for (const key of url.searchParams.keys()) {
-    if (key !== "limit" && key !== "cursor") throw new HttpError(400, "invalid_capability_query");
-  }
-  const limits = url.searchParams.getAll("limit");
-  const cursors = url.searchParams.getAll("cursor");
-  if (limits.length > 1 || cursors.length > 1) throw new HttpError(400, "invalid_capability_query");
-  if (limits.length) {
-    if (!/^[0-9]{1,3}$/.test(limits[0])) throw new HttpError(400, "invalid_capability_query");
-    const limit = Number(limits[0]);
-    if (limit < 1 || limit > 100) throw new HttpError(400, "invalid_capability_query");
-    payload.limit = limit;
-  }
-  if (cursors.length) {
-    if (!/^[0-9a-f]{1,512}$/i.test(cursors[0])) throw new HttpError(400, "invalid_capability_cursor");
-    payload.cursor = cursors[0].toLowerCase();
-  }
-  const value = await command(config, identity, "junctura_capability_api", "capability_command", "list", payload);
-  return json(response, 200, value);
 }
 
 function capabilityOperation(method, version, action) {

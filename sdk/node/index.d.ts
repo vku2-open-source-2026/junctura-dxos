@@ -3,6 +3,19 @@
 export type Json = null | boolean | number | string | Json[] | { [key: string]: Json };
 export type JsonObject = { [key: string]: Json };
 export type CapabilityReference = { capabilityId: string; version: string; manifestDigest: string };
+export type CapabilityCatalogItem = {
+  capabilityId: string; versionId: string; providerAppId: string; version: string; digest: string;
+  state: 'published'; visibility: 'tenant' | 'units' | 'applications' | 'hidden';
+  title: string; description: string; publishedAt: string; myAccess: 'none' | 'requested' | 'granted';
+  manifest?: JsonObject;
+};
+export type CapabilityAccessRequestCreate = { capabilityId: string; version: string; purpose: string };
+export type CapabilityAccessRequestState = 'pending' | 'withdrawn' | 'declined' | 'accepted';
+export type CapabilityAccessRequest = CapabilityAccessRequestCreate & {
+  requestId: string; providerAppId: string; consumerAppId: string; manifestDigest: string;
+  state: CapabilityAccessRequestState; reason: string | null; grantId: string | null;
+  createdAt: string; updatedAt: string;
+};
 export type ExecutionTarget = { kind: 'capability'; capability: CapabilityReference }
   | { kind: 'composition'; compositionId: string; version: string; compositionDigest: string };
 export type Execution = { executionId: string; state: 'accepted' | 'running' | 'auth_required' | 'succeeded' | 'failed' | 'timed_out' | 'outcome_unknown' | 'cancelled'; output?: Json; [key: string]: unknown };
@@ -250,6 +263,16 @@ export function createJuncturaClient(options: { baseUrl: string; clientId: strin
   cancelWorkflowWithPendingCheck(executionId: string, options?: { userToken?: string }): Promise<void>;
   listWorkflowTaskHistory(executionId: string, page?: WorkflowPageOptions): Promise<{ items: WorkflowHistoryEntry[]; nextCursor: string | null }>;
   discover(query?: { limit?: number; cursor?: string }): Promise<unknown>;
+  listCapabilityCatalog(options?: { limit?: number; cursor?: string; userToken?: string }):
+    Promise<{ items: CapabilityCatalogItem[]; nextCursor: string | null }>;
+  createCapabilityAccessRequest(body: CapabilityAccessRequestCreate, idempotencyKey?: string): Promise<CapabilityAccessRequest>;
+  listCapabilityAccessRequests(options?: {
+    direction?: 'incoming' | 'outgoing'; state?: CapabilityAccessRequestState; limit?: number; cursor?: string; userToken?: string;
+  }): Promise<{ items: CapabilityAccessRequest[]; nextCursor: string | null }>;
+  getCapabilityAccessRequest(requestId: string, options?: { userToken?: string }): Promise<CapabilityAccessRequest>;
+  withdrawCapabilityAccessRequest(requestId: string): Promise<CapabilityAccessRequest>;
+  declineCapabilityAccessRequest(requestId: string, reason: string, options?: { userToken?: string }): Promise<CapabilityAccessRequest>;
+  acceptCapabilityAccessRequest(requestId: string, options?: { userToken?: string }): Promise<CapabilityAccessRequest>;
   execute(target: ExecutionTarget, input: Json, idempotencyKey?: string, context?: ExecutionContext): Promise<Execution>;
   redeemTicket(invocation: { authorization: string | undefined; invocationId: string; input: Json }): Promise<TicketContext>;
   execution(id: string): Promise<Execution>;

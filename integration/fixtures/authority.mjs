@@ -19,7 +19,12 @@ async function operatorToken() {
   assert.fail("Operator authentication did not recover within thirty seconds");
 }
 async function admin(path, body, method = "GET") {
-  return fetch(`${base}/identity/admin/realms/junctura/${path}`, { method, headers: { Authorization: `Bearer ${adminToken}`, "Content-Type": "application/json" }, body: body === undefined ? undefined : JSON.stringify(body) });
+  const send = () => fetch(`${base}/identity/admin/realms/junctura/${path}`, { method, headers: { Authorization: `Bearer ${adminToken}`, "Content-Type": "application/json" }, body: body === undefined ? undefined : JSON.stringify(body) });
+  const response = await send();
+  if (response.status !== 401) return response;
+  // The operator token is short-lived; long suites can outlast it.
+  adminToken = await operatorToken();
+  return send();
 }
 async function login(username, password, clientId, clientSecret) {
   const verifier = randomBytes(32).toString("base64url");

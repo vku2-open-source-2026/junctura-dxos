@@ -91,6 +91,35 @@ export function requireWriter(identity) {
 
 export const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
+export function readCursorPage(params, queryError, cursorError, filters = {}) {
+  const payload = {};
+  const keys = new Set(["limit", "cursor", ...Object.keys(filters)]);
+  const supplied = [...params.keys()];
+  if (new Set(supplied).size !== supplied.length || supplied.some(key => !keys.has(key))) {
+    throw new HttpError(400, queryError);
+  }
+  if (params.has("limit")) {
+    const value = params.get("limit");
+    const limit = Number(value);
+    if (!/^[0-9]{1,3}$/.test(value) || limit < 1 || limit > 100) throw new HttpError(400, queryError);
+    payload.limit = limit;
+  }
+  if (params.has("cursor")) {
+    const value = params.get("cursor");
+    if (!/^[0-9a-f]{1,512}$/i.test(value)) throw new HttpError(400, cursorError);
+    payload.cursor = value.toLowerCase();
+  }
+  for (const [key, allowed] of Object.entries(filters)) {
+    if (!params.has(key)) continue;
+    const value = params.get(key);
+    if (!allowed.includes(value)) {
+      throw new HttpError(400, queryError);
+    }
+    payload[key] = value;
+  }
+  return payload;
+}
+
 export const jsonObject = value => value !== null && typeof value === "object" && !Array.isArray(value);
 
 export function canonicalJson(value) {
