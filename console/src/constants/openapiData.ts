@@ -123,6 +123,9 @@ function requestExample(endpoint: ApiEndpointDef): RequestExample {
       case "createResourceConsent":
         return { contentType, json: { resourceType: "record", resourceId: UUID,
           recipientUnit: "unit-b", purpose: "Review the selected record" } };
+      case "createResourceConsentRequest":
+        return { contentType, json: { resourceType: "record", resourceId: UUID,
+          purpose: "Review the selected record", expiresAt: "2030-01-01T00:00:00Z" } };
       case "v1CreateRecord":
       case "v2CreateRecord":
       case "v1ReplaceRecordData":
