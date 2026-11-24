@@ -144,6 +144,11 @@ function requestExample(endpoint: ApiEndpointDef): RequestExample {
           schema: { type: "object", required: ["code"], properties: { code: { type: "string" } } },
           indexed: ["code"], uniqueKey: "code", searchable: [], sensitive: [],
         } };
+      case "putFieldMaskingPolicy":
+        return { contentType, json: { fields: {
+          nationalId: { mask: "full", owner: true },
+          phone: { mask: "last4", roles: ["manager"] },
+        } } };
       case "createVersionedRecord":
       case "replaceVersionedRecord":
       case "upsertRecordByKey":

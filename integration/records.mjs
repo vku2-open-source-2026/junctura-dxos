@@ -48,17 +48,7 @@ before(async () => {
   recipient = await support.createBackend("recipient");
 });
 
-after(async () => {
-  try {
-    for (const app of [owner, recipient].filter(Boolean)) {
-      await sql(`DELETE FROM app_private.idempotency_results WHERE tenant_id = 'tenant-a'
-        AND caller_scope = sha256(convert_to(jsonb_build_array(${quoted(issuer)},'${app.subject}',
-          '${app.clientId}','${app.appId}'::uuid,NULL)::text,'UTF8'));`);
-    }
-  } finally {
-    await support.cleanup([owner, recipient], []);
-  }
-});
+after(() => support.cleanup([owner, recipient]));
 
 test("schema registration, replay, compatibility, sharing and grant redaction through HTTP", async () => {
   const name = collection("registered");

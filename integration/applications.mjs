@@ -379,8 +379,7 @@ test('same-tenant and foreign apps cannot bypass ownership through headers, v1, 
   assert.equal((await api(objectPath().replace('/v2/','/v1/'),serviceToken)).status,404);
   const claim={tenant_id:'tenant-a',iss:issuer,sub:resourceB.subject,client_id:resourceB.clientId,resource_writer:true,app_id:resourceA.app.appId};
   const set=`SET ROLE junctura_resource_api; SELECT set_config('request.jwt.claims',${q(JSON.stringify(claim))},false);`;
-  const hidden=await sql(`${set} SELECT count(*) FROM core.app_records WHERE id=${q(privateRecord.id)};`);
-  assert.equal(hidden.stdout.trim().split(/\r?\n/).at(-1),'0');
+  await assert.rejects(sql(`${set} SELECT data FROM core.app_records WHERE id=${q(privateRecord.id)};`));
   await assert.rejects(sql(`${set} UPDATE core.app_records SET owner_app_id=${q(resourceB.app.appId)} WHERE id=${q(privateRecord.id)};`));
   await assert.rejects(sql(`${set} INSERT INTO core.app_records(id,collection,data,owner_app_id) VALUES('${randomUUID()}','private_fixture','{}',${q(resourceA.app.appId)});`));
   const acl=await sql("SELECT has_table_privilege('junctura_api','core.app_records','SELECT'),has_table_privilege('junctura_app_api','core.app_records','SELECT'),has_function_privilege('junctura_api','core.resource_command(text,jsonb)','EXECUTE'),has_schema_privilege('junctura_resource_api','app_private','USAGE');");
@@ -390,7 +389,10 @@ test('same-tenant and foreign apps cannot bypass ownership through headers, v1, 
     const identity=${JSON.stringify(identity)};
     const jwt=applicationToken(identity,process.env.DATA_JWT_SECRET,'junctura_resource_api');
     let r=await fetch(process.env.DATA_URL+'/app_records?id=eq.${privateRecord.id}',{headers:{Authorization:'Bearer '+jwt}});
-    assert.equal(r.status,200);assert.deepEqual(await r.json(),[]);
+    assert.ok([403,404].includes(r.status));
+    const recordJwt=applicationToken(identity,process.env.DATA_JWT_SECRET,'junctura_record_api');
+    r=await fetch(process.env.DATA_URL+'/rpc/record_command',{method:'POST',headers:{Authorization:'Bearer '+recordJwt,'Content-Type':'application/json'},body:JSON.stringify({operation:'get',payload:{collection:'private_fixture',id:'${privateRecord.id}'}})});
+    assert.equal((await r.json()).status,404);
     r=await fetch(process.env.DATA_URL+'/rpc/resource_command',{method:'POST',headers:{Authorization:'Bearer '+jwt,'Content-Type':'application/json'},body:JSON.stringify({operation:'object_get',payload:{id:'${privateObject.id}'}})});
     assert.equal((await r.json()).status,404);
     identity.subject=${JSON.stringify(owner.id)};
@@ -400,8 +402,9 @@ test('same-tenant and foreign apps cannot bypass ownership through headers, v1, 
     const readonly=applicationToken({tenantId:'tenant-a',issuer:${JSON.stringify(issuer)},subject:${JSON.stringify(resourceA.subject)},clientId:${JSON.stringify(resourceA.clientId)},roles:['core-reader']},process.env.DATA_JWT_SECRET,'junctura_resource_api');
     r=await fetch(process.env.DATA_URL+'/rpc/resource_command',{method:'POST',headers:{Authorization:'Bearer '+readonly,'Content-Type':'application/json'},body:JSON.stringify({operation:'object_prepare',payload:{id:'${randomUUID()}'}})});
     assert.equal((await r.json()).status,403);
-    r=await fetch(process.env.DATA_URL+'/app_records',{method:'POST',headers:{Authorization:'Bearer '+readonly,'Content-Type':'application/json'},body:JSON.stringify({id:'${randomUUID()}',collection:'private_fixture',data:{}})});
-    assert.equal(r.status,403,'SQL writer enforcement does not depend on the HTTP adapter');
+    const recordReader=applicationToken({tenantId:'tenant-a',issuer:${JSON.stringify(issuer)},subject:${JSON.stringify(resourceA.subject)},clientId:${JSON.stringify(resourceA.clientId)},roles:['core-reader']},process.env.DATA_JWT_SECRET,'junctura_record_api');
+    r=await fetch(process.env.DATA_URL+'/rpc/record_command',{method:'POST',headers:{Authorization:'Bearer '+recordReader,'Content-Type':'application/json'},body:JSON.stringify({operation:'create',payload:{collection:'private_fixture',body:{data:{}}}})});
+    assert.equal((await r.json()).status,403,'SQL writer enforcement does not depend on the HTTP adapter');
     for(const path of ${JSON.stringify([recordPath(),objectPath()])}) {
       r=await fetch('http://127.0.0.1:8080'+path,{headers:{Authorization:'Bearer '+${JSON.stringify(resourceB.token)},'X-App-Id':${JSON.stringify(resourceA.app.appId)}}});assert.equal(r.status,404);
     }`);

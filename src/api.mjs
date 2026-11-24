@@ -320,7 +320,8 @@ export function createApi(config) {
     if (path === "/v2/data:export" || path === "/v2/data:import") {
       return handleRecordArchive(request, response, await authorize(request, true), config, new URL(request.url, "http://core"));
     }
-    if (path === "/v2/data:batch" || path?.startsWith("/v2/data/") || path?.startsWith("/v2/data-schemas/")) {
+    if (path === "/v2/data:batch" || path?.startsWith("/v2/data/") || path?.startsWith("/v2/data-schemas/") ||
+        path?.startsWith("/v2/data-masking/")) {
       const url = new URL(request.url, "http://core");
       const listing = request.method === "GET" && /^\/v2\/data\/[^/]+$/.test(path);
       if (/^\/v2\/data\/[^/]+\/aggregate$/.test(path) || (listing && (config.strictRecords ||

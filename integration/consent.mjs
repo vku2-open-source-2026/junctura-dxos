@@ -35,6 +35,9 @@ test("a verified subject grants and revokes audited delegated reads to a unit", 
     ROLLBACK;`);
   assert.equal(otherTenantLookup.split("\n").at(-1), "t");
 
+  await json(await request(`/v2/data-masking/${prefix}`, await exchange(ownerSource), {
+    method: "PUT", body: { fields: { label: { mask: "full", owner: true } } },
+  }), 200);
   const body = { resourceType: "record", resourceId: record.id, recipientUnit, purpose: "Review the selected record" };
   const create = (who, input, headers = idempotency()) => request(consents, who, { method: "POST", body: input, headers });
   const revoke = (who, grant) => request(`${consents}/${grant.consentId}/revoke`, who, { method: "POST", body: {} });
@@ -53,7 +56,7 @@ test("a verified subject grants and revokes audited delegated reads to a unit", 
 
   const readerToken = await exchange(readerSource);
   const readRecord = await request(target, readerToken);
-  assert.deepEqual((await json(readRecord, 200)).data, record.data);
+  assert.deepEqual((await json(readRecord, 200)).data, { label: "***" });
   const readObject = await request(objectPath, readerToken);
   assert.equal(readObject.status, 200);
   assert.equal(await readObject.text(), contents);
@@ -78,7 +81,7 @@ test("a verified subject grants and revokes audited delegated reads to a unit", 
   assert.deepEqual(Object.fromEntries(listed.consents.map(s => [s.consentId, s.status])), {
     [grant.consentId]: "revoked", [expiring.consentId]: "expired", [objectGrant.consentId]: "revoked",
   });
-  assert.equal((await request(target, await exchange(ownerSource))).status, 200);
+  assert.deepEqual((await json(await request(target, await exchange(ownerSource)), 200)).data, record.data);
 
   const history = await json(await request("/v1/me/data-access", owner), 200);
   const otherHistory = await json(await request("/v1/me/data-access", outsider), 200);

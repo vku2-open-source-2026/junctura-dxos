@@ -121,7 +121,7 @@ async function enforceAccess(config, fetcher, request, identity, claims, exchang
       userRoute: Boolean(exchange) || checkOnly || path === "/v1/identity" || path === "/v1/search" ||
         path === "/v1/capabilities/catalog" || path === "/v1/trust/access-requests" ||
         path?.startsWith("/v1/trust/access-requests/") || scopedRoute.test(path) || consentRequest,
-      managerOnly: write && path?.startsWith("/v2/data-schemas/"),
+      managerOnly: write && (path?.startsWith("/v2/data-schemas/") || path?.startsWith("/v2/data-masking/")),
       sourceClient: exchange ? claims.client_id : undefined,
       delegationEvent: exchange === "issue" ? "exchanged" : identity.actor && !exchange && !checkOnly ? "authorized" : undefined,
     } }),
