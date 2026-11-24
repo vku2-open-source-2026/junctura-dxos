@@ -142,6 +142,7 @@ Duplicate client binding remains reserved after revocation.
 | POST | `/v1/capabilities/{capabilityId}/versions/{version}/publish` | Publish with `{approvalId}` and `If-Match`. |
 | POST | `/v1/capabilities/{capabilityId}/versions/{version}/deprecate` | Deprecate publication; `{reason}` and `If-Match`. |
 | POST | `/v1/capabilities/{capabilityId}/versions/{version}/revoke` | Terminal revocation; `{reason}` and `If-Match`. |
+| PUT | `/v1/capabilities/{capabilityId}/versions/{version}/visibility` | Set catalog exposure `{visibility, units?, applications?}`; `If-Match`. |
 
 Create with `capabilities.write`, active provider application/enrollment, and owner authority or
 `capabilities.publish`; the enrolled provider owner must retain `capabilities.write`. Capability IDs
@@ -170,6 +171,23 @@ revocation is terminal. Conflicts include 409 `capability_conflict`, `immutable_
 `validation_required` or `approval_stale`; invalid manifests return 422 `invalid_manifest` with issues.
 Required audit writes, including validation reports and approval consumption, commit atomically
 with changes. See [SECURITY.md](SECURITY.md#audit) for audit access.
+
+### Catalog visibility
+
+Every version carries one catalog exposure level, defaulting to `hidden` for registered and
+migrated rows: `tenant` (whole organization), `units` (only callers whose token groups name a
+designated unit), `applications` (only the designated caller applications, matched against the
+human app assignment or the verified backend binding) and `hidden`. Setting `tenant` or `hidden`
+clears both designation lists. List and read results return only versions the caller is allowed
+to see: exact-grant discovery and management views behave as before, and on top of them a
+published version is returned under its exposure level. Exposure never crosses tenants. Setting
+the level requires `capabilities.publish`, or `capabilities.write` plus ownership of the provider
+application, an exact `If-Match`, and confirmed units/same-tenant applications in the designation
+list (1–64 entries each); unknown references return 404, malformed bodies 400
+`invalid_capability_visibility`, and missing or stale `If-Match` return 428/412. Every change is
+audited as `capability.visibility_changed` with the chosen level as the reason code. Existing
+denials are unchanged: an application without approved invoke authority is still refused with 403
+`capability_not_granted` and an `authorization.denied` audit row.
 
 ## Direct trust grants
 

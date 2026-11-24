@@ -8,12 +8,37 @@ import {
   parseManifestText,
   validateManifest,
 } from "./manifest.mjs";
-import { HttpError, json, readBody, readFlatJsonObject, uuidPattern } from "../../../platform/http/http.mjs";
+import { HttpError, json, jsonObject, parseRecordJson, readBody, readFlatJsonObject, uuidPattern } from "../../../platform/http/http.mjs";
 import { trustCommand, validateGrantApproval } from "../trust/trust.mjs";
 
-const CAPABILITY_PATH = /^\/v1\/capabilities\/([^/]+)\/versions(?:\/([^/]+))?(?:\/(validate|publish|deprecate|revoke))?$/;
+const CAPABILITY_PATH = /^\/v1\/capabilities\/([^/]+)\/versions(?:\/([^/]+))?(?:\/(validate|publish|deprecate|revoke|visibility))?$/;
 const CAPABILITY_ID = /^urn:junctura:capability:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}:[a-z][a-z0-9-]{0,62}$/;
 const VERSION = /^(0|[1-9][0-9]{0,8})\.(0|[1-9][0-9]{0,8})\.(0|[1-9][0-9]{0,8})$/;
+const VISIBILITY_LEVELS = new Set(["tenant", "units", "applications", "hidden"]);
+const UNIT_KEY = /^[a-z][a-z0-9-]{1,63}$/;
+
+// Catalog exposure update. The visibility level is required; the designation
+// list is required exactly when the level names its audience and forbidden
+// otherwise. Unknown keys, wrong shapes and oversized/duplicate entries fail.
+export function validateVisibilityBody(body) {
+  if (!jsonObject(body) || !VISIBILITY_LEVELS.has(body.visibility)) {
+    throw new HttpError(400, "invalid_capability_visibility");
+  }
+  const list = body.visibility === "units" || body.visibility === "applications" ? body.visibility : null;
+  const allowed = list ? new Set(["visibility", list]) : new Set(["visibility"]);
+  if (Object.keys(body).some(key => !allowed.has(key))) {
+    throw new HttpError(400, "invalid_capability_visibility");
+  }
+  const values = list ? body[list] : undefined;
+  if (list && (!Array.isArray(values) || values.length < 1 || values.length > 64 ||
+      new Set(values).size !== values.length ||
+      values.some(value => list === "units"
+        ? typeof value !== "string" || !value.isWellFormed() || !UNIT_KEY.test(value)
+        : typeof value !== "string" || !uuidPattern.test(value)))) {
+    throw new HttpError(400, "invalid_capability_visibility");
+  }
+  return body;
+}
 
 export async function handleCapabilities(request, response, identity, config, url) {
   if (!config.dataUrl) throw new HttpError(503, "capabilities_unavailable");
@@ -50,6 +75,15 @@ export async function handleCapabilities(request, response, identity, config, ur
     const issues = validateManifest(manifest, { capabilityId, ...(version ? { version } : {}) });
     if (issues.length) throw new ManifestValidationError(issues);
     payload = { capabilityId, version: manifest.version, manifest, providerAppId: manifest.providerAppId, digest: manifestDigest(manifest) };
+  } else if (operation === "visibility") {
+    if (request.headers["content-type"]?.split(";", 1)[0].trim() !== "application/json") throw new HttpError(415, "json_required");
+    const bytes = await readBody(request, 16384);
+    let body;
+    try { body = parseRecordJson(new TextDecoder("utf-8", { fatal: true }).decode(bytes)); }
+    catch { throw new HttpError(400, "invalid_capability_visibility"); }
+    validateVisibilityBody(body);
+    payload = { capabilityId, version, visibility: body.visibility,
+      ...(body.units ? { units: body.units } : {}), ...(body.applications ? { applications: body.applications } : {}) };
   } else {
     const body = operation === "get" ? {} : await readFlatJsonObject(request);
     payload = { capabilityId, ...(version ? { version } : {}), ...body };
@@ -166,7 +200,8 @@ async function listCapabilities(request, response, identity, config, url) {
 function capabilityOperation(method, version, action) {
   if (!version && method === "POST") return "register";
   if (version && !action) return method === "GET" ? "get" : method === "PUT" ? "update" : undefined;
-  if (version && action && method === "POST") return action;
+  if (version && action && method === "POST" && action !== "visibility") return action;
+  if (version && action === "visibility" && method === "PUT") return "visibility";
   return undefined;
 }
 
