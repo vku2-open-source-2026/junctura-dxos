@@ -86,6 +86,7 @@ export const API_DOCS_COPY_VI: Record<string, ApiDocsCopy> = {
   publishCapabilityVersion: { summary: "Công bố một phiên bản năng lực đã kiểm tra.", when: "Dùng khi bên cung cấp sẵn sàng cho ứng dụng khác gọi năng lực." },
   deprecateCapabilityVersion: { summary: "Ngừng khuyến nghị một phiên bản nhưng vẫn giữ dùng được.", when: "Dùng khi có phiên bản mới và muốn hướng người dùng chuyển sang." },
   revokeCapabilityVersion: { summary: "Thu hồi một phiên bản năng lực đã công bố.", when: "Dùng khi phiên bản có lỗi hoặc không còn được phép sử dụng." },
+  setCapabilityVersionVisibility: { summary: "Đổi mức hiển thị của một phiên bản trong danh mục tổ chức.", when: "Dùng để mở phiên bản cho cả tổ chức, một số đơn vị hoặc một số ứng dụng chỉ định; mặc định là ẩn." },
   proposeTrustGrant: { summary: "Đề xuất cho một ứng dụng gọi năng lực của ứng dụng khác.", when: "Dùng khi bên cung cấp muốn cấp quyền có mục đích và hạn dùng." },
   getTrustGrant: { summary: "Đọc thông tin một quyền giữa hai ứng dụng.", when: "Dùng để kiểm tra phạm vi, mục đích và hạn dùng của quyền." },
   activateTrustGrant: { summary: "Kích hoạt quyền sau khi quản trị viên khác duyệt.", when: "Dùng khi quyền đã được đề xuất và cần người thứ hai phê duyệt." },
