@@ -29,6 +29,9 @@ import type {
   TrustGraphEdge,
   TrustGraphNode,
   TrustGrant,
+  AccessRequestState,
+  CapabilityAccessRequest,
+  CapabilityCatalogItem,
   CapabilityVersion,
   SubjectConsent,
   EmergencyAccess,
@@ -664,6 +667,105 @@ export class ApiClient {
     if (!res.ok) await this.fail(res, "capabilities_unavailable");
     const data = (await res.json()) as { items?: CapabilityVersion[] };
     return Array.isArray(data.items) ? data.items : [];
+  }
+
+  public async listCapabilityCatalog(
+    filters: { limit?: number; cursor?: string } = {}
+  ): Promise<ApiPage<CapabilityCatalogItem>> {
+    const limit = Math.min(100, Math.max(1, Math.round(filters.limit ?? 100)));
+    const query = new URLSearchParams({ limit: String(limit) });
+    if (filters.cursor) query.set("cursor", filters.cursor);
+    const res = await this.send(`/v1/capabilities/catalog?${query}`, {
+      signal: AbortSignal.timeout(8000),
+    });
+    if (!res.ok) await this.fail(res, "capability_catalog_unavailable");
+    return (await res.json()) as ApiPage<CapabilityCatalogItem>;
+  }
+
+  public async listCapabilityAccessRequests(
+    filters: {
+      direction?: "incoming" | "outgoing";
+      state?: AccessRequestState;
+      limit?: number;
+      cursor?: string;
+    } = {}
+  ): Promise<ApiPage<CapabilityAccessRequest>> {
+    const limit = Math.min(100, Math.max(1, Math.round(filters.limit ?? 100)));
+    const query = new URLSearchParams({ limit: String(limit) });
+    if (filters.direction) query.set("direction", filters.direction);
+    if (filters.state) query.set("state", filters.state);
+    if (filters.cursor) query.set("cursor", filters.cursor);
+    const res = await this.send(`/v1/trust/access-requests?${query}`, {
+      signal: AbortSignal.timeout(8000),
+    });
+    if (!res.ok) await this.fail(res, "access_requests_unavailable");
+    return (await res.json()) as ApiPage<CapabilityAccessRequest>;
+  }
+
+  public async acceptCapabilityAccessRequest(
+    requestId: string
+  ): Promise<CapabilityAccessRequest> {
+    const res = await this.send(
+      `/v1/trust/access-requests/${encodeURIComponent(requestId)}/accept`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      }
+    );
+    if (!res.ok) await this.fail(res, "access_request_failed");
+    return (await res.json()) as CapabilityAccessRequest;
+  }
+
+  public async declineCapabilityAccessRequest(
+    requestId: string,
+    reason: string
+  ): Promise<CapabilityAccessRequest> {
+    const trimmed = reason.trim();
+    if (!trimmed || trimmed.length > 512) {
+      throw new ApiError(400, "reason_required");
+    }
+    const res = await this.send(
+      `/v1/trust/access-requests/${encodeURIComponent(requestId)}/decline`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reason: trimmed }),
+      }
+    );
+    if (!res.ok) await this.fail(res, "access_request_failed");
+    return (await res.json()) as CapabilityAccessRequest;
+  }
+
+  public async withdrawCapabilityAccessRequest(
+    requestId: string
+  ): Promise<CapabilityAccessRequest> {
+    const res = await this.send(
+      `/v1/trust/access-requests/${encodeURIComponent(requestId)}/withdraw`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      }
+    );
+    if (!res.ok) await this.fail(res, "access_request_failed");
+    return (await res.json()) as CapabilityAccessRequest;
+  }
+
+  public async createCapabilityAccessRequest(
+    body: { capabilityId: string; version: string; purpose: string },
+    idempotencyKey: string
+  ): Promise<CapabilityAccessRequest> {
+    const res = await this.send("/v1/trust/access-requests", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Idempotency-Key": idempotencyKey,
+      },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) await this.fail(res, "access_request_failed");
+    return (await res.json()) as CapabilityAccessRequest;
   }
 
   public async getWorkflowSummary(): Promise<WorkflowSummary> {

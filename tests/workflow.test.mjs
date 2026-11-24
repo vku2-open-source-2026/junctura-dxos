@@ -5,6 +5,7 @@ import { readFileSync } from "node:fs";
 import { Readable } from "node:stream";
 import { test } from "node:test";
 import { canonicalInput, handleWorkflow } from "../src/modules/workflow/workflow.mjs";
+import { logicalRequestDigest } from "../src/platform/http/http.mjs";
 import { startWorkflowReconciler, workflowTaskPage } from "../src/modules/workflow/tasks.mjs";
 
 const config = { dataUrl: "https://data.invalid", dataSecret: "fixture",
@@ -93,6 +94,111 @@ test("an accepted task completion replays from PostgreSQL without calling Flowab
   await completeTask({ headers: { "idempotency-key": key } }, response, identity, config, receipt.execution.id, { taskId: receipt.taskId },
     () => assert.fail("a recorded receipt needs no engine request"));
   assert.equal(calls, 1);
+});
+
+const completionTask = { id: "task-1", tenantId: identity.tenantId, processInstanceId: "run-1",
+  processDefinitionId: "process:1:1", taskDefinitionKey: "review", executionId: "branch-1" };
+const completionExecution = { id: "run-1", definitionId: "process:1:1", status: "running", input: {}, dueAt: null };
+const completionReceipt = { taskId: "task-1", completionStatus: "pending",
+  execution: { ...completionExecution, definitionId: "process:1:1" } };
+
+async function runCompletion(t, body, readExecution) {
+  const { completeTask } = await import("../src/modules/workflow/tasks.mjs");
+  const payloads = [];
+  let status = 200;
+  t.mock.method(globalThis, "fetch", async (url, options) => {
+    if (new URL(url).origin === config.dataUrl) {
+      const { operation, payload } = JSON.parse(options.body);
+      assert.equal(operation, "complete");
+      payloads.push(payload);
+      const current = status;
+      status = 202;
+      return Response.json({ status: current, value: completionReceipt });
+    }
+    assert.equal(new URL(url).pathname, "/runtime/tasks/task-1");
+    return Response.json(completionTask);
+  });
+  const response = { writeHead: value => assert.equal(value, 202), end: value => assert.deepEqual(JSON.parse(value), completionReceipt) };
+  await completeTask({ headers: { "idempotency-key": "11111111-1111-4111-8111-111111111111" } }, response,
+    identity, config, "run-1", body, readExecution ?? (() => completionExecution));
+  return payloads;
+}
+
+test("task completion merges output into process variables as serialized JSON", async (t) => {
+  const payloads = await runCompletion(t, { taskId: "task-1", output: { report: { lines: [1, 2] }, note: "ok" } });
+  assert.equal(payloads.length, 2);
+  const variables = { report: "{\"lines\":[1,2]}", note: "ok" };
+  assert.deepEqual(payloads[0].variables, variables);
+  assert.equal(payloads[0].active, undefined);
+  assert.deepEqual(payloads[1].variables, variables);
+  assert.equal(payloads[1].active, true);
+  assert.equal(payloads[1].definitionId, "process:1:1");
+  assert.equal(payloads[1].digest, logicalRequestDigest({ body: { taskId: "task-1", output: { report: { lines: [1, 2] }, note: "ok" } } }));
+});
+
+test("task completion accepts decision and reason coming from output", async (t) => {
+  const payloads = await runCompletion(t, { taskId: "task-1", output: { decision: "approved", reason: "ok", score: 7 } });
+  assert.deepEqual(payloads[1].variables, { decision: "approved", reason: "ok", score: 7 });
+});
+
+test("task completion rejects output that is not a JSON object", async (t) => {
+  const { completeTask } = await import("../src/modules/workflow/tasks.mjs");
+  t.mock.method(globalThis, "fetch", async () => assert.fail("invalid output must not reach SQL or the engine"));
+  const response = { writeHead: () => assert.fail(), end: () => assert.fail() };
+  for (const output of [null, [], "x", 5, true]) {
+    await assert.rejects(
+      completeTask({ headers: { "idempotency-key": "11111111-1111-4111-8111-111111111111" } }, response,
+        identity, config, "run-1", { taskId: "task-1", output }, () => assert.fail()),
+      { status: 400, message: "invalid_request" });
+  }
+});
+
+test("task completion caps output at 64 KiB", async (t) => {
+  const { completeTask } = await import("../src/modules/workflow/tasks.mjs");
+  t.mock.method(globalThis, "fetch", async () => Response.json({ status: 202, value: completionReceipt }));
+  const response = { writeHead: value => assert.equal(value, 202), end: value => assert.deepEqual(JSON.parse(value), completionReceipt) };
+  const options = { headers: { "idempotency-key": "11111111-1111-4111-8111-111111111111" } };
+  await assert.rejects(
+    completeTask(options, response, identity, config, "run-1", { taskId: "task-1", output: { blob: "x".repeat(65526) } }, () => assert.fail()),
+    { status: 413, message: "body_too_large" });
+  await completeTask(options, response, identity, config, "run-1", { taskId: "task-1", output: { blob: "x".repeat(65525) } },
+    () => assert.fail("a recorded receipt needs no engine request"));
+});
+
+test("task completion rejects output keys that collide with variables or reserved names", async (t) => {
+  const { completeTask } = await import("../src/modules/workflow/tasks.mjs");
+  t.mock.method(globalThis, "fetch", async () => assert.fail("invalid output must not reach SQL or the engine"));
+  const response = { writeHead: () => assert.fail(), end: () => assert.fail() };
+  for (const body of [
+    { taskId: "task-1", variables: { note: "a" }, output: { note: "b" } },
+    { taskId: "task-1", output: { "bad-name": 1 } },
+    { taskId: "task-1", output: { "9lives": 1 } },
+    { taskId: "task-1", output: { input: "x" } },
+    { taskId: "task-1", output: { __junctura_completion: "x" } },
+    { taskId: "task-1", output: { decision: { approved: true } } },
+    { taskId: "task-1", output: { decision: "" } },
+    { taskId: "task-1", output: { reason: "y".repeat(501) } },
+  ]) {
+    await assert.rejects(
+      completeTask({ headers: { "idempotency-key": "11111111-1111-4111-8111-111111111111" } }, response,
+        identity, config, "run-1", body, () => assert.fail()),
+      { status: 400, message: "invalid_request" });
+  }
+});
+
+test("task completion returns 404 for a task of another execution or definition", async (t) => {
+  const { completeTask } = await import("../src/modules/workflow/tasks.mjs");
+  const response = { writeHead: () => assert.fail(), end: () => assert.fail() };
+  const options = { headers: { "idempotency-key": "11111111-1111-4111-8111-111111111111" } };
+  let engineTask = { ...completionTask, processInstanceId: "run-2" };
+  t.mock.method(globalThis, "fetch", async (url) => new URL(url).origin === config.dataUrl
+    ? Response.json({ status: 200, value: completionReceipt })
+    : Response.json(engineTask));
+  await assert.rejects(completeTask(options, response, identity, config, "run-1", { taskId: "task-1" },
+    () => completionExecution), { status: 404, message: "not_found" });
+  engineTask = { ...completionTask, processDefinitionId: "process:2:2" };
+  await assert.rejects(completeTask(options, response, identity, config, "run-1", { taskId: "task-1" },
+    () => completionExecution), { status: 404, message: "not_found" });
 });
 
 test("inbox forwards the definition filter and caps the SQL input at 20 engine pages", async (t) => {

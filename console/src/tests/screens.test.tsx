@@ -53,6 +53,7 @@ describe("Signed-in screens render from real API data", () => {
     ["queue", viStrings.queue.title, viStrings.queue.emptyTitle],
     ["apps", viStrings.applications.title, viStrings.applications.listEmptyTitle],
     ["caps", viStrings.capabilities.title, viStrings.capabilities.capsEmptyTitle],
+    ["catalog", viStrings.catalog.title, viStrings.catalog.emptyTitle],
     ["grants", viStrings.grants.title, viStrings.grants.emptyTitle],
     ["connect-map", viStrings.connect.title, undefined],
     ["records", viStrings.records.title, undefined],

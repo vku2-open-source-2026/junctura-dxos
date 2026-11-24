@@ -6697,7 +6697,7 @@
       "post": {
         "operationId": "completeWorkflowTask",
         "summary": "Complete a specific workflow task",
-        "description": "Business workflows require taskId. Core checks execution, tenant, unit and candidate-group membership before accepting the command, including replays. A task claimed by another caller returns 409 task_claimed; a completed task returns 409 task_already_completed for a new attempt. A valid claim by the caller or an unclaimed task can be completed. variables supplies primitive BPMN routing values and replaces the proposed output field. Optional records are creates owned by the calling app; using them requires an active binding for that app and a verified user context. Core validates and commits them with a durable completion outbox entry. A 202 means the task transition is still pending. An identical replay with the original Idempotency-Key returns the first result even if the task has since completed. Read execution state and history after a 202. Other parallel tasks remain pending. While an accepted completion is pending, cancellation conflicts. The empty object retains synchronous compatibility for the technical checkpoint and executions started before workflow task policy was introduced.",
+        "description": "Business workflows require taskId. Core checks execution, tenant, unit and candidate-group membership before accepting the command, including replays. A task claimed by another caller returns 409 task_claimed; a completed task returns 409 task_already_completed for a new attempt. A valid claim by the caller or an unclaimed task can be completed. variables supplies primitive BPMN routing values. The optional output object supplies up to 64 KiB of business results: its keys become process variables, must not collide with variables keys, and structured values are stored as JSON strings. Optional records are creates owned by the calling app; using them requires an active binding for that app and a verified user context. Core validates and commits them with a durable completion outbox entry. A 202 means the task transition is still pending. An identical replay with the original Idempotency-Key returns the first result even if the task has since completed. Read execution state and history after a 202. Other parallel tasks remain pending. While an accepted completion is pending, cancellation conflicts. The empty object retains synchronous compatibility for the technical checkpoint and executions started before workflow task policy was introduced.",
         "tags": [
           "tenant"
         ],
@@ -6747,6 +6747,12 @@
                   "decision": "approved",
                   "reason": "Criteria met",
                   "approved": true
+                },
+                "output": {
+                  "summary": {
+                    "lines": 3
+                  },
+                  "note": "Reviewed"
                 },
                 "records": [
                   {
@@ -11652,6 +11658,42 @@
         "x-max-utf8-bytes": 4096,
         "description": "Maximum 4,096 bytes when compactly encoded as UTF-8 JSON. Core reserves input and __junctura_completion. decision and reason are optional history fields. Keep sensitive data out of variables."
       },
+      "WorkflowTaskOutput": {
+        "type": "object",
+        "propertyNames": {
+          "type": "string",
+          "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,63}$",
+          "not": {
+            "enum": [
+              "input",
+              "__junctura_completion"
+            ]
+          }
+        },
+        "additionalProperties": {
+          "type": [
+            "string",
+            "number",
+            "boolean",
+            "object",
+            "array"
+          ]
+        },
+        "properties": {
+          "decision": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          }
+        },
+        "x-max-utf8-bytes": 65536,
+        "description": "Optional business result; keys become process variables like variables and must not collide with variables keys. Maximum 65,536 bytes when compactly encoded as UTF-8 JSON. Core reserves input and __junctura_completion. Structured values are stored as JSON strings. decision and reason are optional history fields. Keep sensitive data out of output."
+      },
       "WorkflowTaskCompletion": {
         "type": "object",
         "properties": {
@@ -11661,6 +11703,9 @@
           },
           "variables": {
             "$ref": "#/components/schemas/WorkflowTaskVariables"
+          },
+          "output": {
+            "$ref": "#/components/schemas/WorkflowTaskOutput"
           },
           "records": {
             "type": "array",

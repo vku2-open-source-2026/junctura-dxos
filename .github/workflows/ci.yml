@@ -117,6 +117,8 @@ jobs:
         run: npm run test:catalog-visibility
       - name: Verify workflow task policy and outbox against Flowable
         run: npm run test:workflow-tasks
+      - name: Verify workflow task completion output against Flowable
+        run: npm run test:workflow-task-output
       - name: Verify registration, guarded capability invocation, resource isolation and Flowable worker
         run: |
           npm run test:applications

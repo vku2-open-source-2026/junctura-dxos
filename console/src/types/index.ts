@@ -337,6 +337,46 @@ export interface CapabilityVersion {
   digest: string;
 }
 
+export type CatalogAccessState = "none" | "requested" | "granted";
+
+export type CatalogVisibility = "tenant" | "units" | "applications" | "hidden";
+
+export interface CapabilityCatalogItem {
+  capabilityId: string;
+  versionId: string;
+  providerAppId: string;
+  version: string;
+  digest: string;
+  state: "published";
+  visibility: CatalogVisibility;
+  title: string;
+  description: string;
+  publishedAt: string;
+  myAccess: CatalogAccessState;
+  manifest?: CapabilityManifest;
+}
+
+export type AccessRequestState =
+  | "pending"
+  | "withdrawn"
+  | "declined"
+  | "accepted";
+
+export interface CapabilityAccessRequest {
+  requestId: string;
+  providerAppId: string;
+  consumerAppId: string;
+  capabilityId: string;
+  version: string;
+  manifestDigest: string;
+  purpose: string;
+  state: AccessRequestState;
+  reason: string | null;
+  grantId: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface AuditChainBreak {
   chainSeq: number;
   eventId: string | null;
