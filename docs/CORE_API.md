@@ -114,6 +114,8 @@ Methods are included with each family; action suffixes are described in the link
 | `/v1/compositions` and `/*` (GET, POST, PUT) | Opt-in C4B registry/lifecycle | `config.compositionRuntime`; management `compositions.write` / `compositions.publish` | [CAPABILITIES.md](CAPABILITIES.md) |
 | `/v1/me/consents` (GET, POST), `/{consentId}/revoke` (POST) | Manage the caller's own consents | Own authenticated login with a matching binding if the token supplies `subjectId` | [SECURITY.md](SECURITY.md) |
 | `/v1/me/resource-consents` (GET, POST), `/{consentId}/revoke` (POST) | Manage the caller's consent for an organization unit to read a record or linked object | Own login token with a verified subject binding | Resource consent below |
+| `/v1/resource-consent-requests` (POST), `/{requestId}` (GET), `/{requestId}/cancel` (POST) | Submit, check or cancel a request for resource consent | Exchanged token with a current application assignment in the original unit | Resource consent requests below |
+| `/v1/me/resource-consent-requests` (GET), `/{requestId}/accept` and `/{requestId}/decline` (POST) | List and decide the subject's pending resource consent requests | Own login token with a verified subject binding | Resource consent requests below |
 | `/v1/me/data-access` (GET), `/{accessId}/flag` (POST) | Merged access history naming the caller as data subject; flag a visible entry for review | Verified client and own tenant, issuer and subject | [SECURITY.md](SECURITY.md) |
 | `/v1/me/emergency-accesses/{executionId}/feedback` (POST) | The subject's feedback on their own break-glass access | Verified client and own tenant, issuer and subject | [SECURITY.md](SECURITY.md) |
 | `/v1/emergency-accesses` (GET), `/{executionId}/review` (POST) | Review break-glass invocations | List: management `trust.approve` or `audit.read`; review: `trust.approve` and writer | [SECURITY.md](SECURITY.md) |
@@ -164,7 +166,7 @@ and upstream send/read to 15 seconds. Upstream URLs are fixed configuration. Aut
 
 The application backend sends `POST /v1/token-exchange` with its enrolled service account's access token in `Authorization: Bearer` and the user's login access token in a JSON body `{"subjectToken":"<user-access-token>"}`. The login token must come from the same application client and tenant. Core resolves the user's current assignment and pins the unit selected by the application access rules. If the application credential names a unit, that unit must match.
 
-Present the returned `access_token` as a bearer to `/v1/identity`, `/v1/search`, or the v2 record, schema and object routes permitted by the current assignment. It carries the user in `sub`, the app client and its service account in `act`, and the verified tenant and selected unit. Writes require `core-writer` in both input tokens and a current assignment that permits the operation. The bearer lasts at most 60 seconds and expires by the earlier input expiry. To renew access, exchange an active login token and an active service account token again. Token exchange accepts only those two input credentials.
+Present the returned `access_token` as a bearer to `/v1/identity`, `/v1/search`, the resource consent request routes for the requester, or the v2 record, schema and object routes permitted by the current assignment. It carries the user in `sub`, the app client and its service account in `act`, and the verified tenant and selected unit. Changes to v2 resources require `core-writer` in both input tokens and a current assignment that permits the operation. The bearer lasts at most 60 seconds and expires by the earlier input expiry. To renew access, exchange an active login token and an active service account token again. Token exchange accepts only those two input credentials.
 
 Core uses Keycloak Standard Token Exchange V2 to obtain an access-only user proof and checks it on every delegated call. Core also checks the active app, enrollment, assignment and unit on every call. For an existing realm, apply the token exchange attributes and audience mapper on `junctura-core` from the realm configuration. [Realm configuration](../infra/keycloak/realm.json)
 
@@ -190,6 +192,25 @@ Supply a future UTC `expiresAt` to set a time limit. Omit it to grant consent un
 For consent-based access, a user in the recipient unit presents an exchanged bearer for an application currently assigned to that user in that unit. The grant covers exact reads through `GET /v2/data/{collection}/{id}` or `GET /v2/objects/{id}`. Application permissions for lists, searches and writes follow their existing rules. If ordinary read authority is absent and the selected unit's matching consent was revoked or expired, Core returns `403` with `consent_revoked` or `consent_expired` and a `requestId`. Without a matching grant for that unit, the usual resource or unit denial applies.
 
 The subject's `GET /v1/me/data-access` shows the attempt under `action: "resource.read"` with the reader's login, recipient unit, app, time, resource reference, consent ID, request ID and outcome. An authorized tenant reader can query `GET /v1/audit-events?action=resource.read` for the Core audit entries, which also include the resource subject ID and the application client ID.
+
+### Resource consent requests
+
+With an exchanged bearer, send `POST /v1/resource-consent-requests` with the resource type (`record` or `object`), ID, purpose and a future UTC expiry.
+
+```json
+{
+  "resourceType": "record",
+  "resourceId": "44444444-4444-4444-8444-444444444444",
+  "purpose": "Review the selected record",
+  "expiresAt": "2030-01-01T00:00:00Z"
+}
+```
+
+Core uses the verified subject of the resource in the caller's organization and the requester's currently assigned unit. A viewer assignment is sufficient. A pending request for the same resource, unit and purpose returns `409 consent_request_already_pending`. A new request returns `201` with its `requestId` and a `Location` header. The original requester uses that location with a current exchanged token for the same unit to check `pending`, `accepted`, `declined`, `expired` or `cancelled`. To cancel a pending request, send `POST /v1/resource-consent-requests/{requestId}/cancel` with `{}`.
+
+The subject uses their own verified login to call `GET /v1/me/resource-consent-requests`. The `requests` array contains pending requests, newest first. Post `{}` to `/v1/me/resource-consent-requests/{requestId}/accept` or post `{}` or `{"reason":"The proposed duration is too long."}` to `/v1/me/resource-consent-requests/{requestId}/decline`. The requester can see `declineReason` when supplied. A decision or cancellation after the request is settled returns `409 consent_request_not_pending`. If the requested version or recipient unit has become unavailable, acceptance can return `409 consent_request_target_changed`.
+
+Acceptance uses the proposed expiry and returns the new `consentId`. The resulting resource consent includes the original `requestId` and follows the read and revocation behavior above. The request stays `accepted` after grant revocation. A pending request reaches its deadline at `expiresAt`. The next authorized check or submission for the same pending-request key records and audits the expiry. Unit retirement closes pending requests. Tenant audit records each transition as `audit.resource_consent_request_<status>`, with the consent request ID in `resourceId`. Authorized tenant readers can query those events with `GET /v1/audit-events?action=audit.resource_consent_request_accepted`.
 
 ## Structured data
 

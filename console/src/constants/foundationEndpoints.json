@@ -4477,5 +4477,275 @@
     "successStatus": "200",
     "successContentType": "application/json",
     "successHasBody": true
+  },
+  {
+    "path": "/v1/resource-consent-requests",
+    "method": "POST",
+    "operationId": "createResourceConsentRequest",
+    "summary": "Request consent to read a resource",
+    "description": "Use an exchanged token to send a request to the verified subject of a record or attached object in the same organization. The recipient is the sender’s current application unit. A future UTC expiry is required.",
+    "tags": [
+      "tenant"
+    ],
+    "security": [
+      {
+        "coreBearer": []
+      }
+    ],
+    "responses": [
+      "201",
+      "400",
+      "401",
+      "403",
+      "404",
+      "405",
+      "409",
+      "413",
+      "415",
+      "429",
+      "502",
+      "503",
+      "504"
+    ],
+    "hasRequestBody": true,
+    "requestContentTypes": [
+      "application/json"
+    ],
+    "pathParameters": [],
+    "queryParameters": [],
+    "headerParameters": [],
+    "successStatus": "201",
+    "successContentType": "application/json",
+    "successHasBody": true
+  },
+  {
+    "path": "/v1/resource-consent-requests/{requestId}",
+    "method": "GET",
+    "operationId": "getResourceConsentRequest",
+    "summary": "Read a resource consent request",
+    "description": "With an exchanged token, the requester can check status while assigned to the original unit.",
+    "tags": [
+      "tenant"
+    ],
+    "security": [
+      {
+        "coreBearer": []
+      }
+    ],
+    "responses": [
+      "200",
+      "400",
+      "401",
+      "403",
+      "404",
+      "405",
+      "429",
+      "502",
+      "503",
+      "504"
+    ],
+    "hasRequestBody": false,
+    "requestContentTypes": [],
+    "pathParameters": [
+      {
+        "name": "requestId",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        },
+        "description": "Resource consent request ID."
+      }
+    ],
+    "queryParameters": [],
+    "headerParameters": [],
+    "successStatus": "200",
+    "successContentType": "application/json",
+    "successHasBody": true
+  },
+  {
+    "path": "/v1/resource-consent-requests/{requestId}/cancel",
+    "method": "POST",
+    "operationId": "cancelResourceConsentRequest",
+    "summary": "Cancel a resource consent request",
+    "description": "With an exchanged token, the requester can cancel a pending request while assigned to the original unit.",
+    "tags": [
+      "tenant"
+    ],
+    "security": [
+      {
+        "coreBearer": []
+      }
+    ],
+    "responses": [
+      "200",
+      "400",
+      "401",
+      "403",
+      "404",
+      "405",
+      "409",
+      "413",
+      "415",
+      "429",
+      "502",
+      "503",
+      "504"
+    ],
+    "hasRequestBody": true,
+    "requestContentTypes": [
+      "application/json"
+    ],
+    "pathParameters": [
+      {
+        "name": "requestId",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        },
+        "description": "Resource consent request ID."
+      }
+    ],
+    "queryParameters": [],
+    "headerParameters": [],
+    "successStatus": "200",
+    "successContentType": "application/json",
+    "successHasBody": true
+  },
+  {
+    "path": "/v1/me/resource-consent-requests",
+    "method": "GET",
+    "operationId": "listPendingResourceConsentRequests",
+    "summary": "List the subject’s pending resource consent requests",
+    "description": "Use the subject’s own login token with a verified subject binding. Returns pending requests in newest-first order.",
+    "tags": [
+      "tenant"
+    ],
+    "security": [
+      {
+        "coreBearer": []
+      }
+    ],
+    "responses": [
+      "200",
+      "400",
+      "401",
+      "403",
+      "404",
+      "405",
+      "429",
+      "502",
+      "503",
+      "504"
+    ],
+    "hasRequestBody": false,
+    "requestContentTypes": [],
+    "pathParameters": [],
+    "queryParameters": [],
+    "headerParameters": [],
+    "successStatus": "200",
+    "successContentType": "application/json",
+    "successHasBody": true
+  },
+  {
+    "path": "/v1/me/resource-consent-requests/{requestId}/accept",
+    "method": "POST",
+    "operationId": "acceptResourceConsentRequest",
+    "summary": "Accept a resource consent request",
+    "description": "Use the subject’s own login token with a verified subject binding. Grants consent to the requested resource version, unit, purpose and expiry. The response contains the linked consentId.",
+    "tags": [
+      "tenant"
+    ],
+    "security": [
+      {
+        "coreBearer": []
+      }
+    ],
+    "responses": [
+      "200",
+      "400",
+      "401",
+      "403",
+      "404",
+      "405",
+      "409",
+      "413",
+      "415",
+      "429",
+      "502",
+      "503",
+      "504"
+    ],
+    "hasRequestBody": true,
+    "requestContentTypes": [
+      "application/json"
+    ],
+    "pathParameters": [
+      {
+        "name": "requestId",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        },
+        "description": "Resource consent request ID."
+      }
+    ],
+    "queryParameters": [],
+    "headerParameters": [],
+    "successStatus": "200",
+    "successContentType": "application/json",
+    "successHasBody": true
+  },
+  {
+    "path": "/v1/me/resource-consent-requests/{requestId}/decline",
+    "method": "POST",
+    "operationId": "declineResourceConsentRequest",
+    "summary": "Decline a resource consent request",
+    "description": "Use the subject’s own login token with a verified subject binding. An optional reason is shown to the requester.",
+    "tags": [
+      "tenant"
+    ],
+    "security": [
+      {
+        "coreBearer": []
+      }
+    ],
+    "responses": [
+      "200",
+      "400",
+      "401",
+      "403",
+      "404",
+      "405",
+      "409",
+      "413",
+      "415",
+      "429",
+      "502",
+      "503",
+      "504"
+    ],
+    "hasRequestBody": true,
+    "requestContentTypes": [
+      "application/json"
+    ],
+    "pathParameters": [
+      {
+        "name": "requestId",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        },
+        "description": "Resource consent request ID."
+      }
+    ],
+    "queryParameters": [],
+    "headerParameters": [],
+    "successStatus": "200",
+    "successContentType": "application/json",
+    "successHasBody": true
   }
 ]

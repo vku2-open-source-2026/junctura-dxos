@@ -75,6 +75,11 @@ def composition_inventory(spec, source=None):
 EXPECTED = {
     '/health': {'get', 'head'}, '/ready': {'get'}, '/v1/identity': {'get'}, '/v1/events': {'get'}, '/v1/token-exchange': {'post'},
     '/v1/me/resource-consents': {'get', 'post'}, '/v1/me/resource-consents/{consentId}/revoke': {'post'},
+    '/v1/resource-consent-requests': {'post'}, '/v1/resource-consent-requests/{requestId}': {'get'},
+    '/v1/resource-consent-requests/{requestId}/cancel': {'post'},
+    '/v1/me/resource-consent-requests': {'get'},
+    '/v1/me/resource-consent-requests/{requestId}/accept': {'post'},
+    '/v1/me/resource-consent-requests/{requestId}/decline': {'post'},
     '/v1/applications': {'get', 'post'}, '/v1/applications/stats': {'get'}, '/v1/applications/{appId}': {'get', 'patch'},
     '/v1/applications/{appId}/assignments': {'get', 'post'},
     '/v1/applications/{appId}/assignments/{assignmentId}': {'delete'},
@@ -235,14 +240,15 @@ def validate_paths(spec, dereference, *, foundation=False):
             return
         if not planned:
             require((ROOT / operation['x-junctura-source']).is_file(), oid + ': source missing')
-            require(operation['x-junctura-test-suite'] in ('core', 'applications', 'records', 'record-queries', 'record-archives', 'app-group-shares', 'directory', 'workflow-tasks', 'events', 'object-metadata', 'search', 'subject-access', 'app-access', 'delegation', 'consent'), oid + ': coverage suite missing')
+            require(operation['x-junctura-test-suite'] in ('core', 'applications', 'records', 'record-queries', 'record-archives', 'app-group-shares', 'directory', 'workflow-tasks', 'events', 'object-metadata', 'search', 'subject-access', 'app-access', 'delegation', 'consent', 'consent-requests'), oid + ': coverage suite missing')
         parameters = [dereference(p) for p in operation.get('parameters', [])]
         require(len({(p['in'], p['name']) for p in parameters}) == len(parameters), oid + ': duplicate parameter')
         require({p['name'] for p in parameters if p['in'] == 'path'} == set(re.findall(r'{([^}]+)}', path)), oid + ': path parameters differ')
         require(all(p.get('required') for p in parameters if p['in'] == 'path'), oid + ': path parameter optional')
         if path.startswith(('/v1/', '/v2/')):
             require(operation.get('security') == [{bearer: []}], oid + ': bearer protection missing')
-            reader_only_write = path == '/v1/token-exchange' or path.startswith(('/v1/applications', '/v1/approvals', '/v1/me/resource-consents')) or (
+            reader_only_write = path == '/v1/token-exchange' or path.startswith(('/v1/applications', '/v1/approvals',
+                '/v1/me/resource-consents', '/v1/resource-consent-requests', '/v1/me/resource-consent-requests')) or (
                 planned and path.startswith(('/v1/me/', '/v1/directory/')))
             roles = ['core-reader'] + (['core-writer'] if method != 'get' and not reader_only_write else [])
             require(operation.get('x-junctura-core-roles') == roles, oid + ': role contract differs')
@@ -389,6 +395,24 @@ def self_test(spec):
             'responseBody':{'service':'junctura-core','status':'ok'},'responseBytes':44}
     validate_observations(spec, [good])
     validate_document(spec, official=False)
+    sender = '/v1/resource-consent-requests'
+    subject = '/v1/me/resource-consent-requests/{requestId}'
+    conflicts = {
+        sender: 'consent_request_already_pending',
+        sender + '/{requestId}/cancel': 'consent_request_not_pending',
+        subject + '/accept': 'consent_request_target_changed',
+        subject + '/decline': 'consent_request_not_pending',
+    }
+    for path, code in conflicts.items():
+        response_body = {'error': code, 'requestId': '11111111-1111-4111-8111-111111111111'}
+        conflict = {**good, 'path': path, 'method': 'POST', 'status': 409, 'responseBody': response_body}
+        validate_observations(spec, [conflict])
+        for invalid in ({'error': code}, {**response_body, 'extra': True}):
+            try:
+                validate_observations(spec, [{**conflict, 'responseBody': invalid}])
+            except ContractError:
+                continue
+            raise ContractError(path + ': accepted an invalid consent request conflict')
     batch = spec['paths']['/v2/data:batch']['post']['requestBody']['content']['application/json']
     increments = batch['examples']['decrementInventory']['value']
     check_value(spec, batch['schema'], increments, 'Atomic batch example')

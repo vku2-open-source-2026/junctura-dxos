@@ -107,6 +107,8 @@ jobs:
         run: npm run test:delegation
       - name: Verify resource consent and subject access history
         run: npm run test:consent
+      - name: Verify resource consent requests
+        run: npm run test:consent-requests
       - name: Verify workflow task policy and outbox against Flowable
         run: npm run test:workflow-tasks
       - name: Verify registration, guarded capability invocation, resource isolation and Flowable worker
