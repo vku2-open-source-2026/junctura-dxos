@@ -399,7 +399,7 @@ reconcile an ambiguous outcome before retrying. No upstream call is blindly retr
 | `/v1/workflows/tasks` | GET | `{items,nextCursor}` for waiting tasks in the caller's candidate groups. |
 | `/v1/workflows/tasks/{taskId}/claim` | POST | Optional `{ttlSeconds}`. Returns `{taskId,claimedBy,claimedUntil}`. |
 | `/v1/workflows/tasks/{taskId}/release` | POST | Returns `204` when the caller's claim is released or the task is already unclaimed. |
-| `/v1/workflows/executions/{executionId}/complete` | POST | Business completion by `{taskId,variables?,records?}` with a UUID `Idempotency-Key`. Returns `202` and `{taskId,completionStatus:"pending",execution}`. |
+| `/v1/workflows/executions/{executionId}/complete` | POST | Business completion by `{taskId,variables?,output?,records?}` with a UUID `Idempotency-Key`. Returns `202` and `{taskId,completionStatus:"pending",execution}`. |
 | `/v1/workflows/executions/{executionId}/history` | GET | `{items,nextCursor}` for confirmed task completions, newest first. |
 | `/v1/workflows/executions/{executionId}` | DELETE | Cancel a running execution. Returns `204` on cancellation and on repetition. A pending completion or a completed execution conflicts with `409`. |
 
@@ -432,7 +432,10 @@ caller's own claim. A new attempt to complete the same finished task returns `40
 ### Completion, history and retries
 
 `variables` accepts strings, numbers and booleans up to 4096 bytes as compact UTF-8 JSON.
-`input` and `__junctura_completion` are reserved. `records` can create up to ten records in collections
+`input` and `__junctura_completion` are reserved. `output` accepts an optional business result as a
+JSON object up to 65536 bytes as compact UTF-8 JSON. Its keys become process variables like `variables`;
+structured values are stored as JSON strings, output keys must not collide with `variables` keys, and
+`output` that is not a JSON object returns `400 invalid_request`. `records` can create up to ten records in collections
 owned by the caller's enrolled, active app. The token must also carry an operator-bound verified subject
 for record-bearing requests. Core commits all records, the completion outbox entry and the replay receipt
 in one PostgreSQL transaction. Each parallel task can be completed by its own ID.

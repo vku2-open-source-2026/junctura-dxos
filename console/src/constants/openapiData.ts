@@ -199,7 +199,7 @@ function requestExample(endpoint: ApiEndpointDef): RequestExample {
           },
         };
       case "completeWorkflowTask":
-        return { contentType, json: { taskId: "task-23", variables: { decision: "approved" } } };
+        return { contentType, json: { taskId: "task-23", variables: { decision: "approved" }, output: { summary: { lines: 3 }, note: "Reviewed" } } };
       case "claimWorkflowTask":
         return { contentType, json: { ttlSeconds: 1800 } };
       case "putDirectoryUnitType":

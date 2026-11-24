@@ -218,7 +218,8 @@ test("SDK workflow task calls use the supplied verified token, filters and stabl
   } });
   const user = { userToken: "workflow-user" };
   const start = { definitionId: "process:1:42", taskDueAt: { review: "2030-01-01T01:00:00Z" } };
-  const body = { taskId: "task:1", variables: { decision: "approved" }, records: [{ collection: "entries", data: {} }] };
+  const body = { taskId: "task:1", variables: { decision: "approved" }, output: { summary: { items: 2 }, note: "done" },
+    records: [{ collection: "entries", data: {} }] };
   await client.startWorkflowWithDeadlines(start, { ...user, idempotencyKey: "start-key" });
   await client.getWorkflowWithDeadline("exec:1", user);
   await client.listWorkflowTasks({ ...user, overdue: false, unit: "unit-a", candidateGroup: "reviewers", limit: 2 });
