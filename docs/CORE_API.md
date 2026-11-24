@@ -239,8 +239,8 @@ default 100) and returns one record even if a larger limit is supplied. It conti
 keys using the first value. `order` and `cursor` on item GET, and all query keys on writes, return `400 invalid_query`.
 
 Core signs 30-second tenant assertions for PostgREST with audience `junctura-data`.
-The database role is `junctura_api` for legacy records, `junctura_resource_api` for legacy v2 list,
-and `junctura_record_api` for the v2 record RPC. Caller tokens are not database credentials. PostgreSQL FORCE ROW LEVEL SECURITY
+The database role is `junctura_api` for v1 records and `junctura_record_api` for v2 record operations.
+Caller tokens are not database credentials. PostgreSQL FORCE ROW LEVEL SECURITY
 checks tenant/resource claims. The signing secret stays private; no anonymous PostgREST role or data/database port is published.
 `data-migrate` applies versioned SQL transactionally, retaining data and recording checksums; changed applied migrations
 are refused. Add reviewed migrations for schema changes. Named volumes survive `docker compose down`; never use `down -v` on persistent data.
@@ -250,6 +250,7 @@ are refused. Add reviewed migrations for schema changes. Named volumes survive `
 | Route | Methods | Contract |
 | --- | --- | --- |
 | `/v2/data-schemas/{collection}` | PUT | Register a collection schema and indexed, searchable, sensitive and unique fields. |
+| `/v2/data-masking/{collection}` | GET, PUT | Read or replace the calling app's field masking policy. |
 | `/v2/data/{collection}` | POST | Create a record with a generated ID and version 1. |
 | `/v2/data/{collection}/{id}` | GET, PATCH, DELETE | Read, replace, increment or delete an individual record. |
 | `/v2/data/{collection}/{id}:lock` | POST, DELETE | Acquire, renew or release an exclusive lease. |
@@ -283,14 +284,59 @@ an idempotency key return a versioned body. To require keys on creates and
 preconditions on replacements and deletes, set `STRICT_RECORD_WRITES=true`
 on every Core replica. In strict mode, the default list scope is the calling
 app and list items include their version. Restart pagination after switching
-modes. Management readers with an explicit app-level grant receive the
-representation with sensitive fields omitted.
+modes. For management readers with an explicit app-level grant, Core omits
+schema-sensitive fields that have no field masking rule.
 
 In compatibility mode, `409` from `POST /v2/data/{collection}` and
 `PATCH /v2/data/{collection}/{id}` returns `error: "conflict"` with the specific
 code in `details.code` and any increment field in `details.field`. This applies
 with or without an idempotency key. Strict mode puts the specific code in `error`
 and returns an increment field at the top level.
+
+#### Field masking
+
+`GET /v2/data-masking/{collection}` returns `{collection, fields}` for the caller's
+app, with empty `fields` by default. To replace the policy, send
+`PUT /v2/data-masking/{collection}` as the owning backend with `core-writer`
+or as a verified app manager with write access. For example:
+
+```json
+{
+  "fields": {
+    "nationalId": { "mask": "full", "owner": true },
+    "phone": { "mask": "last4", "roles": ["manager"] }
+  }
+}
+```
+
+The policy applies to top-level fields of existing and future records in that
+app's collection, including schemaless collections. `full` returns `"***"`.
+`last4` prefixes the last four characters with `***` for strings longer than
+four characters and uses `"***"` for shorter strings and other values. Absent
+fields stay absent. Send `{"fields":{}}` to clear the policy.
+
+A field is shown in full when any of its configured conditions is met after
+the reader has been authorized to access the record.
+
+- `owner: true` allows the owning backend and the verified user who created the
+  record through the owning app.
+- `roles` allows verified `core-reader`, `core-writer` or `regulator` roles,
+  or a verified `viewer`, `editor` or `manager` role in the owning app.
+- `shareIds` allows readers covered by one of the specified exact-app record
+  shares for that field. Create each share with `POST /v2/resource-shares`
+  and use its returned `shareId`. Expiry and revocation also end clear access.
+
+Core applies the policy to individual reads, both list modes, NDJSON exports,
+and record bodies returned by writes or idempotency replays. Batch results
+contain operation metadata. Core records `audit.record_fields_revealed` with
+the reader and record ID whenever it returns one or more clear fields covered
+by the policy. The audit entry carries no field values.
+
+Masked fields are excluded from filtering, sorting, grouping, search indexing
+and increment operations. A unique key cannot also have a masking rule.
+Updating a policy invalidates existing filtered query cursors for the collection.
+An NDJSON export reflects the reader's access, so masked values in it may fail
+validation if the export is imported into a collection with a registered schema.
 
 #### Filtered lists and aggregates
 
@@ -310,11 +356,12 @@ both expose `created_at`.
 `GET /v2/data/{collection}/aggregate?count` counts readable matches. Repeat `groupBy` for up to two
 indexed fields or UTC day buckets such as `day(createdOn)`; day buckets require a date or date-time field.
 Missing values group as `null`. Queries that would return more than 1,000 groups return
-`400 invalid_query`. Lists and aggregates read the caller, ACL, schema and rows from one snapshot.
+`400 invalid_query`. Each query reads matching rows from one snapshot. Core holds the collection's
+schema and masking policy for the duration of a filtered list request.
 
 Management readers with an explicit app-level grant can list or aggregate another app's collection with
-`ownerAppId`; sensitive fields are omitted from list data and may not be used as filters, sort keys or
-group dimensions. A scope the caller may not read returns `404 not_found`.
+`ownerAppId`. Schema-sensitive fields and fields with masking rules are unavailable for these readers'
+filters, sort keys and group dimensions. A scope the caller may not read returns `404 not_found`.
 
 In compatibility mode (`STRICT_RECORD_WRITES=false`), a list without `sort`, any `where[...]` or
 `ownerAppId` keeps the legacy body and cursor without `version` fields. Strict mode and any filtered list

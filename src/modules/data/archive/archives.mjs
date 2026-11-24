@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Junctura Contributors
 // SPDX-License-Identifier: Apache-2.0
 import { HttpError, json, jsonObject, logicalRequestDigest, parseRecordJson, readBody, uuidPattern } from "../../../platform/http/http.mjs";
-import { signInternalToken } from "../../../platform/security/internal-token.mjs";
+import { applicationToken } from "../../applications/applications.mjs";
 import { presentRecordRequest } from "../records.mjs";
 
 const collectionPattern = /^[a-z][a-z0-9_-]{0,62}$/;
@@ -9,19 +9,14 @@ const maxImportBytes = 10 * 1024 * 1024;
 const maxExportBytes = 64 * 1024 * 1024;
 
 async function archiveCommand(config, identity, operation, payload) {
-  const { tenantId, issuer, subject, clientId, roles } = identity;
-  if (!clientId) throw new HttpError(403, "verified_client_required");
+  if (!identity.clientId) throw new HttpError(403, "verified_client_required");
   if (!config.dataUrl) throw new HttpError(503, "data_unavailable");
   let upstream;
   try {
     upstream = await fetch(`${config.dataUrl}/rpc/record_archive`, {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${signInternalToken(config.dataSecret, {
-          role: "junctura_record_api", tenant_id: tenantId, iss: issuer, sub: subject, client_id: clientId,
-          resource_unit: identity.resourceUnit, human_app_id: identity.humanAppId, resource_writer: roles.includes("core-writer"), display_name: identity.preferredUsername,
-          aud: "junctura-data", exp: Math.floor(Date.now() / 1000) + 30,
-        })}`,
+        Authorization: `Bearer ${applicationToken(identity, config.dataSecret, "junctura_record_api")}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({ operation, payload }),

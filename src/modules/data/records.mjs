@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Junctura Contributors
 // SPDX-License-Identifier: Apache-2.0
 import { HttpError, requestIdFor, json, jsonObject, logicalRequestDigest, readRecordJson, requireWriter, uuidPattern } from "../../platform/http/http.mjs";
-import { signInternalToken } from "../../platform/security/internal-token.mjs";
+import { applicationToken } from "../applications/applications.mjs";
 import { readResourceConsent } from "../consent/consent.mjs";
 import { collectionPattern, fieldPattern, parseCollectionSchema, uniqueKeyPattern } from "./schema/collection.mjs";
 
@@ -15,6 +15,25 @@ export function validRecordETag(value) {
 export function parseRecordWrite(body) {
   if (!jsonObject(body) || Object.keys(body).length !== 1 || !jsonObject(body.data)) {
     throw new HttpError(400, "invalid_request");
+  }
+  return body;
+}
+
+export function parseFieldMaskingPolicy(body) {
+  if (!jsonObject(body) || Object.keys(body).length !== 1 || !jsonObject(body.fields) ||
+      Object.keys(body.fields).length > 100) throw new HttpError(400, "invalid_request");
+  const uniqueList = (value, max, valid) => Array.isArray(value) && value.length <= max &&
+    new Set(value).size === value.length && value.every(item => typeof item === "string" && valid(item));
+  for (const [field, rule] of Object.entries(body.fields)) {
+    if (!fieldPattern.test(field) || !jsonObject(rule) ||
+        Object.keys(rule).some(key => !["mask", "owner", "roles", "shareIds"].includes(key)) ||
+        !["full", "last4"].includes(rule.mask) ||
+        (Object.hasOwn(rule, "owner") && typeof rule.owner !== "boolean") ||
+        (Object.hasOwn(rule, "roles") && !uniqueList(rule.roles, 6, role =>
+          ["core-reader", "core-writer", "regulator", "viewer", "editor", "manager"].includes(role))) ||
+        (Object.hasOwn(rule, "shareIds") && !uniqueList(rule.shareIds, 20, id => uuidPattern.test(id)))) {
+      throw new HttpError(400, "invalid_request");
+    }
   }
   return body;
 }
@@ -52,13 +71,10 @@ export function parseRecordWriteHeaders(headers, { requireIdempotency = false, a
 }
 
 export async function recordCommand(config, identity, operation, payload) {
-  const { tenantId, issuer, subject, clientId, roles } = identity;
-  if (!clientId) throw new HttpError(403, "verified_client_required");
+  if (!identity.clientId) throw new HttpError(403, "verified_client_required");
   if (!config.dataUrl) throw new HttpError(503, "data_unavailable");
   try {
-    const token = signInternalToken(config.dataSecret, { role: "junctura_record_api", tenant_id: tenantId,
-      iss: issuer, sub: subject, client_id: clientId, resource_unit: identity.resourceUnit, human_app_id: identity.humanAppId, resource_writer: roles.includes("core-writer"),
-      display_name: identity.preferredUsername, aud: "junctura-data", exp: Math.floor(Date.now() / 1000) + 30 });
+    const token = applicationToken(identity, config.dataSecret, "junctura_record_api");
     const upstream = await fetch(`${config.dataUrl}/rpc/record_command`, {
       method: "POST",
       headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
@@ -207,6 +223,16 @@ export async function handleAppRecords(request, response, identity, config, url)
     return handleRecordBulk(request, response, identity, config, url);
   }
   const method = request.method;
+  if (url.pathname.startsWith("/v2/data-masking/")) {
+    const collection = url.pathname.match(/^\/v2\/data-masking\/([^/]+)$/)?.[1];
+    if (!collectionPattern.test(collection ?? "")) throw new HttpError(400, "invalid_request");
+    if (url.search) throw new HttpError(400, "invalid_query");
+    if (method === "GET") return sendRecordResult(response, await recordCommand(config, identity, "get_masking", { collection }));
+    if (method !== "PUT") return methodNotAllowed(response, "GET, PUT");
+    requireWriter(identity);
+    const { fields } = parseFieldMaskingPolicy(await readRecordJson(request));
+    return sendRecordResult(response, await recordCommand(config, identity, "put_masking", { collection, fields }));
+  }
   const schemaPath = url.pathname.startsWith("/v2/data-schemas/");
   const path = schemaPath ? url.pathname.match(/^\/v2\/data-schemas\/([^/]+)$/)
     : url.pathname.match(/^\/v2\/data\/([^/]+)(?:\/([^/]+))?$/);
