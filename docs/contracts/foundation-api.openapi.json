@@ -8409,6 +8409,552 @@
           }
         }
       }
+    },
+    "/v1/resource-consent-requests": {
+      "post": {
+        "operationId": "createResourceConsentRequest",
+        "summary": "Request consent to read a resource",
+        "description": "Use an exchanged token to send a request to the verified subject of a record or attached object in the same organization. The recipient is the sender’s current application unit. A future UTC expiry is required.",
+        "tags": [
+          "tenant"
+        ],
+        "security": [
+          {
+            "coreBearer": []
+          }
+        ],
+        "x-junctura-core-roles": [
+          "core-reader"
+        ],
+        "x-junctura-authority": "app-delegation",
+        "x-junctura-query-policy": "closed",
+        "x-junctura-source": "src/modules/consent/consent.mjs",
+        "x-junctura-test-suite": "consent-requests",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResourceConsentRequestCreate"
+              },
+              "example": {
+                "resourceType": "record",
+                "resourceId": "44444444-4444-4444-8444-444444444444",
+                "purpose": "Review the selected record",
+                "expiresAt": "2030-01-01T00:00:00Z"
+              }
+            }
+          }
+        },
+        "x-max-body-bytes": 16384,
+        "responses": {
+          "201": {
+            "description": "Request consent to read a resource.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResourceConsentRequest"
+                }
+              }
+            },
+            "headers": {
+              "Location": {
+                "required": true,
+                "description": "Path to check the request status.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "405": {
+            "$ref": "#/components/responses/MethodNotAllowed"
+          },
+          "409": {
+            "description": "A pending request already exists for this resource, unit and purpose (consent_request_already_pending).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationError"
+                }
+              }
+            }
+          },
+          "413": {
+            "$ref": "#/components/responses/TooLarge"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMedia"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "502": {
+            "$ref": "#/components/responses/BadGateway"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          },
+          "504": {
+            "$ref": "#/components/responses/GatewayTimeout"
+          }
+        }
+      }
+    },
+    "/v1/resource-consent-requests/{requestId}": {
+      "get": {
+        "operationId": "getResourceConsentRequest",
+        "summary": "Read a resource consent request",
+        "description": "With an exchanged token, the requester can check status while assigned to the original unit.",
+        "tags": [
+          "tenant"
+        ],
+        "security": [
+          {
+            "coreBearer": []
+          }
+        ],
+        "x-junctura-core-roles": [
+          "core-reader"
+        ],
+        "x-junctura-authority": "app-delegation",
+        "x-junctura-query-policy": "closed",
+        "x-junctura-source": "src/modules/consent/consent.mjs",
+        "x-junctura-test-suite": "consent-requests",
+        "parameters": [
+          {
+            "name": "requestId",
+            "in": "path",
+            "required": true,
+            "description": "Resource consent request ID.",
+            "schema": {
+              "$ref": "#/components/schemas/Uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Read a resource consent request.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResourceConsentRequest"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "405": {
+            "$ref": "#/components/responses/MethodNotAllowed"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "502": {
+            "$ref": "#/components/responses/BadGateway"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          },
+          "504": {
+            "$ref": "#/components/responses/GatewayTimeout"
+          }
+        }
+      }
+    },
+    "/v1/resource-consent-requests/{requestId}/cancel": {
+      "post": {
+        "operationId": "cancelResourceConsentRequest",
+        "summary": "Cancel a resource consent request",
+        "description": "With an exchanged token, the requester can cancel a pending request while assigned to the original unit.",
+        "tags": [
+          "tenant"
+        ],
+        "security": [
+          {
+            "coreBearer": []
+          }
+        ],
+        "x-junctura-core-roles": [
+          "core-reader"
+        ],
+        "x-junctura-authority": "app-delegation",
+        "x-junctura-query-policy": "closed",
+        "x-junctura-source": "src/modules/consent/consent.mjs",
+        "x-junctura-test-suite": "consent-requests",
+        "parameters": [
+          {
+            "name": "requestId",
+            "in": "path",
+            "required": true,
+            "description": "Resource consent request ID.",
+            "schema": {
+              "$ref": "#/components/schemas/Uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "maxProperties": 0
+              },
+              "example": {}
+            }
+          }
+        },
+        "x-max-body-bytes": 16384,
+        "responses": {
+          "200": {
+            "description": "Cancel a resource consent request.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResourceConsentRequest"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "405": {
+            "$ref": "#/components/responses/MethodNotAllowed"
+          },
+          "409": {
+            "description": "The request is no longer pending (consent_request_not_pending).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationError"
+                }
+              }
+            }
+          },
+          "413": {
+            "$ref": "#/components/responses/TooLarge"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMedia"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "502": {
+            "$ref": "#/components/responses/BadGateway"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          },
+          "504": {
+            "$ref": "#/components/responses/GatewayTimeout"
+          }
+        }
+      }
+    },
+    "/v1/me/resource-consent-requests": {
+      "get": {
+        "operationId": "listPendingResourceConsentRequests",
+        "summary": "List the subject’s pending resource consent requests",
+        "description": "Use the subject’s own login token with a verified subject binding. Returns pending requests in newest-first order.",
+        "tags": [
+          "tenant"
+        ],
+        "security": [
+          {
+            "coreBearer": []
+          }
+        ],
+        "x-junctura-core-roles": [
+          "core-reader"
+        ],
+        "x-junctura-authority": "verified-subject",
+        "x-junctura-query-policy": "closed",
+        "x-junctura-source": "src/modules/consent/consent.mjs",
+        "x-junctura-test-suite": "consent-requests",
+        "responses": {
+          "200": {
+            "description": "List the subject’s pending resource consent requests.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResourceConsentRequestList"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "405": {
+            "$ref": "#/components/responses/MethodNotAllowed"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "502": {
+            "$ref": "#/components/responses/BadGateway"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          },
+          "504": {
+            "$ref": "#/components/responses/GatewayTimeout"
+          }
+        }
+      }
+    },
+    "/v1/me/resource-consent-requests/{requestId}/accept": {
+      "post": {
+        "operationId": "acceptResourceConsentRequest",
+        "summary": "Accept a resource consent request",
+        "description": "Use the subject’s own login token with a verified subject binding. Grants consent to the requested resource version, unit, purpose and expiry. The response contains the linked consentId.",
+        "tags": [
+          "tenant"
+        ],
+        "security": [
+          {
+            "coreBearer": []
+          }
+        ],
+        "x-junctura-core-roles": [
+          "core-reader"
+        ],
+        "x-junctura-authority": "verified-subject",
+        "x-junctura-query-policy": "closed",
+        "x-junctura-source": "src/modules/consent/consent.mjs",
+        "x-junctura-test-suite": "consent-requests",
+        "parameters": [
+          {
+            "name": "requestId",
+            "in": "path",
+            "required": true,
+            "description": "Resource consent request ID.",
+            "schema": {
+              "$ref": "#/components/schemas/Uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "maxProperties": 0
+              },
+              "example": {}
+            }
+          }
+        },
+        "x-max-body-bytes": 16384,
+        "responses": {
+          "200": {
+            "description": "Accept a resource consent request.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResourceConsentRequest"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "405": {
+            "$ref": "#/components/responses/MethodNotAllowed"
+          },
+          "409": {
+            "description": "The request is no longer pending (consent_request_not_pending). The resource version or recipient unit is no longer available (consent_request_target_changed).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationError"
+                }
+              }
+            }
+          },
+          "413": {
+            "$ref": "#/components/responses/TooLarge"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMedia"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "502": {
+            "$ref": "#/components/responses/BadGateway"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          },
+          "504": {
+            "$ref": "#/components/responses/GatewayTimeout"
+          }
+        }
+      }
+    },
+    "/v1/me/resource-consent-requests/{requestId}/decline": {
+      "post": {
+        "operationId": "declineResourceConsentRequest",
+        "summary": "Decline a resource consent request",
+        "description": "Use the subject’s own login token with a verified subject binding. An optional reason is shown to the requester.",
+        "tags": [
+          "tenant"
+        ],
+        "security": [
+          {
+            "coreBearer": []
+          }
+        ],
+        "x-junctura-core-roles": [
+          "core-reader"
+        ],
+        "x-junctura-authority": "verified-subject",
+        "x-junctura-query-policy": "closed",
+        "x-junctura-source": "src/modules/consent/consent.mjs",
+        "x-junctura-test-suite": "consent-requests",
+        "parameters": [
+          {
+            "name": "requestId",
+            "in": "path",
+            "required": true,
+            "description": "Resource consent request ID.",
+            "schema": {
+              "$ref": "#/components/schemas/Uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "reason": {
+                    "$ref": "#/components/schemas/ResourceConsentPurpose"
+                  }
+                },
+                "additionalProperties": false
+              },
+              "example": {
+                "reason": "The proposed duration is too long."
+              }
+            }
+          }
+        },
+        "x-max-body-bytes": 16384,
+        "responses": {
+          "200": {
+            "description": "Decline a resource consent request.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResourceConsentRequest"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "405": {
+            "$ref": "#/components/responses/MethodNotAllowed"
+          },
+          "409": {
+            "description": "The request is no longer pending (consent_request_not_pending).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplicationError"
+                }
+              }
+            }
+          },
+          "413": {
+            "$ref": "#/components/responses/TooLarge"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMedia"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "502": {
+            "$ref": "#/components/responses/BadGateway"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          },
+          "504": {
+            "$ref": "#/components/responses/GatewayTimeout"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -13310,6 +13856,10 @@
               "revoked",
               "inactive"
             ]
+          },
+          "requestId": {
+            "$ref": "#/components/schemas/Uuid",
+            "description": "Present when the consent was granted by accepting this request."
           }
         },
         "required": [
@@ -13337,6 +13887,127 @@
         },
         "required": [
           "consents"
+        ],
+        "additionalProperties": false
+      },
+      "ResourceConsentRequestCreate": {
+        "type": "object",
+        "properties": {
+          "resourceType": {
+            "type": "string",
+            "enum": [
+              "record",
+              "object"
+            ]
+          },
+          "resourceId": {
+            "$ref": "#/components/schemas/Uuid"
+          },
+          "purpose": {
+            "$ref": "#/components/schemas/ResourceConsentPurpose"
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d{1,3})?Z$"
+          }
+        },
+        "required": [
+          "resourceType",
+          "resourceId",
+          "purpose",
+          "expiresAt"
+        ],
+        "additionalProperties": false
+      },
+      "ResourceConsentRequest": {
+        "type": "object",
+        "properties": {
+          "requestId": {
+            "$ref": "#/components/schemas/Uuid"
+          },
+          "resourceType": {
+            "type": "string",
+            "enum": [
+              "record",
+              "object"
+            ]
+          },
+          "resourceId": {
+            "$ref": "#/components/schemas/Uuid"
+          },
+          "recipientUnit": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9-]{1,63}$"
+          },
+          "purpose": {
+            "$ref": "#/components/schemas/ResourceConsentPurpose"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "accepted",
+              "declined",
+              "expired",
+              "cancelled"
+            ]
+          },
+          "declineReason": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ResourceConsentPurpose"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "consentId": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Uuid"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "requestId",
+          "resourceType",
+          "resourceId",
+          "recipientUnit",
+          "purpose",
+          "createdAt",
+          "expiresAt",
+          "status",
+          "declineReason",
+          "consentId"
+        ],
+        "additionalProperties": false
+      },
+      "ResourceConsentRequestList": {
+        "type": "object",
+        "properties": {
+          "requests": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ResourceConsentRequest"
+            }
+          }
+        },
+        "required": [
+          "requests"
         ],
         "additionalProperties": false
       }

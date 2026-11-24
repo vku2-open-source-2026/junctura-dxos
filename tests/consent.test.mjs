@@ -1,8 +1,8 @@
 // SPDX-FileCopyrightText: 2026 Junctura Contributors
 // SPDX-License-Identifier: Apache-2.0
 import assert from "node:assert/strict";
-import { createServer } from "node:http";
-import { after, before, test } from "node:test";
+import { Readable } from "node:stream";
+import { after, before, mock, test } from "node:test";
 import { createApi } from "../src/api.mjs";
 import { handleConsent, isConsentPath } from "../src/modules/consent/consent.mjs";
 import { validateExecutionContext } from "../src/modules/capability/execution/execution.mjs";
@@ -13,28 +13,35 @@ const EXECUTION = "aaaaaaaa-0000-4000-8000-000000000005";
 let identity = { tenantId: "tenant-a", subject: "subject-1", issuer: "https://id.example", clientId: "portal", roles: ["core-reader"], subjectId: "person-1" };
 let reply = () => ({ status: 200, value: { consents: [] } });
 let seen = [];
-let data, core, base;
-const listen = server => new Promise(resolve => server.listen(0, "127.0.0.1", () => resolve(`http://127.0.0.1:${server.address().port}`)));
-before(async () => {
-  data = createServer(async (request, response) => {
-    const chunks = []; for await (const chunk of request) chunks.push(chunk);
-    const body = JSON.parse(Buffer.concat(chunks).toString());
-    const claims = JSON.parse(Buffer.from(request.headers.authorization.split(".")[1], "base64url"));
-    seen.push({ url: request.url, body, role: claims.role, sub: claims.sub, subjectId: claims.subject_id });
+const config = { dataUrl: "https://data.example.invalid", dataSecret: "x".repeat(32) };
+before(() => {
+  mock.method(globalThis, "fetch", async (url, options) => {
+    const body = JSON.parse(options.body);
+    const claims = JSON.parse(Buffer.from(options.headers.Authorization.split(".")[1], "base64url"));
+    seen.push({ url: new URL(url).pathname, body, role: claims.role, sub: claims.sub, subjectId: claims.subject_id,
+      actor: claims.actor_sub, unit: claims.resource_unit, app: claims.human_app_id });
     const value = reply(body);
-    if (value === "down") { response.writeHead(503); return response.end(); }
-    response.writeHead(200, { "Content-Type": "application/json" }); response.end(JSON.stringify(value));
+    return value === "down" ? new Response(null, { status: 503 }) : Response.json(value);
   });
-  const dataUrl = await listen(data);
-  core = createServer(async (request, response) => {
-    try { await handleConsent(request, response, identity, { dataUrl, dataSecret: "x".repeat(32) }, new URL(request.url, "http://core")); }
-    catch (error) { json(response, error instanceof HttpError ? error.status : 500, { error: error.message }); }
-  });
-  base = await listen(core);
 });
-after(() => { data.close(); core.close(); });
-const call = (path, method = "GET", body) => fetch(base + path, { method,
-  headers: body === undefined ? {} : { "Content-Type": "application/json" }, body: body === undefined ? undefined : typeof body === "string" ? body : JSON.stringify(body) });
+after(() => mock.restoreAll());
+async function call(path, method = "GET", body, headers = body === undefined ? {} : { "content-type": "application/json" }) {
+  const bytes = body === undefined ? [] : [Buffer.from(typeof body === "string" ? body : JSON.stringify(body))];
+  const request = Object.assign(Readable.from(bytes), { method, headers });
+  const outgoing = new Headers();
+  let result;
+  const response = {
+    setHeader: (name, value) => outgoing.set(name, value),
+    writeHead(status, values) {
+      this.status = status;
+      for (const [name, value] of Object.entries(values)) outgoing.set(name, value);
+    },
+    end(value) { result = new Response(value, { status: this.status, headers: outgoing }); },
+  };
+  try { await handleConsent(request, response, identity, config, new URL(path, "http://core")); }
+  catch (error) { json(response, error instanceof HttpError ? error.status : 500, { error: error.message }); }
+  return result;
+}
 
 test("consent routes are recognised exactly and the API module loads them", () => {
   for (const path of ["/v1/me/consents", `/v1/me/consents/${CONSENT}/revoke`, "/v1/emergency-accesses", `/v1/emergency-accesses/${EXECUTION}/review`]) assert.ok(isConsentPath(path), path);
@@ -49,9 +56,8 @@ test("people list, create and revoke only their own consents through the subject
   assert.equal((await call("/v1/me/consents")).status, 200);
   const proposal = { consumerAppId: "11111111-1111-4111-8111-111111111111", capabilityId: "urn:junctura:capability:22222222-2222-4222-8222-222222222222:vaccination", purposes: ["review"], expiresAt: "2026-12-01T00:00:00.000Z" };
   reply = () => ({ status: 201, value: { consentId: CONSENT, state: "active" } });
-  const created = await fetch(base + "/v1/me/consents", { method: "POST",
-    headers: { "Content-Type": "application/json", "Idempotency-Key": "11111111-1111-4111-8111-111111111111" },
-    body: JSON.stringify(proposal) });
+  const created = await call("/v1/me/consents", "POST", proposal,
+    { "content-type": "application/json", "idempotency-key": "11111111-1111-4111-8111-111111111111" });
   assert.equal(created.status, 201);
   assert.equal(created.headers.get("location"), `/v1/me/consents/${CONSENT}`);
   assert.equal(created.headers.get("cache-control"), "no-store");
@@ -73,14 +79,14 @@ test("consent requests are strict and failures stay closed", async () => {
   assert.equal((await call("/v1/me/consents?subject=other")).status, 400);
   assert.equal((await call("/v1/me/consents", "POST", '{"purposes":["a"],"purposes":["b"]}')).status, 400, "duplicate keys");
   assert.equal((await call("/v1/me/consents", "POST", "[]")).status, 400);
-  assert.equal((await fetch(base + "/v1/me/consents", { method: "POST", body: "{}" })).status, 415);
+  assert.equal((await call("/v1/me/consents", "POST", "{}", {})).status, 415);
   assert.equal((await call("/v1/me/consents/not-a-uuid/revoke", "POST", {})).status, 400);
   assert.equal((await call(`/v1/me/consents/${CONSENT}/revoke`, "POST", { reason: "x" })).status, 400);
   assert.equal((await call("/v1/me/consents", "DELETE")).status, 405);
   reply = () => ({ status: 404, error: "not_found" });
-  const refused = await fetch(base + "/v1/me/consents", { method: "POST",
-    headers: { "Content-Type": "application/json", "Idempotency-Key": "11111111-1111-4111-8111-111111111111" },
-    body: JSON.stringify({ consumerAppId: "11111111-1111-4111-8111-111111111111", capabilityId: "urn:junctura:capability:22222222-2222-4222-8222-222222222222:vaccination", purposes: ["review"], expiresAt: "2026-12-01T00:00:00.000Z" }) });
+  const refused = await call("/v1/me/consents", "POST",
+    { consumerAppId: "11111111-1111-4111-8111-111111111111", capabilityId: "urn:junctura:capability:22222222-2222-4222-8222-222222222222:vaccination", purposes: ["review"], expiresAt: "2026-12-01T00:00:00.000Z" },
+    { "content-type": "application/json", "idempotency-key": "11111111-1111-4111-8111-111111111111" });
   assert.equal(refused.status, 404);
   reply = () => "down";
   assert.equal((await call("/v1/me/consents")).status, 503);
@@ -117,4 +123,48 @@ test("emergency context needs a subject and a justification", () => {
     { purpose: "emergency_care", dataSubject: "p", emergency: true, justification: "short" }]) {
     assert.throws(() => validateExecutionContext(context), error => error.status === 422, JSON.stringify(context));
   }
+});
+
+test("resource consent requests carry the verified unit and keep subject decisions on the subject role", async () => {
+  seen = [];
+  const sender = "/v1/resource-consent-requests";
+  const subject = "/v1/me/resource-consent-requests";
+  const proposal = { resourceType: "record", resourceId: CONSENT, purpose: "Review the selected record", expiresAt: "2030-01-01T00:00:00Z" };
+  const login = { ...identity, subject: "subject-1", subjectId: "person-1", roles: ["core-reader"] };
+  const delegated = { ...login, actor: { sub: "service-1" }, humanAppId: CONSENT, resourceUnit: "unit-b" };
+  assert.ok(isConsentPath(sender));
+  assert.ok(isConsentPath(`${subject}/${EXECUTION}/accept`));
+  reply = ({ operation }) => ({ status: operation === "create" ? 201 : 200, value: { requestId: EXECUTION } });
+  identity = login;
+  assert.equal((await call(sender, "POST", proposal)).status, 403);
+  identity = delegated;
+  assert.equal((await call(subject)).status, 403);
+  assert.equal((await call(sender, "POST", { ...proposal, recipientUnit: "unit-a" })).status, 400);
+  assert.equal((await call(sender, "POST", { ...proposal, expiresAt: undefined })).status, 400);
+  assert.equal((await call(`${sender}/${EXECUTION}/accept`, "POST", {})).status, 404);
+  assert.equal((await call(`${sender}/${EXECUTION}/get`)).status, 404);
+  const submitted = await call(sender, "POST", proposal);
+  assert.equal(submitted.status, 201);
+  assert.equal(submitted.headers.get("location"), `${sender}/${EXECUTION}`);
+  assert.equal(submitted.headers.get("cache-control"), "no-store");
+  assert.equal((await call(`${sender}/${EXECUTION}`)).status, 200);
+  const ok = reply;
+  reply = () => ({ status: 409, error: "consent_request_not_pending" });
+  const conflict = await call(`${sender}/${EXECUTION}/cancel`, "POST", {});
+  assert.equal(conflict.status, 409);
+  assert.deepEqual(await conflict.json(), { error: "consent_request_not_pending" });
+  reply = ok;
+  identity = login;
+  assert.equal((await call(subject)).status, 200);
+  assert.equal((await call(`${subject}/${EXECUTION}/accept`, "POST", { reason: "Unexpected" })).status, 400);
+  assert.equal((await call(`${subject}/${EXECUTION}/accept`, "POST", {})).status, 200);
+  assert.equal((await call(`${subject}/${EXECUTION}/decline`, "POST", { reason: "   " })).status, 400);
+  assert.equal((await call(`${subject}/${EXECUTION}/decline`, "POST", { reason: "A shorter duration would work" })).status, 200);
+  assert.ok(seen.every(entry => entry.url === "/rpc/resource_consent_request_command"));
+  assert.deepEqual(seen.map(({ role, actor, unit, app, body }) => [role, actor, unit, app, body.operation]), [
+    ...["create", "get", "cancel"].map(operation => ["junctura_resource_api", "service-1", "unit-b", CONSENT, operation]),
+    ...["list", "accept", "decline"].map(operation => ["junctura_subject_api", undefined, undefined, undefined, operation]),
+  ]);
+  assert.deepEqual(seen[0].body.payload, proposal);
+  assert.deepEqual(seen.at(-1).body.payload, { requestId: EXECUTION, reason: "A shorter duration would work" });
 });

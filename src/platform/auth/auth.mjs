@@ -56,6 +56,7 @@ export function validateIdentity(claims, issuer, now = Date.now() / 1000) {
 }
 
 const scopedRoute = /^\/v2\/(?:data(?:[/:-]|$)|objects(?:\/|$))/;
+const consentRequestRoute = /^\/v1\/(?:resource-consent-requests(?:\/[0-9a-f-]+(?:\/cancel)?)?|me\/resource-consent-requests(?:\/[0-9a-f-]+\/(?:accept|decline))?)$/;
 const consoleRoles = ["admin", "manager", "viewer"];
 const consoleRoleTtlMs = 3000;
 const consoleRoleCacheLimit = 1024;
@@ -88,8 +89,9 @@ export async function logAccessDenial(config, identity, requestId, code, fetcher
 async function enforceAccess(config, fetcher, request, identity, claims, exchange) {
   const path = request.url?.split("?", 1)[0];
   const checkOnly = path === "/internal/auth";
+  const consentRequest = consentRequestRoute.test(path);
   const write = Boolean(request.method && !["GET", "HEAD", "OPTIONS"].includes(request.method)) &&
-    !(request.method === "POST" && path === "/v1/audit-events/verify");
+    !consentRequest && !(request.method === "POST" && path === "/v1/audit-events/verify");
   const target = /^\/v2\/(?:data\/([^/]+)|objects)\/([a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12})(?:[:/]|$)/.exec(path);
   // The exact GET handlers evaluate unit isolation and consent together.
   const consentRead = identity.actor && request.method === "GET" && target && target[0] === path && path.endsWith(target[2]);
@@ -116,7 +118,7 @@ async function enforceAccess(config, fetcher, request, identity, claims, exchang
     body: JSON.stringify({ payload: { requestId: requestIdFor(request), write: !exchange && !checkOnly && write, ...resource,
       // The gateway check has no target. The public route checks the specific app.
       managementAppId: identity.actor ? undefined : checkOnly ? null : managementAppId(path, request.method),
-      userRoute: Boolean(exchange) || checkOnly || path === "/v1/identity" || path === "/v1/search" || scopedRoute.test(path),
+      userRoute: Boolean(exchange) || checkOnly || path === "/v1/identity" || path === "/v1/search" || scopedRoute.test(path) || consentRequest,
       managerOnly: write && path?.startsWith("/v2/data-schemas/"),
       sourceClient: exchange ? claims.client_id : undefined,
       delegationEvent: exchange === "issue" ? "exchanged" : identity.actor && !exchange && !checkOnly ? "authorized" : undefined,

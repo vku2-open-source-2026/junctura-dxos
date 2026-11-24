@@ -30,7 +30,8 @@ const FEATURE_PREFIXES = [
   ["sharing", ["/v1/trust", "/v2/resource-shares"]],
   ["capabilities", ["/v1/capabilities", "/v1/capability-executions", "/v1/compositions"]],
   ["applications", ["/v1/applications"]],
-  ["consents", ["/v1/me/consents", "/v1/me/data-access", "/v1/emergency-accesses"]],
+  ["consents", ["/v1/me/consents", "/v1/me/data-access", "/v1/emergency-accesses",
+    "/v1/resource-consent-requests", "/v1/me/resource-consent-requests"]],
   ["secrets", ["/v2/secrets"]],
   ["audit", ["/v1/audit-events"]],
 ];

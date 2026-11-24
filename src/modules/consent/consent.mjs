@@ -12,21 +12,30 @@ import { HttpError, json, logicalRequestDigest, readBody, requestIdFor, requireW
 
 export const CONSENTS_PATH = "/v1/me/consents";
 const RESOURCE_CONSENTS_PATH = "/v1/me/resource-consents";
+const RESOURCE_REQUESTS_PATH = "/v1/resource-consent-requests";
+const SUBJECT_REQUESTS_PATH = "/v1/me/resource-consent-requests";
 export const isPlannedSubjectPath = path => /^\/v1\/me\/(?:data-access\/[^/]+\/flag|emergency-accesses\/[^/]+\/feedback)$/.test(path);
 export const EMERGENCY_PATH = "/v1/emergency-accesses";
 
 const capabilityPattern = /^urn:junctura:capability:[0-9a-f-]{36}:[a-z][a-z0-9-]{0,62}$/;
 const purposePattern = /^[a-z][a-z0-9_]{1,62}$/;
 
-function validateResourceConsent(body) {
-  if (Object.keys(body).some(key => !["resourceType", "resourceId", "recipientUnit", "purpose", "expiresAt"].includes(key)) ||
+function validConsentText(value) {
+  return typeof value === "string" && value.isWellFormed() && value.trim() &&
+    [...value].length <= 255 && !/[\p{Cc}]/u.test(value);
+}
+
+function validateResourceConsent(body, proposal = false) {
+  const invalid = proposal ? "invalid_consent_request" : "invalid_consent";
+  const keys = ["resourceType", "resourceId", "purpose", "expiresAt"];
+  if (!proposal) keys.push("recipientUnit");
+  if (Object.keys(body).some(key => !keys.includes(key)) ||
       !["record", "object"].includes(body.resourceType) || typeof body.resourceId !== "string" || !uuidPattern.test(body.resourceId) ||
-      typeof body.recipientUnit !== "string" || !/^[a-z][a-z0-9-]{1,63}$/.test(body.recipientUnit) ||
-      typeof body.purpose !== "string" || !body.purpose.isWellFormed() || !body.purpose.trim() ||
-      [...body.purpose].length > 255 || /[\p{Cc}]/u.test(body.purpose)) {
-    throw new HttpError(400, "invalid_consent");
+      (!proposal && (typeof body.recipientUnit !== "string" || !/^[a-z][a-z0-9-]{1,63}$/.test(body.recipientUnit))) ||
+      !validConsentText(body.purpose)) {
+    throw new HttpError(400, invalid);
   }
-  if (Object.hasOwn(body, "expiresAt") &&
+  if ((proposal || Object.hasOwn(body, "expiresAt")) &&
       (typeof body.expiresAt !== "string" || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?Z$/.test(body.expiresAt) ||
        !Number.isFinite(Date.parse(body.expiresAt)) ||
        new Date(body.expiresAt).toISOString().slice(0, 19) !== body.expiresAt.slice(0, 19))) {
@@ -86,8 +95,8 @@ async function command(config, identity, role, rpc, operation, payload) {
 
 export function isConsentPath(path) {
   if (typeof path !== "string") return false;
-  if (path === RESOURCE_CONSENTS_PATH || path.startsWith(`${RESOURCE_CONSENTS_PATH}/`)) return true;
-  return path === CONSENTS_PATH || path.startsWith(`${CONSENTS_PATH}/`) || path === EMERGENCY_PATH || path.startsWith(`${EMERGENCY_PATH}/`);
+  return [RESOURCE_CONSENTS_PATH, RESOURCE_REQUESTS_PATH, SUBJECT_REQUESTS_PATH, CONSENTS_PATH, EMERGENCY_PATH]
+    .some(base => path === base || path.startsWith(`${base}/`));
 }
 
 async function handleResourceConsents(request, response, identity, config, path) {
@@ -111,10 +120,46 @@ async function handleResourceConsents(request, response, identity, config, path)
   return json(response, 200, (await run("revoke", { consentId: revoke[1] })).value);
 }
 
+async function handleResourceConsentRequests(request, response, identity, config, path, base) {
+  const subject = base === SUBJECT_REQUESTS_PATH;
+  if (subject && (identity.actor || !identity.subjectId)) throw new HttpError(403, "verified_subject_required");
+  if (!subject && (!identity.actor || !identity.humanAppId || !identity.resourceUnit)) {
+    throw new HttpError(403, "application_access_required");
+  }
+  const role = subject ? "junctura_subject_api" : "junctura_resource_api";
+  const run = (operation, payload) => command(config, identity, role, "resource_consent_request_command", operation, payload);
+  let result;
+  if (path === base) {
+    if (request.method !== (subject ? "GET" : "POST")) throw new HttpError(405, "method_not_allowed");
+    result = subject ? await run("list", {}) : await run("create", validateResourceConsent(await readObject(request), true));
+    if (!subject) response.setHeader("Location", `${base}/${result.value.requestId}`);
+  } else {
+    const match = /^\/([^/]+)(?:\/([^/]+))?$/.exec(path.slice(base.length));
+    if (!match || !(subject ? ["accept", "decline"].includes(match[2]) : match[2] === undefined || match[2] === "cancel")) {
+      throw new HttpError(404, "not_found");
+    }
+    const [, id, operation = "get"] = match;
+    if (!uuidPattern.test(id)) throw new HttpError(400, "invalid_consent_request_path");
+    if (request.method !== (operation === "get" ? "GET" : "POST")) throw new HttpError(405, "method_not_allowed");
+    const body = operation === "get" ? {} : await readObject(request);
+    if (Object.keys(body).some(key => operation !== "decline" || key !== "reason") ||
+        (Object.hasOwn(body, "reason") && !validConsentText(body.reason))) {
+      throw new HttpError(400, "invalid_consent_request");
+    }
+    result = await run(operation, { ...body, requestId: id });
+  }
+  return json(response, result.status, result.value);
+}
+
 export async function handleConsent(request, response, identity, config, url) {
   if (url.search) throw new HttpError(400, "invalid_query");
   response.setHeader("Cache-Control", "no-store");
   const path = url.pathname;
+  for (const base of [RESOURCE_REQUESTS_PATH, SUBJECT_REQUESTS_PATH]) {
+    if (path === base || path.startsWith(`${base}/`)) {
+      return handleResourceConsentRequests(request, response, identity, config, path, base);
+    }
+  }
   if (path === RESOURCE_CONSENTS_PATH || path.startsWith(`${RESOURCE_CONSENTS_PATH}/`)) {
     return handleResourceConsents(request, response, identity, config, path);
   }

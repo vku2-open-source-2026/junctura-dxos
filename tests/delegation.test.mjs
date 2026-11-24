@@ -135,6 +135,23 @@ test("a read-only input stays read-only even if introspection and the app role a
   }
 });
 
+test("delegated viewers can submit and cancel consent requests through the assignment check", async t => {
+  const f = fixture(t, { userRoles: reader });
+  const { access_token } = await f.exchange();
+  const requests = "/v1/resource-consent-requests";
+  for (const path of [requests, `${requests}/${appId}/cancel`]) {
+    const identity = await f.authorize(request(access_token, path, "POST"), true);
+    assert.deepEqual(identity.roles, reader);
+    assert.equal(f.entries.at(-1).payload.userRoute, true);
+    assert.equal(f.entries.at(-1).payload.write, false);
+  }
+  await f.authorize(request(access_token, "/v2/data/example", "POST"), true);
+  assert.equal(f.entries.at(-1).payload.write, true);
+  await f.authorize(request(access_token, `${requests}/../me/consents`, "POST"), true);
+  assert.equal(f.entries.at(-1).payload.userRoute, false);
+  assert.equal(f.entries.at(-1).payload.write, true);
+});
+
 test("delegated calls recheck assignment and log an inactive user proof with both identities", async t => {
   const f = fixture(t);
   const { access_token } = await f.exchange();
