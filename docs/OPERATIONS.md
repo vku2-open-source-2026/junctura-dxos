@@ -146,6 +146,10 @@ The script uses `PUBLIC_URL` for administration. If public admin routes are bloc
 
 ## Backup and restore
 
+Migration 061 stores capability access requests in `trust_private.access_requests` under tenant
+RLS. The structured PostgreSQL backup includes the requests with their linked trust grants.
+Catalog and access request RPCs use the existing capability and trust roles.
+
 ```sh
 npm run backup                          # backups/<YYYYMMDD-HHMMSS>/
 npm run restore -- backups/20261103-220000 --yes

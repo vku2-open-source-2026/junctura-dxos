@@ -721,6 +721,79 @@
         "x-junctura-status": "implemented-authorized-discovery"
       }
     },
+    "/v1/capabilities/catalog": {
+      "get": {
+        "operationId": "listCapabilityCatalog",
+        "summary": "List the capability catalog",
+        "description": "Returns the highest published semantic version visible to the caller for each capability using tenant, unit, application and management visibility. The manifest is present only with a live exact discover grant.",
+        "tags": [
+          "capabilities"
+        ],
+        "security": [
+          {
+            "oidcBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 100
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "maxLength": 512,
+              "pattern": "^[0-9a-fA-F]+$"
+            },
+            "description": "Opaque cursor returned as nextCursor. Reuse the same caller and filters."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CapabilityCatalogPage"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          }
+        },
+        "x-junctura-required-permissions": [
+          "live-resource-policy"
+        ],
+        "x-junctura-core-roles": [
+          "core-reader"
+        ],
+        "x-junctura-status": "implemented-catalog-access-requests",
+        "x-junctura-source": "src/modules/capability/registry/capabilities.mjs",
+        "x-junctura-test-suite": "access-requests"
+      }
+    },
     "/v1/capabilities/{capabilityId}/versions": {
       "post": {
         "operationId": "registerCapabilityVersion",
@@ -1964,6 +2037,592 @@
         "x-junctura-core-roles": [
           "core-reader"
         ]
+      }
+    },
+    "/v1/trust/access-requests": {
+      "get": {
+        "operationId": "listCapabilityAccessRequests",
+        "summary": "List capability access requests",
+        "description": "Lists requests sent by the calling application or received by applications the caller owns with trust.write.",
+        "tags": [
+          "trust"
+        ],
+        "security": [
+          {
+            "oidcBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "direction",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "incoming",
+                "outgoing"
+              ]
+            },
+            "description": "Omit to include both directions."
+          },
+          {
+            "name": "state",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "pending",
+                "withdrawn",
+                "declined",
+                "accepted"
+              ]
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 100
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "maxLength": 512,
+              "pattern": "^[0-9a-fA-F]+$"
+            },
+            "description": "Opaque cursor returned as nextCursor. Reuse the same caller and filters."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CapabilityAccessRequestPage"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          }
+        },
+        "x-junctura-required-permissions": [
+          "access-request-party"
+        ],
+        "x-junctura-core-roles": [
+          "core-reader"
+        ],
+        "x-junctura-status": "implemented-catalog-access-requests",
+        "x-junctura-source": "src/modules/capability/trust/access-requests.mjs",
+        "x-junctura-test-suite": "access-requests"
+      },
+      "post": {
+        "operationId": "createCapabilityAccessRequest",
+        "summary": "Request access to a published capability version",
+        "description": "An active consumer application requests a visible published version. An identical retry returns the current request. Reusing the key with different inputs gives 409.",
+        "tags": [
+          "trust"
+        ],
+        "security": [
+          {
+            "oidcBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/Uuid"
+            },
+            "description": "UUID scoped to the requesting application. Use the same key and body for retries."
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Request created.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CapabilityAccessRequest"
+                }
+              }
+            },
+            "headers": {
+              "Location": {
+                "description": "Path to the access request.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Existing request for the idempotency key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CapabilityAccessRequest"
+                }
+              }
+            },
+            "headers": {
+              "Location": {
+                "description": "Path to the access request.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "413": {
+            "$ref": "#/components/responses/ContentTooLarge"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          },
+          "405": {
+            "$ref": "#/components/responses/MethodNotAllowed"
+          }
+        },
+        "x-junctura-required-permissions": [
+          "verified-backend"
+        ],
+        "x-junctura-core-roles": [
+          "core-reader",
+          "core-writer"
+        ],
+        "x-junctura-status": "implemented-catalog-access-requests",
+        "x-junctura-source": "src/modules/capability/trust/access-requests.mjs",
+        "x-junctura-test-suite": "access-requests",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CapabilityAccessRequestCreate"
+              },
+              "example": {
+                "capabilityId": "urn:junctura:capability:11111111-1111-4111-8111-111111111111:echo",
+                "version": "1.0.0",
+                "purpose": "Verify interoperability with the published echo capability."
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/trust/access-requests/{requestId}": {
+      "get": {
+        "operationId": "getCapabilityAccessRequest",
+        "summary": "Read a capability access request",
+        "description": "Visible to the sending application and the provider owner with trust.write.",
+        "tags": [
+          "trust"
+        ],
+        "security": [
+          {
+            "oidcBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "requestId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/Uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CapabilityAccessRequest"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          }
+        },
+        "x-junctura-required-permissions": [
+          "access-request-party"
+        ],
+        "x-junctura-core-roles": [
+          "core-reader"
+        ],
+        "x-junctura-status": "implemented-catalog-access-requests",
+        "x-junctura-source": "src/modules/capability/trust/access-requests.mjs",
+        "x-junctura-test-suite": "access-requests"
+      }
+    },
+    "/v1/trust/access-requests/{requestId}/withdraw": {
+      "post": {
+        "operationId": "withdrawCapabilityAccessRequest",
+        "summary": "Withdraw a pending access request",
+        "description": "Only the sending application can withdraw its pending request.",
+        "tags": [
+          "trust"
+        ],
+        "security": [
+          {
+            "oidcBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "requestId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/Uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/CapabilityAccessRequest"
+                    },
+                    {
+                      "properties": {
+                        "state": {
+                          "const": "withdrawn"
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "413": {
+            "$ref": "#/components/responses/ContentTooLarge"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          },
+          "405": {
+            "$ref": "#/components/responses/MethodNotAllowed"
+          }
+        },
+        "x-junctura-required-permissions": [
+          "verified-backend"
+        ],
+        "x-junctura-core-roles": [
+          "core-reader",
+          "core-writer"
+        ],
+        "x-junctura-status": "implemented-catalog-access-requests",
+        "x-junctura-source": "src/modules/capability/trust/access-requests.mjs",
+        "x-junctura-test-suite": "access-requests",
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Empty"
+              },
+              "example": {}
+            }
+          }
+        }
+      }
+    },
+    "/v1/trust/access-requests/{requestId}/decline": {
+      "post": {
+        "operationId": "declineCapabilityAccessRequest",
+        "summary": "Decline a pending access request",
+        "description": "Only the provider owner with trust.write can decline, and a reason is required.",
+        "tags": [
+          "trust"
+        ],
+        "security": [
+          {
+            "oidcBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "requestId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/Uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/CapabilityAccessRequest"
+                    },
+                    {
+                      "properties": {
+                        "state": {
+                          "const": "declined"
+                        },
+                        "reason": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 512
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "413": {
+            "$ref": "#/components/responses/ContentTooLarge"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          },
+          "405": {
+            "$ref": "#/components/responses/MethodNotAllowed"
+          }
+        },
+        "x-junctura-required-permissions": [
+          "trust.write"
+        ],
+        "x-junctura-core-roles": [
+          "core-reader",
+          "core-writer"
+        ],
+        "x-junctura-status": "implemented-catalog-access-requests",
+        "x-junctura-source": "src/modules/capability/trust/access-requests.mjs",
+        "x-junctura-test-suite": "access-requests",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Reason"
+              },
+              "example": {
+                "reason": "The provider cannot support the requested use."
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/trust/access-requests/{requestId}/accept": {
+      "post": {
+        "operationId": "acceptCapabilityAccessRequest",
+        "summary": "Accept a pending access request",
+        "description": "The provider owner with trust.write creates an exact direct trust grant proposal in the same transaction. The grant must be approved and activated by an independent administrator.",
+        "tags": [
+          "trust"
+        ],
+        "security": [
+          {
+            "oidcBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "requestId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/Uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/CapabilityAccessRequest"
+                    },
+                    {
+                      "properties": {
+                        "state": {
+                          "const": "accepted"
+                        },
+                        "grantId": {
+                          "$ref": "#/components/schemas/Uuid"
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "413": {
+            "$ref": "#/components/responses/ContentTooLarge"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          },
+          "405": {
+            "$ref": "#/components/responses/MethodNotAllowed"
+          }
+        },
+        "x-junctura-required-permissions": [
+          "trust.write"
+        ],
+        "x-junctura-core-roles": [
+          "core-reader",
+          "core-writer"
+        ],
+        "x-junctura-status": "implemented-catalog-access-requests",
+        "x-junctura-source": "src/modules/capability/trust/access-requests.mjs",
+        "x-junctura-test-suite": "access-requests",
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Empty"
+              },
+              "example": {}
+            }
+          }
+        }
       }
     },
     "/v1/approvals": {
@@ -7836,6 +8495,245 @@
         "required": [
           "items"
         ]
+      },
+      "CapabilityCatalogItem": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "capabilityId",
+          "versionId",
+          "providerAppId",
+          "version",
+          "digest",
+          "state",
+          "visibility",
+          "title",
+          "description",
+          "publishedAt",
+          "myAccess"
+        ],
+        "properties": {
+          "capabilityId": {
+            "$ref": "./capability-manifest-v1.schema.json#/$defs/CapabilityId"
+          },
+          "versionId": {
+            "$ref": "#/components/schemas/Uuid"
+          },
+          "providerAppId": {
+            "$ref": "#/components/schemas/Uuid"
+          },
+          "version": {
+            "$ref": "#/components/schemas/Version"
+          },
+          "digest": {
+            "$ref": "#/components/schemas/Digest"
+          },
+          "state": {
+            "const": "published"
+          },
+          "visibility": {
+            "type": "string",
+            "enum": [
+              "tenant",
+              "units",
+              "applications",
+              "hidden"
+            ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "publishedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "myAccess": {
+            "type": "string",
+            "enum": [
+              "none",
+              "requested",
+              "granted"
+            ],
+            "description": "Live exact grant, pending request or pending linked grant, or neither."
+          },
+          "manifest": {
+            "$ref": "./capability-manifest-v1.schema.json"
+          }
+        },
+        "if": {
+          "required": [
+            "manifest"
+          ]
+        },
+        "then": {
+          "properties": {
+            "myAccess": {
+              "const": "granted"
+            }
+          }
+        },
+        "examples": [
+          {
+            "capabilityId": "urn:junctura:capability:11111111-1111-4111-8111-111111111111:echo",
+            "versionId": "22222222-2222-4222-8222-222222222222",
+            "providerAppId": "11111111-1111-4111-8111-111111111111",
+            "version": "1.0.0",
+            "digest": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+            "state": "published",
+            "visibility": "tenant",
+            "title": "Technical echo",
+            "description": "Returns the supplied value.",
+            "publishedAt": "2026-01-01T00:00:00Z",
+            "myAccess": "none"
+          }
+        ]
+      },
+      "CapabilityCatalogPage": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "items",
+          "nextCursor"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CapabilityCatalogItem"
+            }
+          },
+          "nextCursor": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "CapabilityAccessRequestCreate": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "capabilityId",
+          "version",
+          "purpose"
+        ],
+        "properties": {
+          "capabilityId": {
+            "$ref": "./capability-manifest-v1.schema.json#/$defs/CapabilityId"
+          },
+          "version": {
+            "$ref": "#/components/schemas/Version"
+          },
+          "purpose": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512,
+            "pattern": "^(?=[^\\x00-\\x1f\\x7f]*\\S)[^\\x00-\\x1f\\x7f]+$"
+          }
+        }
+      },
+      "CapabilityAccessRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "requestId",
+          "providerAppId",
+          "consumerAppId",
+          "capabilityId",
+          "version",
+          "manifestDigest",
+          "purpose",
+          "state",
+          "reason",
+          "grantId",
+          "createdAt",
+          "updatedAt"
+        ],
+        "properties": {
+          "requestId": {
+            "$ref": "#/components/schemas/Uuid"
+          },
+          "providerAppId": {
+            "$ref": "#/components/schemas/Uuid"
+          },
+          "consumerAppId": {
+            "$ref": "#/components/schemas/Uuid"
+          },
+          "capabilityId": {
+            "$ref": "./capability-manifest-v1.schema.json#/$defs/CapabilityId"
+          },
+          "version": {
+            "$ref": "#/components/schemas/Version"
+          },
+          "manifestDigest": {
+            "$ref": "#/components/schemas/Digest"
+          },
+          "purpose": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512,
+            "pattern": "^[^\\x00-\\x1f\\x7f]*\\S[^\\x00-\\x1f\\x7f]*$"
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "withdrawn",
+              "declined",
+              "accepted"
+            ]
+          },
+          "reason": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "grantId": {
+            "anyOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/Uuid"
+              }
+            ]
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "CapabilityAccessRequestPage": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "items",
+          "nextCursor"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CapabilityAccessRequest"
+            }
+          },
+          "nextCursor": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
       },
       "GrantCreate": {
         "type": "object",

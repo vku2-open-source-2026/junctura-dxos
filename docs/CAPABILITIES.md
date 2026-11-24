@@ -189,6 +189,40 @@ audited as `capability.visibility_changed` with the chosen level as the reason c
 denials are unchanged: an application without approved invoke authority is still refused with 403
 `capability_not_granted` and an `authorization.denied` audit row.
 
+`GET /v1/capabilities/catalog` selects the highest visible published semantic version of each
+capability. It returns title, description, exact version metadata, visibility level and `myAccess`.
+Only a live exact `discover` grant adds the manifest, including input and output schemas.
+The list is ordered by publication time, newest first. Use `limit` (1–100, default 100) and pass
+`nextCursor` to the next request as `cursor`. Each page rechecks tenant, caller and visibility.
+
+`myAccess` is evaluated for the caller and listed version. A live `discover` or `invoke` grant
+gives `granted`. A pending request or an accepted request with an unexpired pending grant gives
+`requested`. All other cases give `none`.
+
+## Capability access requests
+
+An active backend application with `core-writer` can ask to use a visible published version.
+The request pins that version and its manifest digest. Each request is visible to the sender and
+the owning provider principal with `trust.write`. An unrelated caller receives 404 for a specific
+request. All writes require `core-writer`.
+
+| Method and path | Request and result |
+| --- | --- |
+| POST `/v1/trust/access-requests` | Send `{capabilityId, version, purpose}` with a UUID `Idempotency-Key`. Returns 201 and `Location`. The same application and key with the same body returns the current request with 200. A changed body with the same key returns 409. |
+| GET `/v1/trust/access-requests` | List with optional `direction=incoming\|outgoing`, `state=pending\|withdrawn\|declined\|accepted`, `limit` and `cursor`. Omit direction for both views. The cursor binds the caller and filters. |
+| GET `/v1/trust/access-requests/{requestId}` | Read the request, including its state, decline reason and linked grant ID when present. |
+| POST `/v1/trust/access-requests/{requestId}/withdraw` | The sending application withdraws a pending request. |
+| POST `/v1/trust/access-requests/{requestId}/decline` | The provider owner with `trust.write` declines a pending request and supplies `{reason}`. |
+| POST `/v1/trust/access-requests/{requestId}/accept` | The provider owner with `trust.write` accepts a pending request and receives its `grantId`. |
+
+Acceptance creates a pending direct grant in the same transaction. The proposal covers `discover`
+and `invoke` for the pinned version, its required permissions and the consumer's verified
+backend subject. It expires 30 days after acceptance. An independent administrator with
+`trust.approve` must approve and activate the grant. The provider owner who accepted the request is
+the grant proposer and cannot approve it. Every request state change writes a
+`capability.access_request_*` audit event in the same transaction. A transition from a terminal
+state returns 409 `invalid_transition`.
+
 ## Direct trust grants
 
 Propose one exact `{capabilityId, version, manifestDigest}` between different active same-tenant apps.

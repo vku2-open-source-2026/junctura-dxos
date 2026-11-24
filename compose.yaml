@@ -132,6 +132,7 @@ services:
       - ./infra/postgres/052-resource-consents.sql:/migrations/052-resource-consents.sql:ro
       - ./infra/postgres/053-resource-consent-requests.sql:/migrations/053-resource-consent-requests.sql:ro
       - ./infra/postgres/060-catalog-visibility.sql:/migrations/060-catalog-visibility.sql:ro
+      - ./infra/postgres/061-capability-access-requests.sql:/migrations/061-capability-access-requests.sql:ro
     depends_on:
       database:
         condition: service_healthy

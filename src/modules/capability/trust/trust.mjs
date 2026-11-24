@@ -42,19 +42,23 @@ export function grantDigest(grantId, identity, proposal) {
     issuer: identity.issuer, createdBy: identity.subject, proposal })).digest("hex")}`;
 }
 
-export async function trustCommand(config, identity, operation, payload) {
+export async function trustRpc(config, identity, rpc, operation, payload) {
   if (!config.dataUrl) throw new HttpError(503, "trust_unavailable");
   if (!identity.clientId) throw new HttpError(403, "verified_client_required");
   let result;
   try {
-    const response = await fetch(`${config.dataUrl}/rpc/trust_command`, { method: "POST",
+    const response = await fetch(`${config.dataUrl}/rpc/${rpc}`, { method: "POST",
       headers: { Authorization: `Bearer ${applicationToken(identity, config.dataSecret, "junctura_trust_api")}`, "Content-Type": "application/json" },
       body: JSON.stringify({ operation, payload }), signal: AbortSignal.timeout(5000), redirect: "error" });
     if (!response.ok) throw Error();
     result = await response.json();
   } catch { throw new HttpError(503, "trust_unavailable"); }
   if (result.error) throw new HttpError(result.status, result.error);
-  return result.value;
+  return result;
+}
+
+export async function trustCommand(config, identity, operation, payload) {
+  return (await trustRpc(config, identity, "trust_command", operation, payload)).value;
 }
 
 export function validateGrantApproval(body, identity) {

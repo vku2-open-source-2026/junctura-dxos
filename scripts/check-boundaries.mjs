@@ -46,6 +46,7 @@ const PUBLIC = new Set([
   "modules/capability/registry/manifest.mjs",
   "modules/capability/registry/payload.mjs",
   "modules/capability/trust/trust.mjs",
+  "modules/capability/trust/access-requests.mjs",
   "modules/capability/execution/execution.mjs",
   "modules/capability/execution/runtime.mjs",
   "modules/capability/execution/provider-network.mjs",

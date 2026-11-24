@@ -41,6 +41,15 @@ const result = await junctura.waitForExecution(execution.executionId);
 consent, seals the call into the audit chain and shows it to them later. Emergency
 access adds `emergency: true` and a `justification` and is reviewed afterwards.
 
+Use `listCapabilityCatalog({ limit, cursor })` to browse published versions and their
+`myAccess` status. To request a version, call
+`createCapabilityAccessRequest({ capabilityId, version, purpose }, idempotencyKey)`.
+Reuse the UUID key if you retry the same submission. Use `listCapabilityAccessRequests`,
+`getCapabilityAccessRequest` and `withdrawCapabilityAccessRequest` to track requests.
+Provider owners can pass their OIDC token as `{ userToken }` to list incoming requests,
+decline a request or accept it. Acceptance returns the ID of a pending grant for an
+independent approver to review.
+
 ## Use as a provider
 
 Junctura invokes a provider with a single-use ticket. Redeem it before doing any work:

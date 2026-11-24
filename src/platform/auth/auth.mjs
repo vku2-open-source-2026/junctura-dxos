@@ -118,7 +118,9 @@ async function enforceAccess(config, fetcher, request, identity, claims, exchang
     body: JSON.stringify({ payload: { requestId: requestIdFor(request), write: !exchange && !checkOnly && write, ...resource,
       // The gateway check has no target. The public route checks the specific app.
       managementAppId: identity.actor ? undefined : checkOnly ? null : managementAppId(path, request.method),
-      userRoute: Boolean(exchange) || checkOnly || path === "/v1/identity" || path === "/v1/search" || scopedRoute.test(path) || consentRequest,
+      userRoute: Boolean(exchange) || checkOnly || path === "/v1/identity" || path === "/v1/search" ||
+        path === "/v1/capabilities/catalog" || path === "/v1/trust/access-requests" ||
+        path?.startsWith("/v1/trust/access-requests/") || scopedRoute.test(path) || consentRequest,
       managerOnly: write && path?.startsWith("/v2/data-schemas/"),
       sourceClient: exchange ? claims.client_id : undefined,
       delegationEvent: exchange === "issue" ? "exchanged" : identity.actor && !exchange && !checkOnly ? "authorized" : undefined,
