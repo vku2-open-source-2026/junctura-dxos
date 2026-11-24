@@ -38,11 +38,17 @@ async function login(username, password, clientId, clientSecret) {
   const tokens = await fetch(`${issuer}/protocol/openid-connect/token`, { method: "POST", body: new URLSearchParams({ grant_type: "authorization_code", client_id: clientId, redirect_uri: "http://127.0.0.1:9876/callback", code, code_verifier: verifier, ...(clientSecret ? { client_secret: clientSecret } : {}) }) });
   assert.equal(tokens.status, 200); return (await tokens.json()).access_token;
 }
+async function createUser(label, { tenant, credentials = [] } = {}) {
+  const username = `${prefix}-${label}`, password = randomBytes(32).toString("hex");
+  const result = await admin("users", { username, enabled: true, firstName: "Technical", lastName: "Fixture",
+    email: `${username}@example.invalid`, emailVerified: true, ...(tenant ? { attributes: { tenant_id: [tenant] } } : {}),
+    credentials: [{ type: "password", value: password, temporary: false }, ...credentials] }, "POST");
+  assert.equal(result.status, 201); const id = result.headers.get("location").split("/").at(-1); users.push(id);
+  return { id, username, password };
+}
 async function human(label, tenant, permissions) {
   const clientId = `${prefix}-management-${tenant}`;
-  const username = `${prefix}-${label}`, password = randomBytes(32).toString("hex");
-  const result = await admin("users", { username, enabled: true, firstName: "Technical", lastName: "Fixture", email: `${username}@example.invalid`, emailVerified: true, attributes: { tenant_id: [tenant] }, credentials: [{ type: "password", value: password, temporary: false }] }, "POST");
-  assert.equal(result.status, 201); const id = result.headers.get("location").split("/").at(-1); users.push(id);
+  const { id, username, password } = await createUser(label, { tenant });
   const verified = await (await admin(`users/${id}`)).json();
   assert.equal(verified.enabled, true); assert.equal(verified.serviceAccountClientId, undefined);
   const group = (await (await admin(`groups?search=${tenant}&exact=true`)).json()).find(value => value.name === tenant); assert.ok(group);
@@ -124,5 +130,5 @@ async function backend(label, principal, administrator, tenant = "tenant-a", wri
 }
 
 
-return { operatorToken, admin, login, human, verifiedSubject, cleanupSubjectBindings, backend };
+return { operatorToken, admin, createUser, login, human, verifiedSubject, cleanupSubjectBindings, backend };
 }

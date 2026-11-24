@@ -44,6 +44,7 @@
     "test:sdk": "node --test tests/sdk.test.mjs",
     "example:sdk": "node --env-file-if-exists=.env examples/sdk-foundation.mjs",
     "test:integration": "node --env-file=.env --test integration/core.mjs",
+    "test:admin-mfa": "node --env-file=.env --test integration/admin-mfa.mjs",
     "test:malware-scan": "node --env-file=.env --test integration/malware-scan.mjs",
     "test:secrets": "node --env-file=.env --test integration/secrets.mjs",
     "test:recovery": "node --env-file=.env --test integration/recovery.mjs",

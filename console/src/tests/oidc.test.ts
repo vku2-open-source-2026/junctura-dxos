@@ -65,14 +65,14 @@ describe("OIDC PKCE helpers", () => {
     expect(sessionStorage.getItem(OIDC_SESSION_KEY)).toBeNull();
   });
 
-  it("signs in with the password grant and stores the access token", async () => {
+  it.each([undefined, "012345"])("signs in with password grant and OTP %s", async otp => {
     const fetchMock = vi.fn(
       (_input: RequestInfo | URL, _init?: RequestInit) =>
         Promise.resolve(tokenResponse(200, { access_token: "fixture-token" }))
     );
     vi.stubGlobal("fetch", fetchMock);
 
-    await signInWithPassword("operator", "fixture-secret");
+    await signInWithPassword("operator", "fixture-secret", otp);
 
     expect(api.getToken()).toBe("fixture-token");
     expect(fetchMock).toHaveBeenCalledTimes(1);
@@ -86,13 +86,14 @@ describe("OIDC PKCE helpers", () => {
     expect(body.get("scope")).toBe("openid");
     expect(body.get("username")).toBe("operator");
     expect(body.get("password")).toBe("fixture-secret");
+    expect(body.get("otp")).toBe(otp ?? null);
   });
 
-  it("maps a 401 token response to invalid credentials", async () => {
+  it.each([400, 401])("maps invalid_grant with status %s to invalid credentials", async status => {
     vi.stubGlobal(
       "fetch",
       vi.fn(() =>
-        Promise.resolve(tokenResponse(401, { error: "invalid_grant" }))
+        Promise.resolve(tokenResponse(status, { error: "invalid_grant" }))
       )
     );
 
