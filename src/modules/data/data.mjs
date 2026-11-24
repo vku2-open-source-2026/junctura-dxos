@@ -6,7 +6,7 @@ import { signInternalToken } from "../../platform/security/internal-token.mjs";
 export { handleAppRecords, parseRecordBatch, presentRecordRequest, sendRecordResult } from "./records.mjs";
 export { handleRecordArchive } from "./archive/archives.mjs";
 export { handleRecordQuery } from "./query/handler.mjs";
-import { resourceRequest } from "../resources/resources.mjs";
+import { recordCommand } from "./records.mjs";
 
 export function dataToken(tenantId, secret) {
   return signInternalToken(secret, { role: "junctura_api", tenant_id: tenantId,
@@ -58,9 +58,7 @@ export async function handleData(request, response, identity, config, url) {
   const [, collection, id] = match;
   const appScoped = url.pathname.startsWith("/v2/");
   if (appScoped && !identity.appId) throw new HttpError(403, "application_access_required");
-  const send = (query, options) => appScoped
-    ? resourceRequest(config, identity, "app_records", query, options)
-    : dataRequest(config, identity.tenantId, query, options);
+  const send = (query, options) => dataRequest(config, identity.tenantId, query, options);
   const query = new URLSearchParams({ collection: `eq.${collection}`, select: "id,collection,data,created_at", order: "created_at.asc,id.asc" });
   if (id) query.set("id", `eq.${id}`);
   if (request.method === "GET") {
@@ -78,11 +76,19 @@ export async function handleData(request, response, identity, config, url) {
     }
     const order = url.searchParams.get("order") ?? "asc";
     if (!["asc", "desc"].includes(order) || new Set(keys).size !== keys.length) throw new HttpError(400, "invalid_query");
+    const cursor = url.searchParams.has("cursor") ? decodeCursor(url.searchParams.get("cursor"), order) : undefined;
+    if (appScoped) {
+      const result = await recordCommand(config, identity, "legacy_list", { collection, limit: Number(limit), order, cursor });
+      if (result.error) throw new HttpError(result.status, result.error);
+      const { items, hasMore } = result.value;
+      const last = items.at(-1);
+      const nextCursor = hasMore
+        ? Buffer.from(JSON.stringify({ t: last.created_at, i: last.id, o: order })).toString("base64url") : null;
+      return json(response, 200, { items, nextCursor });
+    }
     query.set("order", `created_at.${order},id.${order}`);
     query.set("limit", String(Number(limit) + 1));
-    if (url.searchParams.has("cursor")) {
-      query.set("or", cursorFilter(decodeCursor(url.searchParams.get("cursor"), order), order));
-    }
+    if (cursor) query.set("or", cursorFilter(cursor, order));
     const rows = await send(query);
     const items = rows.slice(0, Number(limit));
     const last = items.at(-1);

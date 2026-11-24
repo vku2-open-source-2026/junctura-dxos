@@ -40,6 +40,15 @@ before(async () => {
         const { operation, payload } = await readJson(request);
         requests.push({ path: url.pathname, operation, payload });
         assert.equal(payload.collection, "entries");
+        if (operation === "legacy_list") {
+          const order = payload.order === "asc" ? 1 : -1;
+          const boundary = payload.cursor && { created_at: payload.cursor.t, id: payload.cursor.i };
+          const rows = records.filter(row => row.collection === payload.collection &&
+            (!boundary || compare(row, boundary) * order > 0)).sort((left, right) => compare(left, right) * order);
+          return json(response, 200, { status: 200, value: {
+            items: rows.slice(0, payload.limit), hasMore: rows.length > payload.limit,
+          } });
+        }
         if (operation !== "get") assert.equal(claims.resource_writer, true);
         let row = records.find(item => item.id === payload.id);
         if (operation === "create") {
@@ -60,10 +69,10 @@ before(async () => {
         return json(response, 200, { status: operation === "create" ? 201 : 200, value,
           headers: { ETag: `"record-${"a".repeat(64)}-${row.version ?? 1}"` } });
       }
-      assert.ok(["/records", "/app_records"].includes(url.pathname));
+      assert.equal(url.pathname, "/records");
       const query = url.searchParams;
       assert.equal(query.get("select"), "id,collection,data,created_at");
-      assert.equal(claims.role, url.pathname === "/records" ? "junctura_api" : "junctura_resource_api");
+      assert.equal(claims.role, "junctura_api");
       requests.push({ path: url.pathname, query, raw: request.url, method: request.method });
       let rows = records.filter(row => `eq.${row.collection}` === query.get("collection") &&
         (!query.has("id") || `eq.${row.id}` === query.get("id")));
@@ -123,10 +132,10 @@ beforeEach(() => { records = fixture(); requests = []; upstreamMaxRows = Infinit
 
 for (const version of ["v1", "v2"]) {
   const path = `/${version}/data/entries`;
-  const resource = version === "v1" ? "/records" : "/app_records";
+  const resource = version === "v1" ? "/records" : "/rpc/record_command";
   const useIdentity = () => { currentIdentity = version === "v1" ? identity : { ...identity, appId: "00000000-0000-4000-8000-000000000001" }; };
 
-  for (const order of ["asc", "desc"]) for (const cap of [Infinity, 100]) {
+  for (const order of ["asc", "desc"]) for (const cap of version === "v1" ? [Infinity, 100] : [Infinity]) {
     test(`${version} pages all 250 records ${order} without duplicates or gaps with upstream row cap ${cap}`, async () => {
       useIdentity();
       upstreamMaxRows = cap;
@@ -153,8 +162,13 @@ for (const version of ["v1", "v2"]) {
       assert.deepEqual(items, expected);
       assert.equal(new Set(items.map(row => row.id)).size, 250);
       assert.ok(requests.every(request => request.path === resource));
-      assert.equal(requests.filter(request => request.query.get("limit") === "101").length, 3);
-      assert.equal(requests.filter(request => request.query.get("limit") === "1").length, cap === 100 ? 2 : 0);
+      if (version === "v1") {
+        assert.equal(requests.filter(request => request.query.get("limit") === "101").length, 3);
+        assert.equal(requests.filter(request => request.query.get("limit") === "1").length, cap === 100 ? 2 : 0);
+      } else {
+        assert.equal(requests.length, 3);
+        assert.ok(requests.every(request => request.operation === "legacy_list" && request.payload.limit === 100));
+      }
     });
   }
 
@@ -170,9 +184,13 @@ for (const version of ["v1", "v2"]) {
     const next = await fetch(`${base}${path}?cursor=${first.nextCursor}`);
     assert.equal(next.status, 200);
     assert.deepEqual((await next.json()).items, expected.slice(100, 200));
-    assert.equal(requests[1].query.get("or"), `(created_at.gt."${last.created_at}",and(created_at.eq."${last.created_at}",id.gt.${last.id}))`);
-    assert.ok(requests[1].raw.includes(`%22${last.created_at.replaceAll(":", "%3A").replace("+", "%2B")}%22`));
-    assert.equal(requests[1].raw.includes("%2522"), false, "quotes are encoded once");
+    if (version === "v1") {
+      assert.equal(requests[1].query.get("or"), `(created_at.gt."${last.created_at}",and(created_at.eq."${last.created_at}",id.gt.${last.id}))`);
+      assert.ok(requests[1].raw.includes(`%22${last.created_at.replaceAll(":", "%3A").replace("+", "%2B")}%22`));
+      assert.equal(requests[1].raw.includes("%2522"), false, "quotes are encoded once");
+    } else {
+      assert.deepEqual(requests[1].payload.cursor, { t: last.created_at, i: last.id, o: "asc" });
+    }
   });
 
   test(`${version} returns null for an empty page and exactly full final pages`, async () => {

@@ -50,11 +50,106 @@
     "successHasBody": true
   },
   {
+    "path": "/v2/data-masking/{collection}",
+    "method": "GET",
+    "operationId": "getFieldMaskingPolicy",
+    "summary": "Read a collection field masking policy",
+    "description": "Return the calling app’s policy for top-level record fields. A collection without a policy returns an empty fields object.",
+    "tags": [
+      "app-resource"
+    ],
+    "security": [
+      {
+        "coreBearer": []
+      }
+    ],
+    "responses": [
+      "200",
+      "400",
+      "401",
+      "403",
+      "404",
+      "405",
+      "429",
+      "502",
+      "503",
+      "504"
+    ],
+    "hasRequestBody": false,
+    "requestContentTypes": [],
+    "pathParameters": [
+      {
+        "name": "collection",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_-]{0,62}$"
+        },
+        "description": ""
+      }
+    ],
+    "queryParameters": [],
+    "headerParameters": [],
+    "successStatus": "200",
+    "successContentType": "application/json",
+    "successHasBody": true
+  },
+  {
+    "path": "/v2/data-masking/{collection}",
+    "method": "PUT",
+    "operationId": "putFieldMaskingPolicy",
+    "summary": "Replace a collection field masking policy",
+    "description": "Replace the complete policy for the calling app’s collection. Requires the owning backend with core-writer or a verified app manager with write access. An empty fields object clears the policy. Core masks fields for readers without a matching owner, role or exact-app share rule and audits clear disclosures. Masked fields are excluded from filter, sort, group, search and increment operations. A masking rule on the unique key returns 409.",
+    "tags": [
+      "app-resource"
+    ],
+    "security": [
+      {
+        "coreBearer": []
+      }
+    ],
+    "responses": [
+      "200",
+      "400",
+      "401",
+      "403",
+      "404",
+      "405",
+      "409",
+      "413",
+      "415",
+      "429",
+      "502",
+      "503",
+      "504"
+    ],
+    "hasRequestBody": true,
+    "requestContentTypes": [
+      "application/json"
+    ],
+    "pathParameters": [
+      {
+        "name": "collection",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_-]{0,62}$"
+        },
+        "description": ""
+      }
+    ],
+    "queryParameters": [],
+    "headerParameters": [],
+    "successStatus": "200",
+    "successContentType": "application/json",
+    "successHasBody": true
+  },
+  {
     "path": "/v2/data/{collection}/aggregate",
     "method": "GET",
     "operationId": "aggregateRecords",
     "summary": "Count or group records",
-    "description": "Count all readable matching records in the selected owner scope. groups is empty for count-only requests. Group keys follow the requested dimension order and missing values group as null. Queries that would return more than 1,000 groups return 400 invalid_query. Management viewers may not filter or group on sensitive fields.",
+    "description": "Count all readable matching records in the selected owner scope. groups is empty for count-only requests. Group keys follow the requested dimension order and missing values group as null. Queries that would return more than 1,000 groups return 400 invalid_query. Fields with masking rules are excluded from filtering and grouping. Sensitive schema fields are also unavailable to management viewers.",
     "tags": [
       "app-resource"
     ],
@@ -289,7 +384,7 @@
     "method": "GET",
     "operationId": "exportAppRecords",
     "summary": "Export records owned by the calling app",
-    "description": "Active app owner only. The export covers record IDs and data across its collections. Collection definitions, record revisions, shares, file bytes and audit rows are outside this format.",
+    "description": "Active app owner only. The export covers record IDs and data across its collections. Collection definitions, record revisions, shares, file bytes and audit rows are outside this format. Core applies each collection’s field masking policy when it returns the export page.",
     "tags": [
       "app-resource"
     ],
@@ -2039,7 +2134,7 @@
     "method": "GET",
     "operationId": "listFilteredRecords",
     "summary": "Filter and list records",
-    "description": "Without sort, use the existing (created_at, id) order. Supply nextCursor with unchanged owner, filters and ordering. Data returned to authorized management readers omits sensitive fields. Filtering and sorting on those fields are unavailable to these readers. Shared reads include only live exact shares and live app-group shares with current membership. Missing or inaccessible owner scope returns 404. In compatibility mode, a list without the new filter parameters may retain the legacy body and cursor without version fields.",
+    "description": "Without sort, use the existing (created_at, id) order. Supply nextCursor with unchanged owner, filters and ordering. Core applies the collection’s field masking policy to all returned records. Management readers also omit schema-sensitive fields without masking rules. Fields with masking rules are excluded from filtering and sorting for all readers. Shared reads include only live exact shares and live app-group shares with current membership. Missing or inaccessible owner scope returns 404. In compatibility mode, a list without the new filter parameters may retain the legacy body and cursor without version fields.",
     "tags": [
       "app-resource"
     ],
@@ -2216,7 +2311,7 @@
     "method": "GET",
     "operationId": "getVersionedRecord",
     "summary": "Get a versioned record",
-    "description": "Returns the current representation. An owner receives the strong ETag to use on a subsequent write. Existing records start at version 1. An authorized management reader sees data with sensitive top-level fields omitted. Masking grants no read permission. Strict mode includes version in the response body. Compatibility mode retains the legacy body. Shared and management reads omit the write ETag. An exact GET using a delegated token can also use a current resource consent for the selected unit. A matching revoked or expired consent returns 403 with consent_revoked or consent_expired and requestId when ordinary read authority is absent.",
+    "description": "Returns the current representation. An owner receives the strong ETag to use on a subsequent write. Existing records start at version 1. Core applies the collection’s field masking policy to the authorized reader. Management readers also omit schema-sensitive fields without masking rules. Strict mode includes version in the response body. Compatibility mode retains the legacy body. Shared and management reads omit the write ETag. An exact GET using a delegated token can also use a current resource consent for the selected unit. A matching revoked or expired consent returns 403 with consent_revoked or consent_expired and requestId when ordinary read authority is absent.",
     "tags": [
       "app-resource"
     ],
