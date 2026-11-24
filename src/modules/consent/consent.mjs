@@ -7,14 +7,42 @@
 // Core only asserts the private role for the verified caller.
 import { applicationToken } from "../applications/applications.mjs";
 import { parseStrictJson } from "../capability/compatibility/compatibility.mjs";
-import { HttpError, json, logicalRequestDigest, readBody, requireWriter, uuidPattern } from "../../platform/http/http.mjs";
+import { resourceRequest } from "../resources/resources.mjs";
+import { HttpError, json, logicalRequestDigest, readBody, requestIdFor, requireWriter, uuidPattern } from "../../platform/http/http.mjs";
 
 export const CONSENTS_PATH = "/v1/me/consents";
+const RESOURCE_CONSENTS_PATH = "/v1/me/resource-consents";
 export const isPlannedSubjectPath = path => /^\/v1\/me\/(?:data-access\/[^/]+\/flag|emergency-accesses\/[^/]+\/feedback)$/.test(path);
 export const EMERGENCY_PATH = "/v1/emergency-accesses";
 
 const capabilityPattern = /^urn:junctura:capability:[0-9a-f-]{36}:[a-z][a-z0-9-]{0,62}$/;
 const purposePattern = /^[a-z][a-z0-9_]{1,62}$/;
+
+function validateResourceConsent(body) {
+  if (Object.keys(body).some(key => !["resourceType", "resourceId", "recipientUnit", "purpose", "expiresAt"].includes(key)) ||
+      !["record", "object"].includes(body.resourceType) || typeof body.resourceId !== "string" || !uuidPattern.test(body.resourceId) ||
+      typeof body.recipientUnit !== "string" || !/^[a-z][a-z0-9-]{1,63}$/.test(body.recipientUnit) ||
+      typeof body.purpose !== "string" || !body.purpose.isWellFormed() || !body.purpose.trim() ||
+      [...body.purpose].length > 255 || /[\p{Cc}]/u.test(body.purpose)) {
+    throw new HttpError(400, "invalid_consent");
+  }
+  if (Object.hasOwn(body, "expiresAt") &&
+      (typeof body.expiresAt !== "string" || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?Z$/.test(body.expiresAt) ||
+       !Number.isFinite(Date.parse(body.expiresAt)) ||
+       new Date(body.expiresAt).toISOString().slice(0, 19) !== body.expiresAt.slice(0, 19))) {
+    throw new HttpError(400, "invalid_consent_expiry");
+  }
+  return body;
+}
+
+export async function readResourceConsent(request, config, identity, target) {
+  if (!identity.actor) return null;
+  const result = await resourceRequest(config, identity, "rpc/resource_consent_read", undefined,
+    { method: "POST", body: JSON.stringify({ payload: { ...target, requestId: requestIdFor(request) } }) });
+  if (result.status === 404) return null;
+  if (result.error) throw new HttpError(result.status, result.error);
+  return result;
+}
 
 function validateConsentBody(body) {
   if (Object.keys(body).sort().join(",") !== "capabilityId,consumerAppId,expiresAt,purposes" ||
@@ -58,13 +86,38 @@ async function command(config, identity, role, rpc, operation, payload) {
 
 export function isConsentPath(path) {
   if (typeof path !== "string") return false;
+  if (path === RESOURCE_CONSENTS_PATH || path.startsWith(`${RESOURCE_CONSENTS_PATH}/`)) return true;
   return path === CONSENTS_PATH || path.startsWith(`${CONSENTS_PATH}/`) || path === EMERGENCY_PATH || path.startsWith(`${EMERGENCY_PATH}/`);
+}
+
+async function handleResourceConsents(request, response, identity, config, path) {
+  const run = (operation, payload) =>
+    command(config, identity, "junctura_subject_api", "resource_consent_command", operation, payload);
+  if (identity.actor || !identity.subjectId) throw new HttpError(403, "verified_subject_required");
+  if (path === RESOURCE_CONSENTS_PATH) {
+    if (request.method === "GET") return json(response, 200, (await run("list", {})).value);
+    if (request.method !== "POST") throw new HttpError(405, "method_not_allowed");
+    const consent = validateResourceConsent(await readObject(request));
+    const key = request.headers["idempotency-key"];
+    if (!uuidPattern.test(key ?? "")) throw new HttpError(400, "invalid_request");
+    const result = await run("create", { consent, key, digest: logicalRequestDigest({ body: consent }) });
+    return json(response, result.status, result.value);
+  }
+  const revoke = /^\/v1\/me\/resource-consents\/([^/]+)\/revoke$/.exec(path);
+  if (!revoke) throw new HttpError(404, "not_found");
+  if (!uuidPattern.test(revoke[1])) throw new HttpError(400, "invalid_consent_path");
+  if (request.method !== "POST") throw new HttpError(405, "method_not_allowed");
+  if (Object.keys(await readObject(request)).length) throw new HttpError(400, "invalid_consent");
+  return json(response, 200, (await run("revoke", { consentId: revoke[1] })).value);
 }
 
 export async function handleConsent(request, response, identity, config, url) {
   if (url.search) throw new HttpError(400, "invalid_query");
   response.setHeader("Cache-Control", "no-store");
   const path = url.pathname;
+  if (path === RESOURCE_CONSENTS_PATH || path.startsWith(`${RESOURCE_CONSENTS_PATH}/`)) {
+    return handleResourceConsents(request, response, identity, config, path);
+  }
   if (path === CONSENTS_PATH) {
     if (request.method === "GET") {
       return json(response, 200, (await command(config, identity, "junctura_subject_api", "subject_consent", "list", {})).value);

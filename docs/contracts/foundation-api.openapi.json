@@ -3966,7 +3966,7 @@
       "get": {
         "operationId": "getVersionedRecord",
         "summary": "Get a versioned record",
-        "description": "Returns the current representation. An owner receives the strong ETag to use on a subsequent write. Existing records start at version 1. An authorized management reader sees data with sensitive top-level fields omitted. Masking grants no read permission. Strict mode includes version in the response body. Compatibility mode retains the legacy body. Shared and management reads omit the write ETag.",
+        "description": "Returns the current representation. An owner receives the strong ETag to use on a subsequent write. Existing records start at version 1. An authorized management reader sees data with sensitive top-level fields omitted. Masking grants no read permission. Strict mode includes version in the response body. Compatibility mode retains the legacy body. Shared and management reads omit the write ETag. An exact GET using a delegated token can also use a current resource consent for the selected unit. A matching revoked or expired consent returns 403 with consent_revoked or consent_expired and requestId when ordinary read authority is absent.",
         "tags": [
           "app-resource"
         ],
@@ -4958,7 +4958,7 @@
       "get": {
         "operationId": "v2DownloadObject",
         "summary": "V2 download object",
-        "description": "Active registered backend resolved from verified tenant/issuer/client_id and exact operator-enrolled resource_subject. Owner-only mutations; individually shared reads. Suspension/revocation and disabled enrollment block access. Upload 1 byte to 5 MiB. Stable-UUID PUT with identical bytes is retryable; POST creates a new ID and is not blindly retried. V2 DELETE tombstones permanently; bytes/old versions retained. PUT publishes immutable versions after DB reauthorization; concurrent owner PUTs use last publication. UUIDs are tenant-scoped, so a foreign tenant may create independent bytes at the same UUID.",
+        "description": "Active registered backend resolved from verified tenant/issuer/client_id and exact operator-enrolled resource_subject. Owner-only mutations; individually shared reads. Suspension/revocation and disabled enrollment block access. Upload 1 byte to 5 MiB. Stable-UUID PUT with identical bytes is retryable; POST creates a new ID and is not blindly retried. V2 DELETE tombstones permanently; bytes/old versions retained. PUT publishes immutable versions after DB reauthorization; concurrent owner PUTs use last publication. UUIDs are tenant-scoped, so a foreign tenant may create independent bytes at the same UUID. An exact GET using a delegated token can also use a current resource consent for the selected unit. A matching revoked or expired consent returns 403 with consent_revoked or consent_expired and requestId when ordinary read authority is absent.",
         "tags": [
           "app-resource"
         ],
@@ -8160,6 +8160,252 @@
               },
               "example": {}
             }
+          }
+        }
+      }
+    },
+    "/v1/me/resource-consents": {
+      "get": {
+        "operationId": "listResourceConsents",
+        "summary": "List the current subject’s resource consents",
+        "description": "Return the verified subject’s resource consents in newest-first order, including expired and revoked entries.",
+        "tags": [
+          "tenant"
+        ],
+        "security": [
+          {
+            "coreBearer": []
+          }
+        ],
+        "x-junctura-core-roles": [
+          "core-reader"
+        ],
+        "x-junctura-authority": "verified-subject",
+        "x-junctura-query-policy": "closed",
+        "x-junctura-source": "src/modules/consent/consent.mjs",
+        "x-junctura-test-suite": "consent",
+        "responses": {
+          "200": {
+            "description": "Resource consents owned by the caller.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResourceConsentList"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "405": {
+            "$ref": "#/components/responses/MethodNotAllowed"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "502": {
+            "$ref": "#/components/responses/BadGateway"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          },
+          "504": {
+            "$ref": "#/components/responses/GatewayTimeout"
+          }
+        }
+      },
+      "post": {
+        "operationId": "createResourceConsent",
+        "summary": "Grant a unit consent to read a resource",
+        "description": "As the verified subject, grant a current unit in the same organization access to a record you created or to an object attached to it. Omit expiresAt for consent without a time limit. An identical request with the same key replays the original result for 24 hours.",
+        "tags": [
+          "tenant"
+        ],
+        "security": [
+          {
+            "coreBearer": []
+          }
+        ],
+        "x-junctura-core-roles": [
+          "core-reader"
+        ],
+        "x-junctura-authority": "verified-subject",
+        "x-junctura-query-policy": "closed",
+        "x-junctura-source": "src/modules/consent/consent.mjs",
+        "x-junctura-test-suite": "consent",
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/Uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResourceConsentCreate"
+              },
+              "example": {
+                "resourceType": "record",
+                "resourceId": "44444444-4444-4444-8444-444444444444",
+                "recipientUnit": "unit-b",
+                "purpose": "Review the selected record"
+              }
+            }
+          }
+        },
+        "x-max-body-bytes": 16384,
+        "responses": {
+          "201": {
+            "description": "Resource consent created.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResourceConsent"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "405": {
+            "$ref": "#/components/responses/MethodNotAllowed"
+          },
+          "413": {
+            "$ref": "#/components/responses/TooLarge"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMedia"
+          },
+          "422": {
+            "$ref": "#/components/responses/IdempotencyKeyReused"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "502": {
+            "$ref": "#/components/responses/BadGateway"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          },
+          "504": {
+            "$ref": "#/components/responses/GatewayTimeout"
+          }
+        }
+      }
+    },
+    "/v1/me/resource-consents/{consentId}/revoke": {
+      "post": {
+        "operationId": "revokeResourceConsent",
+        "summary": "Revoke a resource consent",
+        "description": "As the verified subject who granted the consent, revoke it. Repeated revocations return the same state.",
+        "tags": [
+          "tenant"
+        ],
+        "security": [
+          {
+            "coreBearer": []
+          }
+        ],
+        "x-junctura-core-roles": [
+          "core-reader"
+        ],
+        "x-junctura-authority": "verified-subject",
+        "x-junctura-query-policy": "closed",
+        "x-junctura-source": "src/modules/consent/consent.mjs",
+        "x-junctura-test-suite": "consent",
+        "parameters": [
+          {
+            "name": "consentId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/Uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "maxProperties": 0
+              },
+              "example": {}
+            }
+          }
+        },
+        "x-max-body-bytes": 16384,
+        "responses": {
+          "200": {
+            "description": "Resource consent revoked.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResourceConsent"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "405": {
+            "$ref": "#/components/responses/MethodNotAllowed"
+          },
+          "413": {
+            "$ref": "#/components/responses/TooLarge"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMedia"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "502": {
+            "$ref": "#/components/responses/BadGateway"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          },
+          "504": {
+            "$ref": "#/components/responses/GatewayTimeout"
           }
         }
       }
@@ -12972,6 +13218,125 @@
         },
         "required": [
           "items"
+        ],
+        "additionalProperties": false
+      },
+      "ResourceConsentPurpose": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 255,
+        "pattern": "^[^\\u0000-\\u001f\\u007f-\\u009f]*\\S[^\\u0000-\\u001f\\u007f-\\u009f]*$"
+      },
+      "ResourceConsentCreate": {
+        "type": "object",
+        "properties": {
+          "resourceType": {
+            "type": "string",
+            "enum": [
+              "record",
+              "object"
+            ]
+          },
+          "resourceId": {
+            "$ref": "#/components/schemas/Uuid"
+          },
+          "recipientUnit": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9-]{1,63}$"
+          },
+          "purpose": {
+            "$ref": "#/components/schemas/ResourceConsentPurpose"
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d{1,3})?Z$"
+          }
+        },
+        "required": [
+          "resourceType",
+          "resourceId",
+          "recipientUnit",
+          "purpose"
+        ],
+        "additionalProperties": false
+      },
+      "ResourceConsent": {
+        "type": "object",
+        "properties": {
+          "consentId": {
+            "$ref": "#/components/schemas/Uuid"
+          },
+          "resourceType": {
+            "type": "string",
+            "enum": [
+              "record",
+              "object"
+            ]
+          },
+          "resourceId": {
+            "$ref": "#/components/schemas/Uuid"
+          },
+          "recipientUnit": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9-]{1,63}$"
+          },
+          "purpose": {
+            "$ref": "#/components/schemas/ResourceConsentPurpose"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "expiresAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "revokedAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "active",
+              "expired",
+              "revoked",
+              "inactive"
+            ]
+          }
+        },
+        "required": [
+          "consentId",
+          "resourceType",
+          "resourceId",
+          "recipientUnit",
+          "purpose",
+          "createdAt",
+          "expiresAt",
+          "revokedAt",
+          "status"
+        ],
+        "additionalProperties": false
+      },
+      "ResourceConsentList": {
+        "type": "object",
+        "properties": {
+          "consents": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ResourceConsent"
+            }
+          }
+        },
+        "required": [
+          "consents"
         ],
         "additionalProperties": false
       }

@@ -97,8 +97,13 @@ async function backend(label, principal, administrator, tenant = "tenant-a", wri
   const roles = await Promise.all(["core-reader", ...(writer ? ["core-writer"] : [])].map(async name => (await admin(`roles/${name}`)).json()));
   assert.equal((await admin(`users/${subject}/role-mappings/realm`, roles, "POST")).status, 204);
   const secret = (await (await admin(`clients/${id}/client-secret`)).json()).value;
-  const issued = await fetch(`${issuer}/protocol/openid-connect/token`, { method: "POST", body: new URLSearchParams({ grant_type: "client_credentials", client_id: clientId, client_secret: secret }) });
-  assert.equal(issued.status, 200); const token = (await issued.json()).access_token;
+  async function issueToken() {
+    const response = await fetch(`${issuer}/protocol/openid-connect/token`, { method: "POST",
+      body: new URLSearchParams({ grant_type: "client_credentials", client_id: clientId, client_secret: secret }) });
+    assert.equal(response.status, 200);
+    return (await response.json()).access_token;
+  }
+  const token = await issueToken();
   assert.equal((await api("/v1/identity", token)).status, 200, "issuer verifies backend tenant membership");
   const body = { displayName: "Technical trust consumer", oauthClientId: clientId, providerOrigin: providerOrigin ?? `https://${clientId}.example.invalid` };
   await sql(`INSERT INTO app_private.enrollments(tenant_id,issuer,oauth_client_id,owner_subject,provider_origin,resource_subject)
@@ -110,7 +115,7 @@ async function backend(label, principal, administrator, tenant = "tenant-a", wri
   assert.equal(decision.status, 201, await decision.clone().text());
   const active = await api(`/v1/applications/${pending.appId}/approve`, administrator, { approvalId: (await decision.json()).approvalId }, { "If-Match": created.headers.get("etag") });
   assert.equal(active.status, 200, active.ok ? undefined : await active.text());
-  return { app: await active.json(), token, subject, clientId, clientSecret: secret, etag: active.headers.get("etag") };
+  return { app: await active.json(), token, issueToken, subject, clientId, clientSecret: secret, etag: active.headers.get("etag") };
 }
 
 

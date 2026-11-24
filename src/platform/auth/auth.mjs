@@ -91,7 +91,9 @@ async function enforceAccess(config, fetcher, request, identity, claims, exchang
   const write = Boolean(request.method && !["GET", "HEAD", "OPTIONS"].includes(request.method)) &&
     !(request.method === "POST" && path === "/v1/audit-events/verify");
   const target = /^\/v2\/(?:data\/([^/]+)|objects)\/([a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12})(?:[:/]|$)/.exec(path);
-  const resource = target ? { resourceId: target[2], resourceCollection: target[1] } : {};
+  // The exact GET handlers evaluate unit isolation and consent together.
+  const consentRead = identity.actor && request.method === "GET" && target && target[0] === path && path.endsWith(target[2]);
+  const resource = target && !consentRead ? { resourceId: target[2], resourceCollection: target[1] } : {};
   const roles = claims.resource_access?.[identity.clientId]?.roles;
   const clientRoles = Array.isArray(roles) ? roles.filter(role => typeof role === "string") : [];
   let consoleRole = identity.clientId === "junctura-console"

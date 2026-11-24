@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 import { HttpError, requestIdFor, json, jsonObject, logicalRequestDigest, readRecordJson, requireWriter, uuidPattern } from "../../platform/http/http.mjs";
 import { signInternalToken } from "../../platform/security/internal-token.mjs";
+import { readResourceConsent } from "../consent/consent.mjs";
 import { collectionPattern, fieldPattern, parseCollectionSchema, uniqueKeyPattern } from "./schema/collection.mjs";
 
 export { logicalRequestDigest, parseCollectionSchema };
@@ -229,7 +230,11 @@ export async function handleAppRecords(request, response, identity, config, url)
       throw new HttpError(400, "invalid_query");
     }
     const legacyBody = !config.strictRecords;
-    return sendRecordResult(response, await recordCommand(config, identity, "get", { ...payload, legacyBody }), { legacyBody });
+    const result = await recordCommand(config, identity, "get", { ...payload, legacyBody });
+    const consent = result.error === "not_found"
+      ? await readResourceConsent(request, config, identity, { kind: "record", collection, id })
+      : null;
+    return sendRecordResult(response, consent ?? result, { legacyBody });
   }
   let operation = schemaPath ? undefined : !id && method === "POST" ? "create"
     : id && method === "PATCH" ? "replace" : id && method === "DELETE" ? "delete" : undefined;

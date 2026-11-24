@@ -52,7 +52,9 @@ export function validateApplicationBody(body, operation) {
 
 export function applicationToken(identity, secret, role = "junctura_app_api") {
   return signInternalToken(secret, { role, tenant_id: identity.tenantId, sub: identity.subject,
-    ...(role === "junctura_resource_api" ? { resource_writer: identity.roles.includes("core-writer") } : {}),
+    ...(role === "junctura_resource_api" ? {
+      resource_writer: identity.roles.includes("core-writer"), actor_sub: identity.actor?.sub,
+    } : {}),
     ...(role === "junctura_trust_api" ? { trust_writer: identity.roles.includes("core-writer") } : {}),
     ...(role === "junctura_directory_api" ? { directory_writer: identity.roles.includes("core-writer") } : {}),
     // The candidate subjectId travels to RPCs that verify the operator binding.
