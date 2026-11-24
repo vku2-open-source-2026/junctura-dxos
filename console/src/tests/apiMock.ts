@@ -99,6 +99,12 @@ function defaultResponse(url: string): Response {
       truncated: false,
     });
   }
+  if (url.includes("/v1/capabilities/catalog")) {
+    return json(200, { items: [], nextCursor: null });
+  }
+  if (url.includes("/v1/trust/access-requests")) {
+    return json(200, { items: [], nextCursor: null });
+  }
   if (url.includes("/v1/capabilities")) return json(200, { items: [] });
   if (url.includes("/v1/storage/files")) {
     return json(200, {
