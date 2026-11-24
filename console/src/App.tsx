@@ -29,6 +29,8 @@ import { ConsentsScreen } from "./components/screens/ConsentsScreen";
 import { EmergencyScreen } from "./components/screens/EmergencyScreen";
 import { PlatformSettingsScreen } from "./components/screens/PlatformSettingsScreen";
 import { CapabilitiesScreen } from "./components/screens/capabilities";
+import { CatalogScreen } from "./components/screens/catalog";
+import { AccessRequestsScreen } from "./components/screens/accessRequests";
 import { GrantsScreen } from "./components/screens/GrantsScreen";
 import { ConnectMapScreen } from "./components/screens/connect/ConnectMapScreen";
 import { DocsScreen } from "./components/screens/DocsScreen";
@@ -124,6 +126,10 @@ const AppContent: React.FC<AppContentProps> = ({
         return <ApplicationsScreen />;
       case "caps":
         return <CapabilitiesScreen />;
+      case "catalog":
+        return <CatalogScreen />;
+      case "access-requests":
+        return <AccessRequestsScreen />;
       case "users":
         return <UsersScreen />;
       case "orgs":
