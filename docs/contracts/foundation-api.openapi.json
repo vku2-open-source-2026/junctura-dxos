@@ -38,7 +38,7 @@
   ],
   "x-junctura-status": "implemented",
   "x-junctura-upstream-boundary": "/identity/ is a Keycloak passthrough. Only the documented protocol integration is standardized here; upstream admin/login-action/other protocol surfaces remain governed by the pinned provider, not advertised as Junctura-owned APIs.",
-  "x-junctura-routing-errors": "For implemented routes: Unsupported methods are normally 405 on health, identity, data, objects, administration and existing workflow instance paths. /ready, workflow definition/execution collections and resource-share routes return 404 for unsupported methods. Authentication, writer checks or resource lookup may reject first. Invalid app/record/object paths can return 400. HEAD always has no wire body. Unknown public routes return 404; Gateway /v1,/v2 auth precedes lookup. Gateway auth errors may be HTML.",
+  "x-junctura-routing-errors": "For implemented routes: Unsupported methods are normally 405 on health, metrics, identity, data, objects, administration and existing workflow instance paths. /ready, workflow definition/execution collections and resource-share routes return 404 for unsupported methods. Authentication, writer checks or resource lookup may reject first. Invalid app/record/object paths can return 400. HEAD always has no wire body. Unknown public routes return 404; Gateway /v1,/v2 auth precedes lookup. Gateway auth errors may be HTML.",
   "paths": {
     "/v2/data-schemas/{collection}": {
       "put": {
@@ -2809,6 +2809,40 @@
           }
         },
         "x-junctura-test-suite": "core"
+      }
+    },
+    "/metrics": {
+      "get": {
+        "operationId": "getPrometheusMetrics",
+        "summary": "Get Prometheus process metrics",
+        "description": "Prometheus text format 0.0.4 with request counters by method, route family and status, cumulative request duration and process uptime/memory gauges. Unauthenticated by design because Prometheus cannot speak OIDC; reachable only on the internal monitoring network and never proxied by the gateway. Query strings are ignored and other methods return 405 with Allow: GET.",
+        "tags": [
+          "process"
+        ],
+        "x-junctura-query-policy": "ignored",
+        "x-junctura-source": "src/modules/metrics/metrics.mjs",
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "headers": {
+              "Cache-Control": {
+                "$ref": "#/components/headers/CacheControl"
+              }
+            },
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "405": {
+            "$ref": "#/components/responses/MethodNotAllowed"
+          }
+        },
+        "x-junctura-test-suite": "metrics"
       }
     },
     "/v1/identity": {

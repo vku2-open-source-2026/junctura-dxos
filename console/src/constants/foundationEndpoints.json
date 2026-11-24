@@ -1478,6 +1478,29 @@
     "successHasBody": true
   },
   {
+    "path": "/metrics",
+    "method": "GET",
+    "operationId": "getPrometheusMetrics",
+    "summary": "Get Prometheus process metrics",
+    "description": "Prometheus text format 0.0.4 with request counters by method, route family and status, cumulative request duration and process uptime/memory gauges. Unauthenticated by design because Prometheus cannot speak OIDC; reachable only on the internal monitoring network and never proxied by the gateway. Query strings are ignored and other methods return 405 with Allow: GET.",
+    "tags": [
+      "process"
+    ],
+    "security": [],
+    "responses": [
+      "200",
+      "405"
+    ],
+    "hasRequestBody": false,
+    "requestContentTypes": [],
+    "pathParameters": [],
+    "queryParameters": [],
+    "headerParameters": [],
+    "successStatus": "200",
+    "successContentType": "text/plain",
+    "successHasBody": true
+  },
+  {
     "path": "/v1/identity",
     "method": "GET",
     "operationId": "getVerifiedIdentity",
