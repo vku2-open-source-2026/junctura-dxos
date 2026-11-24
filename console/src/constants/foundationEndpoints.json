@@ -2216,7 +2216,7 @@
     "method": "GET",
     "operationId": "getVersionedRecord",
     "summary": "Get a versioned record",
-    "description": "Returns the current representation. An owner receives the strong ETag to use on a subsequent write. Existing records start at version 1. An authorized management reader sees data with sensitive top-level fields omitted. Masking grants no read permission. Strict mode includes version in the response body. Compatibility mode retains the legacy body. Shared and management reads omit the write ETag.",
+    "description": "Returns the current representation. An owner receives the strong ETag to use on a subsequent write. Existing records start at version 1. An authorized management reader sees data with sensitive top-level fields omitted. Masking grants no read permission. Strict mode includes version in the response body. Compatibility mode retains the legacy body. Shared and management reads omit the write ETag. An exact GET using a delegated token can also use a current resource consent for the selected unit. A matching revoked or expired consent returns 403 with consent_revoked or consent_expired and requestId when ordinary read authority is absent.",
     "tags": [
       "app-resource"
     ],
@@ -2779,7 +2779,7 @@
     "method": "GET",
     "operationId": "v2DownloadObject",
     "summary": "V2 download object",
-    "description": "Active registered backend resolved from verified tenant/issuer/client_id and exact operator-enrolled resource_subject. Owner-only mutations; individually shared reads. Suspension/revocation and disabled enrollment block access. Upload 1 byte to 5 MiB. Stable-UUID PUT with identical bytes is retryable; POST creates a new ID and is not blindly retried. V2 DELETE tombstones permanently; bytes/old versions retained. PUT publishes immutable versions after DB reauthorization; concurrent owner PUTs use last publication. UUIDs are tenant-scoped, so a foreign tenant may create independent bytes at the same UUID.",
+    "description": "Active registered backend resolved from verified tenant/issuer/client_id and exact operator-enrolled resource_subject. Owner-only mutations; individually shared reads. Suspension/revocation and disabled enrollment block access. Upload 1 byte to 5 MiB. Stable-UUID PUT with identical bytes is retryable; POST creates a new ID and is not blindly retried. V2 DELETE tombstones permanently; bytes/old versions retained. PUT publishes immutable versions after DB reauthorization; concurrent owner PUTs use last publication. UUIDs are tenant-scoped, so a foreign tenant may create independent bytes at the same UUID. An exact GET using a delegated token can also use a current resource consent for the selected unit. A matching revoked or expired consent returns 403 with consent_revoked or consent_expired and requestId when ordinary read authority is absent.",
     "tags": [
       "app-resource"
     ],
@@ -4340,6 +4340,140 @@
         "description": "Client-generated UUID for the rotation."
       }
     ],
+    "successStatus": "200",
+    "successContentType": "application/json",
+    "successHasBody": true
+  },
+  {
+    "path": "/v1/me/resource-consents",
+    "method": "GET",
+    "operationId": "listResourceConsents",
+    "summary": "List the current subject’s resource consents",
+    "description": "Return the verified subject’s resource consents in newest-first order, including expired and revoked entries.",
+    "tags": [
+      "tenant"
+    ],
+    "security": [
+      {
+        "coreBearer": []
+      }
+    ],
+    "responses": [
+      "200",
+      "400",
+      "401",
+      "403",
+      "404",
+      "405",
+      "429",
+      "502",
+      "503",
+      "504"
+    ],
+    "hasRequestBody": false,
+    "requestContentTypes": [],
+    "pathParameters": [],
+    "queryParameters": [],
+    "headerParameters": [],
+    "successStatus": "200",
+    "successContentType": "application/json",
+    "successHasBody": true
+  },
+  {
+    "path": "/v1/me/resource-consents",
+    "method": "POST",
+    "operationId": "createResourceConsent",
+    "summary": "Grant a unit consent to read a resource",
+    "description": "As the verified subject, grant a current unit in the same organization access to a record you created or to an object attached to it. Omit expiresAt for consent without a time limit. An identical request with the same key replays the original result for 24 hours.",
+    "tags": [
+      "tenant"
+    ],
+    "security": [
+      {
+        "coreBearer": []
+      }
+    ],
+    "responses": [
+      "201",
+      "400",
+      "401",
+      "403",
+      "404",
+      "405",
+      "413",
+      "415",
+      "422",
+      "429",
+      "502",
+      "503",
+      "504"
+    ],
+    "hasRequestBody": true,
+    "requestContentTypes": [
+      "application/json"
+    ],
+    "pathParameters": [],
+    "queryParameters": [],
+    "headerParameters": [
+      {
+        "name": "Idempotency-Key",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        },
+        "description": ""
+      }
+    ],
+    "successStatus": "201",
+    "successContentType": "application/json",
+    "successHasBody": true
+  },
+  {
+    "path": "/v1/me/resource-consents/{consentId}/revoke",
+    "method": "POST",
+    "operationId": "revokeResourceConsent",
+    "summary": "Revoke a resource consent",
+    "description": "As the verified subject who granted the consent, revoke it. Repeated revocations return the same state.",
+    "tags": [
+      "tenant"
+    ],
+    "security": [
+      {
+        "coreBearer": []
+      }
+    ],
+    "responses": [
+      "200",
+      "400",
+      "401",
+      "403",
+      "404",
+      "405",
+      "413",
+      "415",
+      "429",
+      "502",
+      "503",
+      "504"
+    ],
+    "hasRequestBody": true,
+    "requestContentTypes": [
+      "application/json"
+    ],
+    "pathParameters": [
+      {
+        "name": "consentId",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        },
+        "description": ""
+      }
+    ],
+    "queryParameters": [],
+    "headerParameters": [],
     "successStatus": "200",
     "successContentType": "application/json",
     "successHasBody": true

@@ -74,6 +74,7 @@
     "console:check:endpoints": "npm --prefix console run check:endpoints",
     "test:app-access": "node --env-file-if-exists=.env --test integration/app-access.mjs",
     "test:delegation": "node --env-file-if-exists=.env --test integration/delegation.mjs",
+    "test:consent": "node --env-file-if-exists=.env --test integration/consent.mjs",
     "test:catalog-visibility": "node --env-file-if-exists=.env --test integration/catalog-visibility.mjs"
   }
 }

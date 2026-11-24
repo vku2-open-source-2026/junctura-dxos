@@ -168,6 +168,8 @@ Restore verifies checksums before changes, requires `--yes` and takes a safety b
 drops/recreates the three databases with original owners/ACLs/RLS, replaces the object volume,
 then starts the stack with `--wait`. Keep the same `.env` and initialized PostgreSQL roles;
 role passwords, `.env` and OpenBao data/operator/token volumes are outside the archive.
+For dumps taken with migration 052 applied, the target PostgreSQL cluster must already have
+`junctura_consent_lookup` (`NOLOGIN NOBYPASSRLS`), the owner of `app_private.resource_consent_target`.
 
 ## Gateway access log
 

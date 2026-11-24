@@ -129,6 +129,7 @@ services:
       - ./infra/postgres/049-access-denial-reasons.sql:/migrations/049-access-denial-reasons.sql:ro
       - ./infra/postgres/050-app-access-compatibility.sql:/migrations/050-app-access-compatibility.sql:ro
       - ./infra/postgres/051-delegation.sql:/migrations/051-delegation.sql:ro
+      - ./infra/postgres/052-resource-consents.sql:/migrations/052-resource-consents.sql:ro
       - ./infra/postgres/060-catalog-visibility.sql:/migrations/060-catalog-visibility.sql:ro
     depends_on:
       database:

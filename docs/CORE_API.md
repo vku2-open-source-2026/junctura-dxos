@@ -113,6 +113,7 @@ Methods are included with each family; action suffixes are described in the link
 | `/v1/capability-authorizations/introspect` (POST) | Opt-in provider ticket redemption | Writer, exact bound provider and valid ticket/context | [CAPABILITIES.md](CAPABILITIES.md) |
 | `/v1/compositions` and `/*` (GET, POST, PUT) | Opt-in C4B registry/lifecycle | `config.compositionRuntime`; management `compositions.write` / `compositions.publish` | [CAPABILITIES.md](CAPABILITIES.md) |
 | `/v1/me/consents` (GET, POST), `/{consentId}/revoke` (POST) | Manage the caller's own consents | Own authenticated login with a matching binding if the token supplies `subjectId` | [SECURITY.md](SECURITY.md) |
+| `/v1/me/resource-consents` (GET, POST), `/{consentId}/revoke` (POST) | Manage the caller's consent for an organization unit to read a record or linked object | Own login token with a verified subject binding | Resource consent below |
 | `/v1/me/data-access` (GET), `/{accessId}/flag` (POST) | Merged access history naming the caller as data subject; flag a visible entry for review | Verified client and own tenant, issuer and subject | [SECURITY.md](SECURITY.md) |
 | `/v1/me/emergency-accesses/{executionId}/feedback` (POST) | The subject's feedback on their own break-glass access | Verified client and own tenant, issuer and subject | [SECURITY.md](SECURITY.md) |
 | `/v1/emergency-accesses` (GET), `/{executionId}/review` (POST) | Review break-glass invocations | List: management `trust.approve` or `audit.read`; review: `trust.approve` and writer | [SECURITY.md](SECURITY.md) |
@@ -168,6 +169,27 @@ Present the returned `access_token` as a bearer to `/v1/identity`, `/v1/search`,
 Core uses Keycloak Standard Token Exchange V2 to obtain an access-only user proof and checks it on every delegated call. Core also checks the active app, enrollment, assignment and unit on every call. For an existing realm, apply the token exchange attributes and audience mapper on `junctura-core` from the realm configuration. [Realm configuration](../infra/keycloak/realm.json)
 
 Policy refusals return `403` with `requestId`. `not_assigned_to_app` means the current user assignment is missing, `unit_mismatch` means the selected unit is invalid for the call, and `capability_not_granted` means the effective roles or supported route set exclude the operation. `delegation_not_allowed` covers an invalid delegation pairing or a delegated credential whose user proof has become inactive, including a locked user. Tenant audit records `delegation.exchanged`, `delegation.authorized` and `authorization.denied` with the request ID in `reason`, the login in `subject`, the app client in `managementClient` and the application ID in `actorAppId` when the enrollment is verified.
+
+## Resource consent
+
+With your own login bearer and a verified `subjectId`, send `POST /v1/me/resource-consents` with a UUID `Idempotency-Key` and a JSON body like this.
+
+```json
+{
+  "resourceType": "record",
+  "resourceId": "44444444-4444-4444-8444-444444444444",
+  "recipientUnit": "unit-b",
+  "purpose": "Review the selected record"
+}
+```
+
+The recipient must be a confirmed directory unit in your organization. Core records the verified user's login as the subject of a new record created through an assigned application. A record needs this association to be eligible for consent. Use `resourceType: "object"` to grant access to a specific version of an object attached to your record. A new object version or a recreated record needs its own consent.
+
+Supply a future UTC `expiresAt` to set a time limit. Omit it to grant consent until revocation. Creation returns `201` and repeats the original result for an identical key and body for 24 hours. `GET /v1/me/resource-consents` returns your grants under `consents` with their status. A grant becomes `inactive` if its recipient unit is removed while it is active. Send `POST /v1/me/resource-consents/{consentId}/revoke` with `{}` to revoke. The response shows the recorded `revokedAt`, including on subsequent revocation requests.
+
+For consent-based access, a user in the recipient unit presents an exchanged bearer for an application currently assigned to that user in that unit. The grant covers exact reads through `GET /v2/data/{collection}/{id}` or `GET /v2/objects/{id}`. Application permissions for lists, searches and writes follow their existing rules. If ordinary read authority is absent and the selected unit's matching consent was revoked or expired, Core returns `403` with `consent_revoked` or `consent_expired` and a `requestId`. Without a matching grant for that unit, the usual resource or unit denial applies.
+
+The subject's `GET /v1/me/data-access` shows the attempt under `action: "resource.read"` with the reader's login, recipient unit, app, time, resource reference, consent ID, request ID and outcome. An authorized tenant reader can query `GET /v1/audit-events?action=resource.read` for the Core audit entries, which also include the resource subject ID and the application client ID.
 
 ## Structured data
 
@@ -828,8 +850,8 @@ reconciliation. The access log uses the binding for canonical events and the log
 Operators review ambiguous historical entries against the original execution and consent before assigning
 an identifier kind. Binding keys are immutable in normal operation.
 Application audit accepts a delegated-user token for the enrolled client when the operator has bound
-that login subject to the app and verified its subject ID. Resource authorization currently uses the
-enrolled backend service-account subject.
+that login subject to the app and verified its subject ID. For resource-consent reads, Core derives
+the reader and acting application from the exchanged token and records both in the audit chain.
 
 ### Files, search and privacy
 

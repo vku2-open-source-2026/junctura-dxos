@@ -6601,7 +6601,7 @@
             "format": "date-time"
           },
           "purpose": {
-            "$ref": "#/components/schemas/PurposeCode"
+            "$ref": "./foundation-api.openapi.json#/components/schemas/ResourceConsentPurpose"
           },
           "flaggedAt": {
             "anyOf": [
@@ -6622,6 +6622,31 @@
           },
           "outcome": {
             "$ref": "#/components/schemas/AuditOutcome"
+          },
+          "reader": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "unit": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9-]{1,63}$"
+          },
+          "consentId": {
+            "$ref": "./foundation-api.openapi.json#/components/schemas/Uuid"
+          },
+          "requestId": {
+            "$ref": "./foundation-api.openapi.json#/components/schemas/Uuid"
+          },
+          "reasonCode": {
+            "enum": [
+              null,
+              "consent_revoked",
+              "consent_expired"
+            ]
+          },
+          "resourceRef": {
+            "$ref": "#/components/schemas/AuditResourceRef"
           }
         },
         "required": [
@@ -6634,7 +6659,8 @@
           "action",
           "outcome"
         ],
-        "additionalProperties": false
+        "additionalProperties": false,
+        "description": "Core resource-consent entries include reader, unit, consentId, requestId, reasonCode and resourceRef."
       },
       "AuditActor": {
         "oneOf": [
@@ -6754,6 +6780,9 @@
           },
           {
             "$ref": "#/components/schemas/PlatformAuditEntry"
+          },
+          {
+            "$ref": "#/components/schemas/ResourceConsentAuditEntry"
           }
         ]
       },
@@ -11056,6 +11085,85 @@
         },
         "required": [
           "items"
+        ],
+        "additionalProperties": false
+      },
+      "ResourceConsentAuditEntry": {
+        "type": "object",
+        "properties": {
+          "source": {
+            "const": "resource_consent"
+          },
+          "eventId": {
+            "$ref": "./foundation-api.openapi.json#/components/schemas/Uuid"
+          },
+          "appId": {
+            "$ref": "./foundation-api.openapi.json#/components/schemas/Uuid"
+          },
+          "occurredAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "tenantId": {
+            "type": "string"
+          },
+          "managementClient": {
+            "type": "string"
+          },
+          "subjectId": {
+            "$ref": "./foundation-api.openapi.json#/components/schemas/SubjectId"
+          },
+          "action": {
+            "const": "resource.read"
+          },
+          "outcome": {
+            "enum": [
+              "success",
+              "denied"
+            ]
+          },
+          "reader": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "unit": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9-]{1,63}$"
+          },
+          "consentId": {
+            "$ref": "./foundation-api.openapi.json#/components/schemas/Uuid"
+          },
+          "requestId": {
+            "$ref": "./foundation-api.openapi.json#/components/schemas/Uuid"
+          },
+          "reasonCode": {
+            "enum": [
+              null,
+              "consent_revoked",
+              "consent_expired"
+            ]
+          },
+          "resourceRef": {
+            "$ref": "#/components/schemas/AuditResourceRef"
+          }
+        },
+        "required": [
+          "source",
+          "eventId",
+          "appId",
+          "occurredAt",
+          "tenantId",
+          "managementClient",
+          "subjectId",
+          "action",
+          "outcome",
+          "reader",
+          "unit",
+          "consentId",
+          "requestId",
+          "reasonCode",
+          "resourceRef"
         ],
         "additionalProperties": false
       }

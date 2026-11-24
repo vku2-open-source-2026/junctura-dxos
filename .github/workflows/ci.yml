@@ -105,6 +105,8 @@ jobs:
         run: npm run test:app-access
       - name: Verify token exchange and delegated access
         run: npm run test:delegation
+      - name: Verify resource consent and subject access history
+        run: npm run test:consent
       - name: Verify catalog visibility levels and tenant isolation
         run: npm run test:catalog-visibility
       - name: Verify workflow task policy and outbox against Flowable
