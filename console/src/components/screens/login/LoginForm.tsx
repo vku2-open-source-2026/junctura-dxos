@@ -70,7 +70,8 @@ export const LoginForm: React.FC<LoginFormProps> = ({
     clearOidcError();
     setBusy("password");
     try {
-      await signInWithPassword(trimmedUsername, password);
+      const otp = new FormData(event.currentTarget).get("otp");
+      await signInWithPassword(trimmedUsername, password, typeof otp === "string" ? otp : undefined);
     } catch (error) {
       setLoginError(
         error instanceof PasswordSignInError && error.code === "not_assigned_to_app"
@@ -173,6 +174,23 @@ export const LoginForm: React.FC<LoginFormProps> = ({
             )}
           </button>
         </div>
+      </div>
+
+      <div>
+        <label
+          htmlFor="login-otp"
+          className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300"
+        >
+          {t.login.otpLabel}
+        </label>
+        <input
+          id="login-otp"
+          name="otp"
+          type="text"
+          inputMode="numeric"
+          autoComplete="one-time-code"
+          className={inputClassName}
+        />
       </div>
 
       {authNotice && (

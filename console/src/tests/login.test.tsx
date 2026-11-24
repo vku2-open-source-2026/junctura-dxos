@@ -110,11 +110,12 @@ describe("LoginScreen", () => {
     expect(api.getToken()).toBeNull();
   });
 
-  it("exchanges the form credentials at the Keycloak token endpoint", async () => {
+  it("exchanges the form credentials and authenticator code at the Keycloak token endpoint", async () => {
     const fetchMock = stubFetch();
     renderLogin();
     await findLoginHeading();
     await screen.findByDisplayValue("admin1");
+    fireEvent.change(screen.getByLabelText(viStrings.login.otpLabel), { target: { value: "012345" } });
 
     fireEvent.click(
       screen.getByRole("button", { name: viStrings.login.submit })
@@ -137,6 +138,7 @@ describe("LoginScreen", () => {
     expect(body.get("scope")).toBe("openid");
     expect(body.get("username")).toBe("admin1");
     expect(body.get("password")).toBe("fixture-secret-1");
+    expect(body.get("otp")).toBe("012345");
   });
 
   it("explains invalid credentials on a 401 response", async () => {

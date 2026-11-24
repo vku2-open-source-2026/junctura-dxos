@@ -366,7 +366,8 @@ export async function startLogin(loginHint?: string): Promise<void> {
 
 export async function signInWithPassword(
   username: string,
-  password: string
+  password: string,
+  otp?: string
 ): Promise<void> {
   const body = new URLSearchParams({
     grant_type: "password",
@@ -375,6 +376,7 @@ export async function signInWithPassword(
     password,
     scope: "openid",
   });
+  if (otp?.trim()) body.set("otp", otp.trim());
 
   let response: Response;
   try {
@@ -398,6 +400,9 @@ export async function signInWithPassword(
           unassignedDescriptions.includes(error.error_description.trim()))
         : failure.includes('data-error-code="not_assigned_to_app"')) {
         throw new PasswordSignInError("not_assigned_to_app");
+      }
+      if (isRecord(error) && error.error === "invalid_grant") {
+        throw new PasswordSignInError("invalid_credentials");
       }
     }
     throw new PasswordSignInError(response.status === 401 ? "invalid_credentials" : "login_failed");
