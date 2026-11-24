@@ -88,6 +88,7 @@ EXPECTED = {
     '/v1/approvals': {'post'}, '/v1/approvals/{approvalId}': {'get'},
     '/v1/approvals/{approvalId}/revoke': {'post'},
     '/v2/data-schemas/{collection}': {'put'},
+    '/v2/data-masking/{collection}': {'get', 'put'},
     '/v2/data/{collection}/{id}:lock': {'post', 'delete'},
     '/v2/data/{collection}/aggregate': {'get'},
     '/v2/data/{collection}/by-key/{key}': {'put'}, '/v2/data:batch': {'post'},
@@ -240,7 +241,7 @@ def validate_paths(spec, dereference, *, foundation=False):
             return
         if not planned:
             require((ROOT / operation['x-junctura-source']).is_file(), oid + ': source missing')
-            require(operation['x-junctura-test-suite'] in ('core', 'applications', 'records', 'record-queries', 'record-archives', 'app-group-shares', 'directory', 'workflow-tasks', 'events', 'object-metadata', 'search', 'subject-access', 'app-access', 'delegation', 'consent', 'consent-requests', 'metrics'), oid + ': coverage suite missing')
+            require(operation['x-junctura-test-suite'] in ('core', 'applications', 'records', 'record-queries', 'record-archives', 'field-masking', 'app-group-shares', 'directory', 'workflow-tasks', 'events', 'object-metadata', 'search', 'subject-access', 'app-access', 'delegation', 'consent', 'consent-requests', 'metrics'), oid + ': coverage suite missing')
         parameters = [dereference(p) for p in operation.get('parameters', [])]
         require(len({(p['in'], p['name']) for p in parameters}) == len(parameters), oid + ': duplicate parameter')
         require({p['name'] for p in parameters if p['in'] == 'path'} == set(re.findall(r'{([^}]+)}', path)), oid + ': path parameters differ')

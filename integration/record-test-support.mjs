@@ -44,7 +44,7 @@ export function recordTestSupport(prefix) {
     });
   }
 
-  async function createBackend(suffix, { enroll = true } = {}) {
+  async function createBackend(suffix, { enroll = true, writer = true } = {}) {
     adminToken = await operatorToken();
     const clientId = `${prefix.replaceAll("_", "-")}-${suffix}`;
     const template = (await (await admin("clients?clientId=tenant-a")).json())[0];
@@ -61,7 +61,8 @@ export function recordTestSupport(prefix) {
     const group = (await (await admin("groups?search=tenant-a&exact=true")).json()).find(item => item.name === "tenant-a");
     if (!group) throw new Error("tenant-a group missing");
     if ((await admin(`users/${subject}/groups/${group.id}`, "PUT")).status !== 204) throw new Error("group membership failed");
-    const roles = await Promise.all(["core-reader", "core-writer"].map(async name => (await admin(`roles/${name}`)).json()));
+    const roleNames = writer ? ["core-reader", "core-writer"] : ["core-reader"];
+    const roles = await Promise.all(roleNames.map(async name => (await admin(`roles/${name}`)).json()));
     if ((await admin(`users/${subject}/role-mappings/realm`, "POST", roles)).status !== 204) throw new Error("role mapping failed");
     const { value: secret } = await (await admin(`clients/${client}/client-secret`)).json();
     const response = await fetch(`${issuer}/protocol/openid-connect/token`, {
@@ -86,11 +87,14 @@ export function recordTestSupport(prefix) {
   async function cleanup(backends) {
     try {
       for (const app of backends.filter(Boolean)) {
-        await sql(`DELETE FROM app_private.record_export_snapshots WHERE owner_app_id='${app.appId}';
-          DELETE FROM app_private.record_query_cursors WHERE owner_app_id='${app.appId}';`);
-        await sql(`DELETE FROM app_private.idempotency_results WHERE concrete_path LIKE '%${prefix}%';
+        await sql(`BEGIN;
+          SELECT set_config('request.jwt.claims', '{"tenant_id":"tenant-a"}', true);
+          DELETE FROM app_private.record_export_snapshots WHERE owner_app_id='${app.appId}';
+          DELETE FROM app_private.record_query_cursors WHERE owner_app_id='${app.appId}';
+          DELETE FROM app_private.idempotency_results WHERE tenant_id='tenant-a' AND (
+            concrete_path LIKE '%${prefix}%' OR caller_scope = sha256(convert_to(jsonb_build_array(
+              ${q(issuer)},${q(app.subject)},${q(app.clientId)},${q(app.appId)}::uuid,NULL)::text,'UTF8')));
           DELETE FROM app_private.resource_shares WHERE owner_app_id='${app.appId}' OR grantee_app_id='${app.appId}';
-          -- Objects go before their owning application.
           DELETE FROM app_private.object_upload_staging WHERE tenant_id='tenant-a' AND owner_app_id='${app.appId}';
           DELETE FROM app_private.resource_objects WHERE tenant_id='tenant-a' AND owner_app_id='${app.appId}';
           DELETE FROM app_private.record_read_grants WHERE owner_app_id='${app.appId}';
@@ -99,8 +103,8 @@ export function recordTestSupport(prefix) {
           DELETE FROM core.app_records WHERE tenant_id='tenant-a' AND owner_app_id='${app.appId}';
           DELETE FROM app_private.record_collections WHERE tenant_id='tenant-a' AND owner_app_id='${app.appId}';
           DELETE FROM app_private.enrollments WHERE tenant_id='tenant-a' AND oauth_client_id=${q(app.clientId)};
-          DELETE FROM app_private.applications a WHERE a.tenant_id='tenant-a' AND a.app_id='${app.appId}'
-            AND NOT EXISTS (SELECT FROM app_private.audit e WHERE (e.tenant_id,e.actor_app_id)=(a.tenant_id,a.app_id));`);
+          UPDATE app_private.applications SET state='revoked' WHERE tenant_id='tenant-a' AND app_id='${app.appId}';
+          COMMIT;`);
       }
       await sql(`DELETE FROM app_private.app_groups WHERE tenant_id='tenant-a' AND app_group LIKE '%${prefix.replaceAll("_", "-")}%';`);
     } finally {

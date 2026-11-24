@@ -103,15 +103,16 @@ test("pg_dump/pg_restore preserves real data and tenant RLS in an isolated tempo
     const acl = await docker(["exec", target, "psql", "-U", "junctura_admin", "-d", "recovered", "-Atc",
       "SELECT has_schema_privilege('junctura_api','app_private','USAGE'),has_function_privilege('junctura_api','core.application_command(text,jsonb)','EXECUTE'),has_function_privilege('junctura_app_api','core.application_command(text,jsonb)','EXECUTE');"]);
     assert.equal(acl.stdout.trim(), "f|f|t", "Restore preserves isolated authority RPC grants");
-    for(const [tenant,appId,expected] of [['tenant-a',id,'1'],['tenant-a',otherApp,'0'],['tenant-b',id,'0']]) {
+    for(const [tenant,appId,expected] of [['tenant-a',id,'200'],['tenant-a',otherApp,'404'],['tenant-b',id,'404']]) {
       const claims=JSON.stringify({tenant_id:tenant,iss:'https://recovery.example.invalid',client_id:`restore-${appId}`,sub:`subject-${appId}`,app_id:id,resource_writer:true});
       const result=await docker(['exec',target,'psql','-U','junctura_admin','-d','recovered','-v','ON_ERROR_STOP=1','-Atc',
-        `SET ROLE junctura_resource_api; SELECT set_config('request.jwt.claims','${claims}',false); SELECT count(*) FROM core.app_records WHERE id='${id}';`]);
+        `SET ROLE junctura_record_api; SELECT set_config('request.jwt.claims','${claims}',false);
+          SELECT core.record_command('get',jsonb_build_object('collection','recovery_fixture','id','${id}'))->>'status';`]);
       assert.equal(result.stdout.trim().split(/\r?\n/).at(-1),expected,`Restored app RLS: ${tenant}/${appId}`);
     }
     const resourceAcl=await docker(['exec',target,'psql','-U','junctura_admin','-d','recovered','-Atc',
-      "SELECT has_table_privilege('junctura_api','core.app_records','SELECT'),has_schema_privilege('junctura_resource_api','app_private','USAGE');"]);
-    assert.equal(resourceAcl.stdout.trim(),'f|f','Restore preserves resource role separation');
+      "SELECT has_table_privilege('junctura_api','core.app_records','SELECT'),has_table_privilege('junctura_resource_api','core.app_records','SELECT'),has_schema_privilege('junctura_resource_api','app_private','USAGE');"]);
+    assert.equal(resourceAcl.stdout.trim(),'f|f|f','Restore preserves resource role separation');
     const recordAcl = await docker(["exec", target, "psql", "-U", "junctura_admin", "-d", "recovered", "-Atc",
       "SELECT has_function_privilege('junctura_record_api','core.record_command(text,jsonb)','EXECUTE'),has_table_privilege('junctura_record_api','core.app_records','SELECT'),has_table_privilege('junctura_record_api','app_private.record_collections','SELECT'),has_column_privilege('junctura_resource_api','core.app_records','data','UPDATE'),has_function_privilege('junctura_resource_api','core.record_command(text,jsonb)','EXECUTE');"]);
     assert.equal(recordAcl.stdout.trim(), "t|f|f|f|f");

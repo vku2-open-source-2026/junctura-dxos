@@ -93,6 +93,8 @@ jobs:
         run: docker compose -f compose.yaml -f infra/testing/compose.unit.yaml run --rm --no-deps --volume "$PWD/tests:/app/tests:ro" --volume "$PWD/scripts:/app/scripts:ro" --volume "$PWD/.env.example:/app/.env.example:ro" --volume "$PWD/sdk:/app/sdk:ro" --volume "$PWD/docs/contracts:/app/docs/contracts:ro" --volume "$PWD/infra/postgres:/app/infra/postgres:ro" --volume "$PWD/infra/keycloak:/app/infra/keycloak:ro" --volume "$PWD/infra/flowable:/app/infra/flowable:ro" --volume "$PWD/examples:/app/examples:ro" --volume "$PWD/compose.yaml:/app/compose.yaml:ro" core node --test
       - name: Verify real Core integrations
         run: npm run test:integration
+      - name: Verify administrator TOTP on both Console sign-in flows
+        run: npm run test:admin-mfa
       - name: Verify record operations through the gateway
         run: |
           npm run test:records
@@ -101,6 +103,8 @@ jobs:
           npm run test:app-group-shares
       - name: Verify directory management against the real identity provider
         run: npm run test:directory
+      - name: Verify per-reader record field masking
+        run: npm run test:field-masking
       - name: Verify application access, unit isolation and denial reasons
         run: npm run test:app-access
       - name: Verify token exchange and delegated access
@@ -115,6 +119,8 @@ jobs:
         run: npm run test:catalog-visibility
       - name: Verify workflow task policy and outbox against Flowable
         run: npm run test:workflow-tasks
+      - name: Verify workflow task completion output against Flowable
+        run: npm run test:workflow-task-output
       - name: Verify registration, guarded capability invocation, resource isolation and Flowable worker
         run: |
           npm run test:applications
@@ -145,6 +151,7 @@ jobs:
           npm run test:record-queries
           npm run test:record-archives
           npm run test:app-group-shares
+          npm run test:field-masking
       - name: Verify Prometheus scraping and Grafana provisioning
         run: |
           docker compose --profile monitoring up --detach --no-deps --wait --wait-timeout 300 prometheus grafana

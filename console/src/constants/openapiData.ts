@@ -144,6 +144,11 @@ function requestExample(endpoint: ApiEndpointDef): RequestExample {
           schema: { type: "object", required: ["code"], properties: { code: { type: "string" } } },
           indexed: ["code"], uniqueKey: "code", searchable: [], sensitive: [],
         } };
+      case "putFieldMaskingPolicy":
+        return { contentType, json: { fields: {
+          nationalId: { mask: "full", owner: true },
+          phone: { mask: "last4", roles: ["manager"] },
+        } } };
       case "createVersionedRecord":
       case "replaceVersionedRecord":
       case "upsertRecordByKey":
@@ -207,7 +212,7 @@ function requestExample(endpoint: ApiEndpointDef): RequestExample {
           },
         };
       case "completeWorkflowTask":
-        return { contentType, json: { taskId: "task-23", variables: { decision: "approved" } } };
+        return { contentType, json: { taskId: "task-23", variables: { decision: "approved" }, output: { summary: { lines: 3 }, note: "Reviewed" } } };
       case "claimWorkflowTask":
         return { contentType, json: { ttlSeconds: 1800 } };
       case "putDirectoryUnitType":

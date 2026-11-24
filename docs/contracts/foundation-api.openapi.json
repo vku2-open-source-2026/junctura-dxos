@@ -212,11 +212,222 @@
         "x-junctura-test-suite": "records"
       }
     },
+    "/v2/data-masking/{collection}": {
+      "get": {
+        "operationId": "getFieldMaskingPolicy",
+        "summary": "Read a collection field masking policy",
+        "description": "Return the calling app’s policy for top-level record fields. A collection without a policy returns an empty fields object.",
+        "tags": [
+          "app-resource"
+        ],
+        "x-junctura-query-policy": "closed",
+        "security": [
+          {
+            "coreBearer": []
+          }
+        ],
+        "x-junctura-core-roles": [
+          "core-reader"
+        ],
+        "x-junctura-authority": "app-resource",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Collection"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Effective field masking policy for the collection.",
+            "headers": {
+              "Cache-Control": {
+                "$ref": "#/components/headers/CacheControl"
+              },
+              "X-Content-Type-Options": {
+                "$ref": "#/components/headers/NoSniff"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FieldMaskingPolicy"
+                },
+                "example": {
+                  "collection": "entries",
+                  "fields": {
+                    "nationalId": {
+                      "mask": "full",
+                      "owner": true
+                    },
+                    "phone": {
+                      "mask": "last4",
+                      "roles": [
+                        "manager"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/PlannedBadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "405": {
+            "$ref": "#/components/responses/MethodNotAllowed"
+          },
+          "429": {
+            "$ref": "#/components/responses/PlannedRateLimited"
+          },
+          "502": {
+            "$ref": "#/components/responses/BadGateway"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          },
+          "504": {
+            "$ref": "#/components/responses/GatewayTimeout"
+          }
+        },
+        "x-junctura-source": "src/modules/data/records.mjs",
+        "x-junctura-test-suite": "field-masking"
+      },
+      "put": {
+        "operationId": "putFieldMaskingPolicy",
+        "summary": "Replace a collection field masking policy",
+        "description": "Replace the complete policy for the calling app’s collection. Requires the owning backend with core-writer or a verified app manager with write access. An empty fields object clears the policy. Core masks fields for readers without a matching owner, role or exact-app share rule and audits clear disclosures. Masked fields are excluded from filter, sort, group, search and increment operations. A masking rule on the unique key returns 409.",
+        "tags": [
+          "app-resource"
+        ],
+        "x-junctura-query-policy": "closed",
+        "security": [
+          {
+            "coreBearer": []
+          }
+        ],
+        "x-junctura-core-roles": [
+          "core-reader",
+          "core-writer"
+        ],
+        "x-junctura-authority": "app-resource",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Collection"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FieldMaskingPolicyWrite"
+              },
+              "example": {
+                "fields": {
+                  "nationalId": {
+                    "mask": "full",
+                    "owner": true
+                  },
+                  "phone": {
+                    "mask": "last4",
+                    "roles": [
+                      "manager"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "x-max-body-bytes": 65536,
+        "responses": {
+          "200": {
+            "description": "Effective field masking policy for the collection.",
+            "headers": {
+              "Cache-Control": {
+                "$ref": "#/components/headers/CacheControl"
+              },
+              "X-Content-Type-Options": {
+                "$ref": "#/components/headers/NoSniff"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FieldMaskingPolicy"
+                },
+                "example": {
+                  "collection": "entries",
+                  "fields": {
+                    "nationalId": {
+                      "mask": "full",
+                      "owner": true
+                    },
+                    "phone": {
+                      "mask": "last4",
+                      "roles": [
+                        "manager"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/PlannedBadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "405": {
+            "$ref": "#/components/responses/MethodNotAllowed"
+          },
+          "409": {
+            "$ref": "#/components/responses/PlannedConflict"
+          },
+          "413": {
+            "$ref": "#/components/responses/PlannedTooLarge"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMedia"
+          },
+          "429": {
+            "$ref": "#/components/responses/PlannedRateLimited"
+          },
+          "502": {
+            "$ref": "#/components/responses/BadGateway"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          },
+          "504": {
+            "$ref": "#/components/responses/GatewayTimeout"
+          }
+        },
+        "x-junctura-source": "src/modules/data/records.mjs",
+        "x-junctura-test-suite": "field-masking"
+      }
+    },
     "/v2/data/{collection}/aggregate": {
       "get": {
         "operationId": "aggregateRecords",
         "summary": "Count or group records",
-        "description": "Count all readable matching records in the selected owner scope. groups is empty for count-only requests. Group keys follow the requested dimension order and missing values group as null. Queries that would return more than 1,000 groups return 400 invalid_query. Management viewers may not filter or group on sensitive fields.",
+        "description": "Count all readable matching records in the selected owner scope. groups is empty for count-only requests. Group keys follow the requested dimension order and missing values group as null. Queries that would return more than 1,000 groups return 400 invalid_query. Fields with masking rules are excluded from filtering and grouping. Sensitive schema fields are also unavailable to management viewers.",
         "tags": [
           "app-resource"
         ],
@@ -726,7 +937,7 @@
       "get": {
         "operationId": "exportAppRecords",
         "summary": "Export records owned by the calling app",
-        "description": "Active app owner only. The export covers record IDs and data across its collections. Collection definitions, record revisions, shares, file bytes and audit rows are outside this format.",
+        "description": "Active app owner only. The export covers record IDs and data across its collections. Collection definitions, record revisions, shares, file bytes and audit rows are outside this format. Core applies each collection’s field masking policy when it returns the export page.",
         "tags": [
           "app-resource"
         ],
@@ -3742,7 +3953,7 @@
       "get": {
         "operationId": "listFilteredRecords",
         "summary": "Filter and list records",
-        "description": "Without sort, use the existing (created_at, id) order. Supply nextCursor with unchanged owner, filters and ordering. Data returned to authorized management readers omits sensitive fields. Filtering and sorting on those fields are unavailable to these readers. Shared reads include only live exact shares and live app-group shares with current membership. Missing or inaccessible owner scope returns 404. In compatibility mode, a list without the new filter parameters may retain the legacy body and cursor without version fields.",
+        "description": "Without sort, use the existing (created_at, id) order. Supply nextCursor with unchanged owner, filters and ordering. Core applies the collection’s field masking policy to all returned records. Management readers also omit schema-sensitive fields without masking rules. Fields with masking rules are excluded from filtering and sorting for all readers. Shared reads include only live exact shares and live app-group shares with current membership. Missing or inaccessible owner scope returns 404. In compatibility mode, a list without the new filter parameters may retain the legacy body and cursor without version fields.",
         "tags": [
           "app-resource"
         ],
@@ -4000,7 +4211,7 @@
       "get": {
         "operationId": "getVersionedRecord",
         "summary": "Get a versioned record",
-        "description": "Returns the current representation. An owner receives the strong ETag to use on a subsequent write. Existing records start at version 1. An authorized management reader sees data with sensitive top-level fields omitted. Masking grants no read permission. Strict mode includes version in the response body. Compatibility mode retains the legacy body. Shared and management reads omit the write ETag. An exact GET using a delegated token can also use a current resource consent for the selected unit. A matching revoked or expired consent returns 403 with consent_revoked or consent_expired and requestId when ordinary read authority is absent.",
+        "description": "Returns the current representation. An owner receives the strong ETag to use on a subsequent write. Existing records start at version 1. Core applies the collection’s field masking policy to the authorized reader. Management readers also omit schema-sensitive fields without masking rules. Strict mode includes version in the response body. Compatibility mode retains the legacy body. Shared and management reads omit the write ETag. An exact GET using a delegated token can also use a current resource consent for the selected unit. A matching revoked or expired consent returns 403 with consent_revoked or consent_expired and requestId when ordinary read authority is absent.",
         "tags": [
           "app-resource"
         ],
@@ -6731,7 +6942,7 @@
       "post": {
         "operationId": "completeWorkflowTask",
         "summary": "Complete a specific workflow task",
-        "description": "Business workflows require taskId. Core checks execution, tenant, unit and candidate-group membership before accepting the command, including replays. A task claimed by another caller returns 409 task_claimed; a completed task returns 409 task_already_completed for a new attempt. A valid claim by the caller or an unclaimed task can be completed. variables supplies primitive BPMN routing values and replaces the proposed output field. Optional records are creates owned by the calling app; using them requires an active binding for that app and a verified user context. Core validates and commits them with a durable completion outbox entry. A 202 means the task transition is still pending. An identical replay with the original Idempotency-Key returns the first result even if the task has since completed. Read execution state and history after a 202. Other parallel tasks remain pending. While an accepted completion is pending, cancellation conflicts. The empty object retains synchronous compatibility for the technical checkpoint and executions started before workflow task policy was introduced.",
+        "description": "Business workflows require taskId. Core checks execution, tenant, unit and candidate-group membership before accepting the command, including replays. A task claimed by another caller returns 409 task_claimed; a completed task returns 409 task_already_completed for a new attempt. A valid claim by the caller or an unclaimed task can be completed. variables supplies primitive BPMN routing values. The optional output object supplies up to 64 KiB of business results: its keys become process variables, must not collide with variables keys, and structured values are stored as JSON strings. Optional records are creates owned by the calling app; using them requires an active binding for that app and a verified user context. Core validates and commits them with a durable completion outbox entry. A 202 means the task transition is still pending. An identical replay with the original Idempotency-Key returns the first result even if the task has since completed. Read execution state and history after a 202. Other parallel tasks remain pending. While an accepted completion is pending, cancellation conflicts. The empty object retains synchronous compatibility for the technical checkpoint and executions started before workflow task policy was introduced.",
         "tags": [
           "tenant"
         ],
@@ -6781,6 +6992,12 @@
                   "decision": "approved",
                   "reason": "Criteria met",
                   "approved": true
+                },
+                "output": {
+                  "summary": {
+                    "lines": 3
+                  },
+                  "note": "Reviewed"
                 },
                 "records": [
                   {
@@ -11686,6 +11903,42 @@
         "x-max-utf8-bytes": 4096,
         "description": "Maximum 4,096 bytes when compactly encoded as UTF-8 JSON. Core reserves input and __junctura_completion. decision and reason are optional history fields. Keep sensitive data out of variables."
       },
+      "WorkflowTaskOutput": {
+        "type": "object",
+        "propertyNames": {
+          "type": "string",
+          "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,63}$",
+          "not": {
+            "enum": [
+              "input",
+              "__junctura_completion"
+            ]
+          }
+        },
+        "additionalProperties": {
+          "type": [
+            "string",
+            "number",
+            "boolean",
+            "object",
+            "array"
+          ]
+        },
+        "properties": {
+          "decision": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          }
+        },
+        "x-max-utf8-bytes": 65536,
+        "description": "Optional business result; keys become process variables like variables and must not collide with variables keys. Maximum 65,536 bytes when compactly encoded as UTF-8 JSON. Core reserves input and __junctura_completion. Structured values are stored as JSON strings. decision and reason are optional history fields. Keep sensitive data out of output."
+      },
       "WorkflowTaskCompletion": {
         "type": "object",
         "properties": {
@@ -11695,6 +11948,9 @@
           },
           "variables": {
             "$ref": "#/components/schemas/WorkflowTaskVariables"
+          },
+          "output": {
+            "$ref": "#/components/schemas/WorkflowTaskOutput"
           },
           "records": {
             "type": "array",
@@ -14044,6 +14300,96 @@
           "requests"
         ],
         "additionalProperties": false
+      },
+      "FieldMaskingRule": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "mask"
+        ],
+        "properties": {
+          "mask": {
+            "type": "string",
+            "enum": [
+              "full",
+              "last4"
+            ],
+            "description": "Full masking returns ***. Last4 appends the last four characters of a string longer than four characters."
+          },
+          "owner": {
+            "type": "boolean",
+            "description": "Allow the owning backend and the verified creator through the owning app to see the original value."
+          },
+          "roles": {
+            "type": "array",
+            "maxItems": 6,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "enum": [
+                "core-reader",
+                "core-writer",
+                "regulator",
+                "viewer",
+                "editor",
+                "manager"
+              ]
+            },
+            "description": "Allow any listed verified Core role or assignment role in the owning app."
+          },
+          "shareIds": {
+            "type": "array",
+            "maxItems": 20,
+            "uniqueItems": true,
+            "items": {
+              "$ref": "#/components/schemas/Uuid"
+            },
+            "description": "Allow any listed live exact-app read share for this field and record."
+          }
+        }
+      },
+      "FieldMaskingPolicyWrite": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "fields"
+        ],
+        "properties": {
+          "fields": {
+            "type": "object",
+            "maxProperties": 100,
+            "propertyNames": {
+              "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,63}$"
+            },
+            "additionalProperties": {
+              "$ref": "#/components/schemas/FieldMaskingRule"
+            }
+          }
+        }
+      },
+      "FieldMaskingPolicy": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "collection",
+          "fields"
+        ],
+        "properties": {
+          "collection": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_-]{0,62}$"
+          },
+          "fields": {
+            "type": "object",
+            "maxProperties": 100,
+            "propertyNames": {
+              "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,63}$"
+            },
+            "additionalProperties": {
+              "$ref": "#/components/schemas/FieldMaskingRule"
+            }
+          }
+        }
       }
     }
   }

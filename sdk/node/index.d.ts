@@ -183,6 +183,7 @@ export type WorkflowTaskFilter = WorkflowPageOptions & { definitionKey?: string;
 export type WorkflowTaskCompletion = {
   taskId: string;
   variables?: Record<string, string | number | boolean>;
+  output?: JsonObject;
   records?: { collection: string; data: JsonObject }[];
 };
 export type WorkflowPendingCompletion = { taskId: string; completionStatus: 'pending'; execution: WorkflowExecutionWithDeadline };

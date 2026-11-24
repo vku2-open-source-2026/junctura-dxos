@@ -91,8 +91,9 @@ test("strong ETag syntax agrees with the Foundation contract", () => {
   assert.throws(() => parseRecordWriteHeaders({ "idempotency-key": `${key}, ${key}` }), { status: 400 });
 });
 
-test("the Core router sends writes, queries and imports to their RPCs with verified claims", async t => {
+test("the Core router sends record operations to their RPCs with verified claims", async t => {
   const issuer = "https://issuer.invalid";
+  const fields = { phone: { mask: "last4", owner: true } };
   const outbound = t.mock.method(globalThis, "fetch", async (url, options) => {
     if (url.startsWith(issuer)) return Response.json({
       active: true, iss: issuer, aud: "junctura-core", exp: Date.now() / 1000 + 60,
@@ -104,6 +105,7 @@ test("the Core router sends writes, queries and imports to their RPCs with verif
     assert.equal(claims.client_id, "verified-client");
     assert.equal(claims.sub, "verified-subject");
     assert.equal(claims.role, "junctura_record_api");
+    assert.deepEqual(claims.record_roles, ["core-reader", "core-writer"]);
     const command = JSON.parse(options.body);
     if (url === "https://data.invalid/rpc/record_query") {
       if (command.operation === "describe") {
@@ -121,6 +123,12 @@ test("the Core router sends writes, queries and imports to their RPCs with verif
       return Response.json({ status: 200, value: { created: 1 } });
     }
     assert.equal(url, "https://data.invalid/rpc/record_command");
+    if (command.operation === "get_masking" || command.operation === "put_masking") {
+      assert.deepEqual(command.payload, {
+        collection: "records", ...(command.operation === "put_masking" ? { fields } : {}),
+      });
+      return Response.json({ status: 200, value: { collection: "records", fields } });
+    }
     assert.equal(command.operation, "batch");
     assert.equal(command.payload.path, "/v2/data:batch");
     return Response.json({ status: 200, value: { results: [{ op: "create", id: key, version: 1 }] } });
@@ -149,4 +157,8 @@ test("the Core router sends writes, queries and imports to their RPCs with verif
   assert.deepEqual(await send({ ...auth, "content-type": "application/x-ndjson" }, { url: "/v2/data:import",
     body: JSON.stringify({ collection: "records", id: key, data: {} }) + "\n" }),
     { status: 200, body: { created: 1 } });
+  const url = "/v2/data-masking/records";
+  const expected = { status: 200, body: { collection: "records", fields } };
+  assert.deepEqual(await send(auth, { method: "GET", url, body: "" }), expected);
+  assert.deepEqual(await send(auth, { method: "PUT", url, body: JSON.stringify({ fields }) }), expected);
 });
