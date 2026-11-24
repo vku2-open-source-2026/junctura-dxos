@@ -14,25 +14,45 @@ const unitMapper = {
 };
 
 export function accessFlows(alias, clientId) {
+  const isConsole = clientId === "junctura-console";
+  const adminCondition = negate => ({ name: "conditional-user-role",
+    config: { condUserRole: `${clientId}.console-admin`, negate: String(negate) } });
+  const otpBranch = (suffix, authenticator) => ({ name: `${alias}-${suffix}`, requirement: "CONDITIONAL", children: [
+    { name: "conditional-user-configured" }, { name: authenticator },
+    ...(isConsole ? [adminCondition(true)] : []),
+  ] });
+  // Install required admin OTP before narrowing the existing optional branches.
+  // The execution priority keeps it after sign-in, including cookie-based SSO.
+  const adminOtpBranch = (flow, children) => isConsole ? [{ name: `${alias}-${flow}-admin-otp`,
+    requirement: "CONDITIONAL", priority: 50, children: [adminCondition(false), ...children] }] : [];
+  const directOtp = "direct-grant-validate-otp";
+  const adminDirectConfigured = `${alias}-direct-admin-configured-otp`;
   return [
     { alias: `${alias}-browser`, children: [
+      ...adminOtpBranch("browser", [{ name: "auth-otp-form" }]),
       { name: `${alias}-sign-in`, children: [
         { name: "auth-cookie", requirement: "ALTERNATIVE" },
         { name: `${alias}-forms`, requirement: "ALTERNATIVE", children: [
           { name: "auth-username-password-form" },
-          { name: `${alias}-otp`, requirement: "CONDITIONAL", children: [
-            { name: "conditional-user-configured" }, { name: "auth-otp-form" },
-          ] },
+          otpBranch("otp", "auth-otp-form"),
         ] },
       ] },
       deniedBranch(`${alias}-browser`, clientId),
     ] },
     { alias: `${alias}-direct`, children: [
+      ...adminOtpBranch("direct", [
+        { name: adminDirectConfigured, requirement: "CONDITIONAL", children: [
+          { name: "conditional-user-configured" }, { name: directOtp },
+        ] },
+        // The direct OTP validator throws if the user has no credential. Deny that case explicitly.
+        { name: `${alias}-direct-admin-otp-denied`, requirement: "CONDITIONAL", children: [
+          { name: "conditional-sub-flow-executed", config: { flow_to_check: adminDirectConfigured, check_result: "not-executed" } },
+          { name: "deny-access-authenticator", config: { denyErrorMessage: "credentialSetupRequired" } },
+        ] },
+      ]),
       { name: "direct-grant-validate-username" },
       { name: "direct-grant-validate-password" },
-      { name: `${alias}-direct-otp`, requirement: "CONDITIONAL", children: [
-        { name: "conditional-user-configured" }, { name: "direct-grant-validate-otp" },
-      ] },
+      otpBranch("direct-otp", directOtp),
       deniedBranch(`${alias}-direct`, clientId),
     ] },
   ];
@@ -75,13 +95,13 @@ export function createApplicationProvider(config, beforeWrite, fetcher = fetch) 
   async function flowTree(alias, children) {
     const path = `/authentication/flows/${encodeURIComponent(alias)}/executions`;
     for (const [index, child] of children.entries()) {
-      const { name, requirement = "REQUIRED", config } = child;
+      const { name, requirement = "REQUIRED", config, priority = index * 10 } = child;
       const find = async () => (await get(path, isList))?.find(item => item.level === 0 &&
         (child.children ? item.displayName === name : item.providerId === name));
       let execution = await find();
       if (!execution) {
-        if (child.children) await write(`${path}/flow`, "POST", { alias: name, type: "basic-flow", priority: index * 10 });
-        else await write(`${path}/execution`, "POST", { provider: name, priority: index * 10 });
+        if (child.children) await write(`${path}/flow`, "POST", { alias: name, type: "basic-flow", priority });
+        else await write(`${path}/execution`, "POST", { provider: name, priority });
         execution = (await find()) ?? fail();
       }
       if (child.children) await flowTree(name, child.children);

@@ -79,6 +79,29 @@ test("both client flows check the client role after authenticating the user", ()
   assert.deepEqual(realm.roles.client[console.clientId].filter(role => role.composite).map(role => role.name), consoleAccessRoles);
 });
 
+test("imported and provisioned Console flows enforce the same OTP policy", () => {
+  const realm = JSON.parse(readFileSync(new URL("../infra/keycloak/realm.json", import.meta.url)));
+  const configs = new Map(realm.authenticatorConfig.map(({ alias, config }) => [alias, config]));
+  const flows = new Map(realm.authenticationFlows.map(flow => [flow.alias, flow.authenticationExecutions]));
+  function imported(alias) {
+    return flows.get(alias).toSorted((a, b) => a.priority - b.priority).map(execution => ({
+      name: execution.flowAlias ?? execution.authenticator, requirement: execution.requirement,
+      ...(execution.flowAlias ? { children: imported(execution.flowAlias) } : {}),
+      ...(execution.authenticatorConfig ? { config: configs.get(execution.authenticatorConfig) } : {}),
+    }));
+  }
+  function provisioned(children) {
+    return children.map(({ priority, ...child }, index) => ({ priority: priority ?? index * 10, child }))
+      .sort((a, b) => a.priority - b.priority)
+      .map(({ child: { name, requirement = "REQUIRED", config, children } }) => ({ name, requirement,
+        ...(config ? { config } : {}), ...(children ? { children: provisioned(children) } : {}),
+      }));
+  }
+  for (const flow of accessFlows("junctura-junctura-console", "junctura-console")) {
+    assert.deepEqual(imported(flow.alias), provisioned(flow.children));
+  }
+});
+
 test("realm import grants the app-sync service account its management permissions", () => {
   const realm = JSON.parse(readFileSync(new URL("../infra/keycloak/realm.json", import.meta.url)));
   const client = realm.clients.find(entry => entry.clientId === "junctura-app-sync");

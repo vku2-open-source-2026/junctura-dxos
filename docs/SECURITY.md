@@ -27,6 +27,13 @@ production-certified. See [architecture](ARCHITECTURE.md) and the [Core API](COR
 
 ## Identity and roles
 
+Console accounts with the Keycloak `junctura-console.console-admin` client role must use TOTP.
+Administrators without an authenticator enroll through Console SSO, even with an existing
+Keycloak session. The password grant requires an enrolled authenticator and a current code. Other Console users
+submit a code only if they have configured OTP. For an existing realm, run
+`npm run directory:provision` with application identity synchronization enabled to update
+the Console flows.
+
 [Core authentication](../src/platform/auth/auth.mjs) checks active status, issuer,
 `junctura-core` audience, expiry, subject, tenant membership and `core-reader`, without
 a positive token cache. Invalid tokens return 401, tenant/role failures 403, unavailable

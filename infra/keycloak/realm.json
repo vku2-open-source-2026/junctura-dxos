@@ -620,6 +620,12 @@
           "priority": 10,
           "authenticatorFlow": true,
           "flowAlias": "junctura-junctura-console-browser-denied"
+        },
+        {
+          "requirement": "CONDITIONAL",
+          "priority": 50,
+          "authenticatorFlow": true,
+          "flowAlias": "junctura-junctura-console-browser-admin-otp"
         }
       ]
     },
@@ -686,6 +692,13 @@
           "priority": 10,
           "authenticatorFlow": false,
           "authenticator": "auth-otp-form"
+        },
+        {
+          "requirement": "REQUIRED",
+          "priority": 20,
+          "authenticatorFlow": false,
+          "authenticator": "conditional-user-role",
+          "authenticatorConfig": "junctura-junctura-console-otp-conditional-user-role"
         }
       ]
     },
@@ -710,6 +723,29 @@
           "authenticatorFlow": false,
           "authenticator": "deny-access-authenticator",
           "authenticatorConfig": "junctura-junctura-console-browser-denied-deny-access-authenticator"
+        }
+      ]
+    },
+    {
+      "id": "7652e4b2-69f0-4ddc-8b65-f91dd14ab7a6",
+      "alias": "junctura-junctura-console-browser-admin-otp",
+      "description": "junctura-junctura-console-browser-admin-otp",
+      "providerId": "basic-flow",
+      "topLevel": false,
+      "builtIn": false,
+      "authenticationExecutions": [
+        {
+          "requirement": "REQUIRED",
+          "priority": 0,
+          "authenticatorFlow": false,
+          "authenticator": "conditional-user-role",
+          "authenticatorConfig": "junctura-junctura-console-browser-admin-otp-conditional-user-role"
+        },
+        {
+          "requirement": "REQUIRED",
+          "priority": 10,
+          "authenticatorFlow": false,
+          "authenticator": "auth-otp-form"
         }
       ]
     },
@@ -744,6 +780,12 @@
           "priority": 30,
           "authenticatorFlow": true,
           "flowAlias": "junctura-junctura-console-direct-denied"
+        },
+        {
+          "requirement": "CONDITIONAL",
+          "priority": 50,
+          "authenticatorFlow": true,
+          "flowAlias": "junctura-junctura-console-direct-admin-otp"
         }
       ]
     },
@@ -766,6 +808,13 @@
           "priority": 10,
           "authenticatorFlow": false,
           "authenticator": "direct-grant-validate-otp"
+        },
+        {
+          "requirement": "REQUIRED",
+          "priority": 20,
+          "authenticatorFlow": false,
+          "authenticator": "conditional-user-role",
+          "authenticatorConfig": "junctura-junctura-console-direct-otp-conditional-user-role"
         }
       ]
     },
@@ -792,9 +841,125 @@
           "authenticatorConfig": "junctura-junctura-console-direct-denied-deny-access-authenticator"
         }
       ]
+    },
+    {
+      "id": "2de51bd5-c7ee-4146-b06b-939b0e179779",
+      "alias": "junctura-junctura-console-direct-admin-otp",
+      "description": "junctura-junctura-console-direct-admin-otp",
+      "providerId": "basic-flow",
+      "topLevel": false,
+      "builtIn": false,
+      "authenticationExecutions": [
+        {
+          "requirement": "REQUIRED",
+          "priority": 0,
+          "authenticatorFlow": false,
+          "authenticator": "conditional-user-role",
+          "authenticatorConfig": "junctura-junctura-console-direct-admin-otp-conditional-user-role"
+        },
+        {
+          "requirement": "CONDITIONAL",
+          "priority": 10,
+          "authenticatorFlow": true,
+          "flowAlias": "junctura-junctura-console-direct-admin-configured-otp"
+        },
+        {
+          "requirement": "CONDITIONAL",
+          "priority": 20,
+          "authenticatorFlow": true,
+          "flowAlias": "junctura-junctura-console-direct-admin-otp-denied"
+        }
+      ]
+    },
+    {
+      "id": "e517f9d5-21f5-48ff-8c47-2b010181b0b3",
+      "alias": "junctura-junctura-console-direct-admin-configured-otp",
+      "description": "junctura-junctura-console-direct-admin-configured-otp",
+      "providerId": "basic-flow",
+      "topLevel": false,
+      "builtIn": false,
+      "authenticationExecutions": [
+        {
+          "requirement": "REQUIRED",
+          "priority": 0,
+          "authenticatorFlow": false,
+          "authenticator": "conditional-user-configured"
+        },
+        {
+          "requirement": "REQUIRED",
+          "priority": 10,
+          "authenticatorFlow": false,
+          "authenticator": "direct-grant-validate-otp"
+        }
+      ]
+    },
+    {
+      "id": "2bf76bdc-486c-4274-8a70-c8d2cbe145d6",
+      "alias": "junctura-junctura-console-direct-admin-otp-denied",
+      "description": "junctura-junctura-console-direct-admin-otp-denied",
+      "providerId": "basic-flow",
+      "topLevel": false,
+      "builtIn": false,
+      "authenticationExecutions": [
+        {
+          "requirement": "REQUIRED",
+          "priority": 0,
+          "authenticatorFlow": false,
+          "authenticator": "conditional-sub-flow-executed",
+          "authenticatorConfig": "junctura-junctura-console-direct-admin-otp-denied-conditional-sub-flow-executed"
+        },
+        {
+          "requirement": "REQUIRED",
+          "priority": 10,
+          "authenticatorFlow": false,
+          "authenticator": "deny-access-authenticator",
+          "authenticatorConfig": "junctura-junctura-console-direct-admin-otp-denied-deny-access-authenticator"
+        }
+      ]
     }
   ],
   "authenticatorConfig": [
+    {
+      "alias": "junctura-junctura-console-otp-conditional-user-role",
+      "config": {
+        "condUserRole": "junctura-console.console-admin",
+        "negate": "true"
+      }
+    },
+    {
+      "alias": "junctura-junctura-console-browser-admin-otp-conditional-user-role",
+      "config": {
+        "condUserRole": "junctura-console.console-admin",
+        "negate": "false"
+      }
+    },
+    {
+      "alias": "junctura-junctura-console-direct-otp-conditional-user-role",
+      "config": {
+        "condUserRole": "junctura-console.console-admin",
+        "negate": "true"
+      }
+    },
+    {
+      "alias": "junctura-junctura-console-direct-admin-otp-conditional-user-role",
+      "config": {
+        "condUserRole": "junctura-console.console-admin",
+        "negate": "false"
+      }
+    },
+    {
+      "alias": "junctura-junctura-console-direct-admin-otp-denied-conditional-sub-flow-executed",
+      "config": {
+        "flow_to_check": "junctura-junctura-console-direct-admin-configured-otp",
+        "check_result": "not-executed"
+      }
+    },
+    {
+      "alias": "junctura-junctura-console-direct-admin-otp-denied-deny-access-authenticator",
+      "config": {
+        "denyErrorMessage": "credentialSetupRequired"
+      }
+    },
     {
       "alias": "junctura-junctura-console-browser-denied-conditional-user-role",
       "config": {
