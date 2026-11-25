@@ -1,0 +1,13 @@
+# SPDX-FileCopyrightText: 2026 Junctura Contributors
+# SPDX-License-Identifier: Apache-2.0
+# File provider scanning this directory for dashboard JSON, provisioned
+# read-only from the mounted repository tree.
+apiVersion: 1
+providers:
+  - name: junctura-core
+    type: file
+    disableDeletion: true
+    updateIntervalSeconds: 30
+    options:
+      path: /etc/grafana/provisioning/dashboards
+      foldersFromFilesStructure: false
