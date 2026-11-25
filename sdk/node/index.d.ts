@@ -123,7 +123,6 @@ export type DirectoryGroup = { unit: string; group: string; name: string };
 export type DirectoryMember = { unit: string; subject: string; groups: string[] };
 export type SubjectConsent = {
   consentId: string;
-  consumer: { appId: string; displayName: string | null };
   capabilityId: string;
   capabilityTitle: string | null;
   purposes: string[];
@@ -131,8 +130,9 @@ export type SubjectConsent = {
   expiresAt: string;
   revokedAt: string | null;
   state: 'active' | 'revoked' | 'expired';
-};
-export type ConsentCreate = { consumerAppId: string; capabilityId: string; purposes: string[]; expiresAt: string };
+} & ({ consumer: { appId: string; displayName: string | null }; recipientUnit?: never } | { recipientUnit: string; consumer?: never });
+export type ConsentCreate = { capabilityId: string; purposes: string[]; expiresAt: string } &
+  ({ consumerAppId: string; recipientUnit?: never } | { recipientUnit: string; consumerAppId?: never });
 export type AuditResourceRef =
   | { type: 'record'; collection: string; id: string }
   | { type: 'object' | 'workflowExecution'; id: string };

@@ -5583,7 +5583,7 @@
       "post": {
         "operationId": "createConsentBySubjectId",
         "summary": "Grant consent as the data subject",
-        "description": "Grant the active registered app the declared purposes for an existing capability, expiring within 366 days. Uses the authenticated login, tenant and issuer for compatibility. A supplied subjectId claim must match the operator binding or the request returns 403.",
+        "description": "Grant the declared purposes for an existing capability, expiring within 366 days. Provide either consumerAppId for an active app or recipientUnit for a confirmed unit in the same tenant. A unit grant requires an operator-bound subjectId from the subject login. App grants keep their existing scope.",
         "tags": [
           "tenant"
         ],
@@ -7652,15 +7652,30 @@
           "expiresAt": {
             "type": "string",
             "format": "date-time"
+          },
+          "recipientUnit": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9-]{1,63}$"
           }
         },
         "required": [
-          "consumerAppId",
           "capabilityId",
           "purposes",
           "expiresAt"
         ],
-        "additionalProperties": false
+        "additionalProperties": false,
+        "oneOf": [
+          {
+            "required": [
+              "consumerAppId"
+            ]
+          },
+          {
+            "required": [
+              "recipientUnit"
+            ]
+          }
+        ]
       },
       "EmergencyFeedbackResult": {
         "type": "object",
@@ -7920,11 +7935,14 @@
               "expired",
               "revoked"
             ]
+          },
+          "recipientUnit": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9-]{1,63}$"
           }
         },
         "required": [
           "consentId",
-          "consumer",
           "capabilityId",
           "capabilityTitle",
           "purposes",
@@ -7933,7 +7951,19 @@
           "revokedAt",
           "state"
         ],
-        "additionalProperties": false
+        "additionalProperties": false,
+        "oneOf": [
+          {
+            "required": [
+              "consumer"
+            ]
+          },
+          {
+            "required": [
+              "recipientUnit"
+            ]
+          }
+        ]
       },
       "SubjectConsents": {
         "type": "object",
@@ -10616,7 +10646,6 @@
         "type": "object",
         "additionalProperties": false,
         "required": [
-          "consumerAppId",
           "capabilityId",
           "purposes",
           "expiresAt"
@@ -10644,15 +10673,30 @@
             "type": "string",
             "format": "date-time",
             "description": "In the future and at most 366 days ahead."
+          },
+          "recipientUnit": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9-]{1,63}$"
           }
-        }
+        },
+        "oneOf": [
+          {
+            "required": [
+              "consumerAppId"
+            ]
+          },
+          {
+            "required": [
+              "recipientUnit"
+            ]
+          }
+        ]
       },
       "SubjectConsent": {
         "type": "object",
         "additionalProperties": false,
         "required": [
           "consentId",
-          "consumer",
           "capabilityId",
           "capabilityTitle",
           "purposes",
@@ -10729,8 +10773,24 @@
               "expired",
               "revoked"
             ]
+          },
+          "recipientUnit": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9-]{1,63}$"
           }
-        }
+        },
+        "oneOf": [
+          {
+            "required": [
+              "consumer"
+            ]
+          },
+          {
+            "required": [
+              "recipientUnit"
+            ]
+          }
+        ]
       },
       "SubjectConsentList": {
         "type": "object",
