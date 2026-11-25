@@ -73,7 +73,7 @@ test("pg_dump/pg_restore preserves real data and tenant RLS in an isolated tempo
       "CREATE ROLE junctura_event_api NOLOGIN NOBYPASSRLS; CREATE ROLE junctura_event_observer NOLOGIN NOBYPASSRLS; " +
       "CREATE ROLE junctura_search_worker NOLOGIN NOBYPASSRLS; CREATE ROLE junctura_objects_worker NOLOGIN NOBYPASSRLS; " +
       "CREATE ROLE junctura_app_access_api NOLOGIN NOBYPASSRLS; " +
-      "CREATE ROLE junctura_consent_lookup NOLOGIN NOBYPASSRLS;"]);
+      "CREATE ROLE junctura_consent_lookup NOLOGIN NOBYPASSRLS; CREATE ROLE junctura_queue_api NOLOGIN NOBYPASSRLS;"]);
     await sourceSql(`INSERT INTO app_private.subject_bindings(tenant_id,issuer,subject_id,login_subject)
       VALUES('tenant-a','https://recovery.example.invalid','subject-${id}','recovery-${id}');`);
     bindingSeeded = true;
