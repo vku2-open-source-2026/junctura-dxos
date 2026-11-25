@@ -393,3 +393,78 @@ test("feature route validates method, query and limits", async () => {
   assert.equal(post.status, 405);
   assert.equal(post.headers.get("allow"), "GET");
 });
+
+const withApi = async (run) => {
+  const route = createApi(config);
+  const server = createServer(async (request, response) => {
+    try { await route(request, response); }
+    catch (error) { reply(response, error); }
+  });
+  const url = await listen(server);
+  try { return await run(url); } finally { server.close(); }
+};
+
+const counterLines = (text) => text.split("\n").filter((line) => line.startsWith("junctura_core_requests_total{"));
+
+test("prometheus metrics endpoint answers unauthenticated in text format", async () => {
+  await withApi(async (url) => {
+    recordRequest({ tenantId: identity.tenantId, method: "GET", path: "/v1/data/records?limit=1", statusCode: 200, durationMs: 25 });
+    const response = await fetch(`${url}/metrics`);
+    assert.equal(response.status, 200);
+    assert.equal(response.headers.get("content-type"), "text/plain; version=0.0.4; charset=utf-8");
+    assert.equal(response.headers.get("cache-control"), "no-store");
+    const body = await response.text();
+    assert.ok(body.includes("# HELP junctura_core_requests_total"), body);
+    assert.ok(body.includes("# TYPE junctura_core_requests_total counter"), body);
+    assert.ok(body.includes('junctura_core_requests_total{method="GET",route="data",code="200"} 1'), body);
+    assert.ok(body.includes('junctura_core_request_duration_seconds_total{method="GET",route="data"} 0.025'), body);
+    for (const line of body.split("\n")) {
+      if (line.startsWith("process_uptime_seconds ") || line.startsWith("process_resident_memory_bytes ") ||
+        line.startsWith("process_heap_used_bytes ") || line.startsWith("process_start_time_seconds ")) {
+        assert.ok(Number(line.split(" ")[1]) >= 0, line);
+      }
+    }
+  });
+});
+
+test("prometheus metrics endpoint rejects non-GET with 405 and Allow", async () => {
+  await withApi(async (url) => {
+    const post = await fetch(`${url}/metrics`, { method: "POST" });
+    assert.equal(post.status, 405);
+    assert.equal(post.headers.get("allow"), "GET");
+    assert.deepEqual(await post.json(), { error: "method_not_allowed" });
+  });
+});
+
+test("prometheus scrape never counts itself", async () => {
+  await withApi(async (url) => {
+    recordRequest({ tenantId: identity.tenantId, method: "GET", path: "/v1/data/records", statusCode: 200, durationMs: 1 });
+    const first = counterLines(await (await fetch(`${url}/metrics`)).text());
+    const second = counterLines(await (await fetch(`${url}/metrics`)).text());
+    assert.deepEqual(second, first);
+    assert.equal(first.length, 1);
+  });
+});
+
+test("prometheus counters include unauthorized requests while tenant stores stay empty", async () => {
+  await withApi(async (url) => {
+    recordRequest({ tenantId: identity.tenantId, method: "POST", path: "/v1/identity", statusCode: 401, durationMs: 5 });
+    recordRequest({ tenantId: identity.tenantId, method: "GET", path: "/v1/data/records", statusCode: 401, durationMs: 1 });
+    const body = await (await fetch(`${url}/metrics`)).text();
+    assert.ok(body.includes('junctura_core_requests_total{method="POST",route="other",code="401"} 1'), body);
+    assert.ok(body.includes('junctura_core_requests_total{method="GET",route="data",code="401"} 1'), body);
+    assert.deepEqual(trafficSeries({ tenantId: identity.tenantId }).totals, ZERO);
+    assert.deepEqual(recentRequests({ tenantId: identity.tenantId }), []);
+  });
+});
+
+test("prometheus labels clamp unknown methods and paths into fixed sets", async () => {
+  await withApi(async (url) => {
+    recordRequest({ tenantId: identity.tenantId, method: "CONNECT", path: "/no/such/route", statusCode: 404, durationMs: 1 });
+    recordRequest({ tenantId: identity.tenantId, method: "get", path: "/v1/database", statusCode: 500, durationMs: 2 });
+    const body = await (await fetch(`${url}/metrics`)).text();
+    assert.ok(body.includes('junctura_core_requests_total{method="OTHER",route="other",code="404"} 1'), body);
+    assert.ok(body.includes('junctura_core_requests_total{method="OTHER",route="other",code="500"} 1'), body);
+    assert.ok(body.includes('junctura_core_request_duration_seconds_total{method="OTHER",route="other"} 0.003'), body);
+  });
+});

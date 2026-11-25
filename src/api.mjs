@@ -26,7 +26,7 @@ import { handleSubjectAccessEvents, SUBJECT_ACCESS_EVENTS_PATH } from "./modules
 import { isStoragePath, handleStorage } from "./modules/storage/storage.mjs";
 import { TRUST_GRAPH_PATH, handleTrust, handleTrustGraph } from "./modules/capability/trust/trust.mjs";
 import { ACCESS_REQUESTS_PATH, handleCapabilityAccessRequests } from "./modules/capability/trust/access-requests.mjs";
-import { handleMetrics, isMetricsPath, recordRequest } from "./modules/metrics/metrics.mjs";
+import { PROMETHEUS_METRICS_PATH, handleMetrics, handlePrometheusMetrics, isMetricsPath, recordRequest } from "./modules/metrics/metrics.mjs";
 
 const tenantOf = new WeakMap();
 
@@ -53,6 +53,7 @@ export function createApi(config) {
       } catch { /* traffic accounting must never affect a request */ }
     });
     const path = request.url?.split("?", 1)[0];
+    if (path === PROMETHEUS_METRICS_PATH) return handlePrometheusMetrics(request, response);
     if (path === "/ready" && request.method === "GET") {
       try {
         await checkReadiness(config);

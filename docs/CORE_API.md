@@ -87,7 +87,7 @@ Methods are included with each family; action suffixes are described in the link
 
 | Route family (methods) | Purpose | Additional permission/boundary | Reference |
 | --- | --- | --- | --- |
-| `/health` (GET, HEAD), `/ready` (GET) | Liveness and dependency readiness | Public | Identity and gateway below |
+| `/health` (GET, HEAD), `/ready` (GET), `/metrics` (GET) | Liveness, dependency readiness and Prometheus process metrics | Public; `/metrics` is reachable only inside the internal monitoring network | Identity and gateway below |
 | `/v1/identity` (GET) | Caller's verified identity | None | Identity and gateway below |
 | `/v1/token-exchange` (POST) | Obtain a short-lived bearer for calling as an assigned user | Enrolled application service account and login access token for the same client and tenant | Delegated application access below |
 | `/identity/` (upstream methods) | Keycloak OIDC passthrough | Keycloak protocol/client policy | Identity and gateway below |
@@ -137,9 +137,16 @@ Authentication or gateway errors can precede these responses. See [CAPABILITIES.
 
 ## Identity and gateway
 
-- `GET/HEAD /health` checks process liveness. `GET /ready` returns `200` or `503`, checking OIDC discovery/issuer
+- `GET /health` checks process liveness. `GET /ready` returns `200` or `503`, checking OIDC discovery/issuer
   and configured data RLS access, filer metadata/registered volume, ClamAV, secrets service and authenticated workflow engine.
   Readiness does not prove every future operation or complete disaster recovery.
+- `GET /metrics` serves the Prometheus text format (version 0.0.4) with request counters by method, route family
+  and status, cumulative request duration and process uptime, start time and memory gauges. Prometheus cannot speak
+  OIDC, so the route is unauthenticated by design; Core publishes it only on the internal monitoring network and the
+  gateway never proxies it, so gateway callers receive `404`. Counters include unauthorized requests and unknown
+  routes, while `/health`, `/ready` and `/metrics` itself are excluded so a scrape never counts itself. Route labels
+  reuse the fixed feature families of the traffic metrics below. Query strings are ignored; other methods return
+  `405` with `Allow: GET`. Unit tests in tests/metrics.test.mjs exercise the response format.
 - `GET /v1/identity` returns `{subject,tenantId,roles,units,groups}` and optional `preferredUsername` from the caller's own
   safe `preferred_username` claim (well-formed, nonblank, at most 255 code points, without C0/DEL controls).
   `units` and `groups` come from the token's verified group paths under the tenant namespace, default to `[]`,

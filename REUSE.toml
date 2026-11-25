@@ -20,6 +20,7 @@ path = [
   "infra/keycloak/realm.json",
   "docs/contracts/**/*.json",
   "docs/security/**",
+  "infra/monitoring/**/*.json",
 ]
 SPDX-FileCopyrightText = "2026 Junctura Contributors"
 SPDX-License-Identifier = "Apache-2.0"
