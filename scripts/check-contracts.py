@@ -488,7 +488,7 @@ def self_test(spec):
         raise ContractError('Static validator accepted a deliberate ' + change + ' regression')
     protected = copy.deepcopy(good)
     protected.update(path='/v1/identity',
-                     responseBody={'subject':'fixture','tenantId':'tenant-a','roles':['core-reader'],'units':[],'groups':[]})
+                     responseBody={'subject':'fixture','tenantId':'tenant-a','roles':['core-reader'],'units':[],'unitPaths':[],'groups':[]})
     try:
         validate_observations(spec, [protected])
     except ContractError:
