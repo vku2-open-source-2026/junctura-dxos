@@ -18,6 +18,6 @@ BEGIN
 END $migration$;
 RESET ROLE;
 REVOKE CREATE ON SCHEMA core FROM junctura_app_owner;
-INSERT INTO core.schema_migrations(version) VALUES(62);
+INSERT INTO core.schema_migrations(version) VALUES(64);
 NOTIFY pgrst,'reload schema';
 COMMIT;
