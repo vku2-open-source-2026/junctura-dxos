@@ -207,6 +207,9 @@ export function createJuncturaClient({ baseUrl, issuer, clientId, clientSecret, 
     return request(`${path}${query.size ? `?${query}` : ""}`);
   };
   const finish = response => response.body?.cancel();
+  const queuePath = queue => `/v1/queues/${segment(queue)}`;
+  const settleMessage = (queue, id, action, leaseToken, signal) =>
+    request(`${queuePath(queue)}/messages/${segment(id)}/${action}`, { method: "POST", json: { leaseToken }, signal });
   const workflowPath = id => `/v1/workflows/executions/${segment(id)}`;
   const accessRequestsPath = "/v1/trust/access-requests";
   const accessRequestPath = id => `${accessRequestsPath}/${segment(id)}`;
@@ -217,6 +220,21 @@ export function createJuncturaClient({ baseUrl, issuer, clientId, clientSecret, 
   };
   const client = {
     request,
+    async sendMessage(queue, payload, { idempotencyKey, delaySeconds, signal } = {}) {
+      if (!idempotencyKey) throw new TypeError("Idempotency-Key is required");
+      return (await request(`${queuePath(queue)}/messages`, {
+        method: "POST", json: { payload, delaySeconds }, idempotencyKey, signal,
+      })).json();
+    },
+    async leaseMessage(queue, { visibilityTimeoutSeconds, signal } = {}) {
+      return (await request(`${queuePath(queue)}/lease`, { method: "POST", json: { visibilityTimeoutSeconds }, signal })).json();
+    },
+    async ackMessage(queue, id, leaseToken, { signal } = {}) {
+      await settleMessage(queue, id, "ack", leaseToken, signal);
+    },
+    async nackMessage(queue, id, leaseToken, { signal } = {}) {
+      await settleMessage(queue, id, "nack", leaseToken, signal);
+    },
     async listApplications({ limit, cursor, q, state, unit, userToken } = {}) {
       const query = new URLSearchParams();
       for (const [name, value] of Object.entries({ limit, cursor, q, state, unit })) {

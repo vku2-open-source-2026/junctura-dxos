@@ -143,6 +143,8 @@ jobs:
         run: |
           docker compose up --detach --no-deps --scale core=2 --wait --wait-timeout 60 core
           npm run test:events
+      - name: Verify application message queues with scaled Core
+        run: npm run test:message-queue
       - name: Verify record operations through the gateway in strict mode
         env:
           STRICT_RECORD_WRITES: "true"

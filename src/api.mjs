@@ -7,6 +7,7 @@ import { AUDIT_EVENTS_PATH, AUDIT_EXPORT_PATH, AUDIT_VERIFY_PATH, handleAudit, h
 import { DIRECTORY_MANAGEMENT_PATH, DIRECTORY_ORGANIZATIONS_PATH, DIRECTORY_PRINCIPALS_PATH, handleDirectory } from "./modules/directory/directory.mjs";
 import { createEventStreams, EVENTS_PATH } from "./modules/events/events.mjs";
 import { handleIdentity, verifiedSubjectBinding } from "./modules/identity/identity.mjs";
+import { handleQueues } from "./modules/queues/queues.mjs";
 import { handleConsent, isConsentPath } from "./modules/consent/consent.mjs";
 import { createAuthorizer, logAccessDenial } from "./platform/auth/auth.mjs";
 import { tokenExchangePath } from "./platform/auth/delegation.mjs";
@@ -225,6 +226,17 @@ export function createApi(config) {
         if (error.status === 413) response.setHeader("Connection", "close");
         return json(response, error instanceof HttpError ? error.status : 503,
           { error: error instanceof HttpError ? error.message : "audit_unavailable", requestId });
+      }
+    }
+    if (path?.startsWith("/v1/queues/")) {
+      const requestId = requestIdFor(request);
+      response.setHeader("X-Request-Id", requestId);
+      try {
+        return await handleQueues(request, response, await authorize(request, true), config, new URL(request.url, "http://core"));
+      } catch (error) {
+        if (error.status === 413) response.setHeader("Connection", "close");
+        return json(response, error instanceof HttpError ? error.status : 503,
+          { error: error instanceof HttpError ? error.message : "queues_unavailable", requestId }, request.method);
       }
     }
     if (path === EVENTS_PATH) {

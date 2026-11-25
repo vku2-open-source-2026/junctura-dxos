@@ -8,7 +8,7 @@ import { fileURLToPath } from "node:url";
 
 const root = fileURLToPath(new URL("..", import.meta.url));
 const src = process.argv[2] ? resolve(process.argv[2]) : join(root, "src");
-const FOUNDATION = new Set(["applications", "resources", "data", "objects", "workflow", "secrets"]);
+const FOUNDATION = new Set(["applications", "resources", "data", "objects", "workflow", "secrets", "queues"]);
 const capabilityLayer = (path) => {
   const id = relative(src, path).split("\\").join("/");
   if (id === "modules/capability/compatibility/compatibility.mjs") return 0;
@@ -23,6 +23,7 @@ const PUBLIC = new Set([
   "modules/applications/applications.mjs",
   "modules/applications/stats.mjs",
   "modules/applications/keycloak.mjs",
+  "modules/queues/queues.mjs",
   "modules/audit/audit.mjs",
   "modules/events/events.mjs",
   "modules/directory/directory.mjs",

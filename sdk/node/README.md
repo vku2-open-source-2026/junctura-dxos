@@ -90,6 +90,9 @@ const { purpose, dataSubject, emergency } = redeemed.context;
 | Method | Purpose |
 | --- | --- |
 | `identity()` | The application's verified identity |
+| `sendMessage(queue, payload, { idempotencyKey, delaySeconds })` | Enqueue a job and return `{ messageId }`. Reuse the UUID key and original input when retrying a send. |
+| `leaseMessage(queue, { visibilityTimeoutSeconds })` | Poll for one job. The response is `{ message }` with the lease token and expiry, or `{ message: null }`. |
+| `ackMessage(queue, id, leaseToken)`, `nackMessage(queue, id, leaseToken)` | Complete or reject a job using its current lease token. |
 | `createRecord(collection, data)`, `getRecord(collection, id)` | Application records |
 | `listRecords(collection, { limit, order, cursor })` | Application records as `{ items, nextCursor }`; limit 1–100 (default 100), order `asc` (default) or `desc`; pass `nextCursor` with the same order until null |
 | `registerCollectionSchema(collection, schema)` | Register or replace an app collection schema and index configuration |

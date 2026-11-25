@@ -36,6 +36,7 @@ export const OPENAPI_TAGS = [
   { id: "tenant", label: "Định danh & Tenant (Tenant)", enLabel: "Tenant Identity" },
   { id: "app-resource", label: "Tài nguyên cấp App v2 (App Resources)", enLabel: "v2 App Resources" },
   { id: "application-admin", label: "Quản trị ứng dụng (Application Admin)", enLabel: "Application Admin" },
+  { id: "message-queues", label: "Hàng đợi tin nhắn", enLabel: "Message Queues" },
   { id: "legacy-tenant", label: "Tài nguyên cũ v1 (Legacy Tenant)", enLabel: "Legacy v1 Resources" },
   { id: "oidc-upstream", label: "Keycloak OIDC Upstream", enLabel: "Keycloak Upstream OIDC" },
 ];
@@ -62,6 +63,7 @@ function futureIso(minutes: number): string {
 
 function pathValue(name: string): string {
   if (name === "collection") return "widgets";
+  if (name === "queue") return "background-jobs";
   if (name === "executionId") return EXECUTION_ID;
   if (name === "id" || name.endsWith("Id")) return UUID;
   return "example";
@@ -118,6 +120,17 @@ function requestExample(endpoint: ApiEndpointDef): RequestExample {
 
   if (contentType === "application/json") {
     switch (endpoint.operationId) {
+      case "configureQueue":
+        return { contentType, json: { producerAppIds: [UUID], consumerAppIds: [UUID], maxAttempts: 5 } };
+      case "sendQueueMessage":
+        return { contentType, json: { payload: { task: "refresh-index" }, delaySeconds: 5 } };
+      case "leaseQueueMessage":
+        return { contentType, json: { visibilityTimeoutSeconds: 30 } };
+      case "ackQueueMessage":
+      case "nackQueueMessage":
+        return { contentType, json: { leaseToken: UUID } };
+      case "replayQueueDeadLetter":
+        return { contentType, json: {} };
       case "exchangeUserToken":
         return { contentType, json: { subjectToken: "<user-access-token>" } };
       case "createResourceConsent":
