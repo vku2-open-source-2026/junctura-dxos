@@ -249,8 +249,8 @@ test("authorizer carries selected units and current role decisions, including de
   await assert.rejects(authorize(req, true), { status: 403, message: "not_assigned_to_app" });
 });
 
-test("rotation reuses the staged secret after Keycloak fails and returns only receipts", async t => {
-  let staged, applied, failUpdate = true, committed = false;
+test("rotation reuses the staged secret until both Keycloak and the bundle have been updated", async t => {
+  let staged, applied, bundle, failUpdate = true, failPublish = true, committed = false;
   const phases = [];
   const client = { id: "client-key", clientId: "app-x", publicClient: false, clientAuthenticatorType: "client-secret" };
   t.mock.method(globalThis, "fetch", async (input, options) => {
@@ -261,6 +261,16 @@ test("rotation reuses the staged secret after Keycloak fails and returns only re
       assert.equal(JSON.parse(options.body).options.cas, 0);
       assert.equal(staged, undefined);
       staged = JSON.parse(options.body).data.clientSecret;
+      return jsonResponse({ data: { version: 1 } });
+    }
+    if (path.includes("/connections/")) {
+      assert.equal(path, `/v1/secret/data/tenants/tenant-a/connections/${appId}`);
+      if (options.method === "GET") return bundle ? jsonResponse({ data: { data: bundle, metadata: { version: 1 } } }) : new Response(null, { status: 404 });
+      if (failPublish) return new Response(null, { status: 503 });
+      const { options: { cas }, data } = JSON.parse(options.body);
+      assert.equal(cas, 0);
+      assert.equal(data.clientSecret, applied);
+      bundle = data;
       return jsonResponse({ data: { version: 1 } });
     }
     if (path.endsWith("/clients")) return jsonResponse([client]);
@@ -278,7 +288,10 @@ test("rotation reuses the staged secret after Keycloak fails and returns only re
     assert.equal(payload.appId, appId);
     if (operation === "lease") return { value: { oauthClientId: "app-x" } };
     if (operation === "rotation_start") return { value: { applied: committed } };
-    if (operation === "rotation_confirm") committed = true;
+    if (operation === "rotation_confirm") {
+      assert.equal(bundle.clientSecret, staged);
+      committed = true;
+    }
     if (operation === "rotation_history") return { value: { items: [{ rotationId, appliedAt: "2026-11-23T00:00:00Z" }] } };
     return {};
   };
@@ -289,14 +302,56 @@ test("rotation reuses the staged secret after Keycloak fails and returns only re
   await assert.rejects(run(response()), { status: 503, message: "app_provider_unavailable" });
   assert.ok(staged);
   assert.equal(committed, false);
-  const retry = response();
   failUpdate = false;
+  await assert.rejects(run(response()), { status: 503, message: "secrets_unavailable" });
+  assert.equal(applied, staged);
+  assert.equal(committed, false);
+  failPublish = false;
+  const retry = response();
   await run(retry);
   assert.equal(applied, staged);
   assert.equal(committed, true);
   assert.deepEqual(retry.body.items, [{ rotationId, appliedAt: "2026-11-23T00:00:00Z" }]);
   assert.equal(phases.filter(value => value === "rotation_confirm").length, 1);
-  assert.equal(phases.filter(value => value === "release").length, 2);
+  assert.equal(phases.filter(value => value === "release").length, 3);
+});
+
+test("approval writes a confidential client's bundle before activating the app", async t => {
+  const client = { id: "client-key", clientId: "app-x", publicClient: false, clientAuthenticatorType: "client-secret" };
+  const publicIssuer = "https://gateway.invalid/identity/realms/junctura";
+  let bundle;
+  t.mock.method(globalThis, "fetch", async (input, options) => {
+    const path = url(input).pathname;
+    if (path.startsWith("/rpc/")) {
+      const { operation } = JSON.parse(options.body);
+      if (operation === "lease") return jsonResponse({ value: { oauthClientId: client.clientId, providerReady: true } });
+      if (operation === "approve") {
+        assert.equal(bundle.clientSecret, "existing-secret");
+        return jsonResponse({ status: 200, value: { appId, revision: 2, state: "active" } });
+      }
+      assert.ok(["approve_check", "release"].includes(operation));
+      return jsonResponse({ status: 200 });
+    }
+    if (path.endsWith("/token")) return jsonResponse({ access_token: "admin", expires_in: 60 });
+    if (path.endsWith("/clients")) return jsonResponse([client]);
+    if (path.endsWith("/clients/client-key")) return jsonResponse(client);
+    if (path.endsWith("/clients/client-key/client-secret")) return jsonResponse({ value: "existing-secret" });
+    assert.equal(path, `/v1/secret/data/tenants/tenant-a/connections/${appId}`);
+    if (options.method === "GET") return new Response(null, { status: 404 });
+    bundle = JSON.parse(options.body).data;
+    return jsonResponse({ data: { version: 1 } });
+  });
+  const reply = response();
+  await handleApplications(request("POST", { approvalId: rotationId }), reply,
+    { tenantId: "tenant-a", issuer: publicIssuer, subject: "operator", clientId: "operator" },
+    { ...config, issuer: publicIssuer, appSyncClientId: "sync", appSyncSecret: "test", secretsUrl: "http://bao.invalid", secretsToken: "test" },
+    url(`${appPath}/approve`));
+  assert.deepEqual(bundle, {
+    appId, tenantId: "tenant-a", baseUrl: "https://gateway.invalid", issuer: publicIssuer, realm: "junctura",
+    clientId: client.clientId, clientSecret: "existing-secret", tokenEndpoint: `${publicIssuer}/protocol/openid-connect/token`,
+    discoveryEndpoint: `${publicIssuer}/.well-known/openid-configuration`,
+  });
+  assert.deepEqual(reply.body, { appId, revision: 2, state: "active" });
 });
 
 test("Console reuses roles for three seconds and refuses old tokens at expiry", async t => {

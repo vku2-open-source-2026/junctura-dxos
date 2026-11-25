@@ -1,0 +1,10 @@
+# SPDX-FileCopyrightText: 2026 Junctura Contributors
+# SPDX-License-Identifier: Apache-2.0
+# Opt-in host access for local Layer-2 development and integration tests.
+services:
+  secrets:
+    networks: [secrets, bootstrap]
+    ports:
+      - "127.0.0.1:${DEV_STACK_OPENBAO_PORT:-18200}:8200"
+networks:
+  bootstrap:

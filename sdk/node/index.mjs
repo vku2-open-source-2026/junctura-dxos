@@ -43,14 +43,85 @@ function canonical(value) {
 /** The input digest a provider presents when it redeems an invocation ticket. */
 export const inputDigest = input => `sha256:${createHash("sha256").update(canonical(input)).digest("hex")}`;
 
-// Server-side only. Secrets and tokens stay in this closure; no Core imports,
-// token persistence, credential forwarding, mutation retries or implicit approval.
-export function createJuncturaClient({ baseUrl, clientId, clientSecret, timeoutMs = 15000, fetcher = fetch }) {
-  const base = new URL(baseUrl);
-  if (base.username || base.password || base.search || base.hash || base.pathname !== "/" ||
+function serviceOrigin(value, service) {
+  const base = URL.parse(value);
+  if (!base || base.username || base.password || base.search || base.hash || base.pathname !== "/" ||
     (base.protocol !== "https:" && !(base.protocol === "http:" && ["127.0.0.1", "localhost", "[::1]"].includes(base.hostname)))) {
-    throw new TypeError("Use an HTTPS Gateway origin, or HTTP loopback for local development");
+    throw new TypeError(`Use an HTTPS ${service} origin, or HTTP loopback for local development`);
   }
+  return base;
+}
+
+function oidcIssuer(value, base) {
+  const url = URL.parse(value);
+  if (!url || url.origin !== base.origin || url.username || url.password || url.search || url.hash ||
+    !/^\/identity\/realms\/[A-Za-z0-9._-]+$/.test(url.pathname)) throw new TypeError("Invalid Gateway OIDC issuer");
+  return url.href;
+}
+
+const bundlePathPattern = /^[a-z][a-z0-9_-]*\/data\/tenants\/([a-z][a-z0-9-]{0,62})\/connections\/([0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12})$/;
+const nonempty = value => typeof value === "string" && value.length > 0;
+
+/** A per-application in-memory bundle loader. Reuses one in-flight load per instance. */
+export function createAppBootstrap({ url, roleId, secretId, cacheMs = 30_000, timeoutMs = 5000, fetcher = fetch }) {
+  const base = serviceOrigin(url, "OpenBao");
+  if (!nonempty(roleId) || !nonempty(secretId)) throw new TypeError("OpenBao AppRole ID and SecretID are required");
+  if (!Number.isSafeInteger(cacheMs) || cacheMs < 0 || !Number.isInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > 60000) {
+    throw new TypeError("Invalid OpenBao bundle cache or request timeout");
+  }
+  let cached, pending;
+  async function request(path, options, errorCode) {
+    let response;
+    try {
+      response = await fetcher(new URL(`/v1/${path}`, base), {
+        ...options, redirect: "error", signal: AbortSignal.timeout(timeoutMs),
+      });
+    } catch { throw new JuncturaError(0, "openbao_unavailable"); }
+    if (!response.ok) {
+      await response.body?.cancel().catch(() => {});
+      const code = response.status >= 500 || response.status === 429 ? "openbao_unavailable"
+        : response.status === 404 && options.method === "GET" ? "connection_bundle_missing" : errorCode;
+      throw new JuncturaError(response.status, code);
+    }
+    try { return await boundedJson(response); }
+    catch { throw new JuncturaError(response.status, "invalid_openbao_response"); }
+  }
+  async function read() {
+    const login = await request("auth/approle/login", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ role_id: roleId, secret_id: secretId }),
+    }, "openbao_login_failed");
+    const path = login?.auth?.metadata?.junctura_bundle;
+    const match = typeof path === "string" && bundlePathPattern.exec(path);
+    const token = login?.auth?.client_token;
+    if (!match || !nonempty(token)) throw new JuncturaError(502, "invalid_openbao_response");
+    const entry = await request(path, { method: "GET", headers: { "X-Vault-Token": token } }, "connection_bundle_forbidden");
+    const data = entry?.data?.data;
+    try {
+      const gateway = serviceOrigin(data?.baseUrl, "Gateway");
+      const issuer = oidcIssuer(data.issuer, gateway);
+      if (data.tenantId !== match[1] || data.appId !== match[2] || data.realm !== new URL(issuer).pathname.split("/").at(-1) ||
+          !nonempty(data.clientId) || !nonempty(data.clientSecret) ||
+          data.tokenEndpoint !== `${issuer}/protocol/openid-connect/token` ||
+          data.discoveryEndpoint !== `${issuer}/.well-known/openid-configuration`) throw new Error();
+    } catch { throw new JuncturaError(502, "invalid_connection_bundle"); }
+    const bundle = Object.freeze(data);
+    cached = { bundle, until: Date.now() + cacheMs };
+    return bundle;
+  }
+  return async function loadBundle({ refresh = false } = {}) {
+    if (pending) return pending;
+    if (!refresh && cached?.until > Date.now()) return cached.bundle;
+    cached = undefined;
+    pending = read();
+    try { return await pending; } finally { pending = undefined; }
+  };
+}
+
+// Server-side only. Secrets and tokens stay in this closure.
+export function createJuncturaClient({ baseUrl, issuer, clientId, clientSecret, timeoutMs = 15000, fetcher = fetch }) {
+  const base = serviceOrigin(baseUrl, "Gateway");
+  const tokenEndpoint = `${oidcIssuer(issuer ?? new URL("/identity/realms/junctura", base).href, base)}/protocol/openid-connect/token`;
   if (!clientId || !clientSecret || !Number.isInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > 60000) throw new TypeError("Client credentials and a bounded timeout are required");
   let cached, pending;
   const signalFor = signal => signal ? AbortSignal.any([signal, AbortSignal.timeout(timeoutMs)]) : AbortSignal.timeout(timeoutMs);
@@ -60,7 +131,7 @@ export function createJuncturaClient({ baseUrl, clientId, clientSecret, timeoutM
     pending = (async () => {
       let response;
       try {
-        response = await fetcher(new URL("/identity/realms/junctura/protocol/openid-connect/token", base), {
+        response = await fetcher(new URL(tokenEndpoint), {
           method: "POST", redirect: "error", signal: signalFor(),
           body: new URLSearchParams({ grant_type: "client_credentials", client_id: clientId, client_secret: clientSecret }),
         });

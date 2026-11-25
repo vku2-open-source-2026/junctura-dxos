@@ -72,17 +72,19 @@ the full-stack `npm run healthcheck` deliberately also requires `/ready`.
 For Layer-2/3 prototyping on a local stack, one command performs the flow below:
 
 ```sh
+docker compose -f compose.yaml -f infra/openbao/compose.bootstrap.yaml up -d --wait
 npm run app:enroll -- lichhop --display-name "Lịch họp"
-node --env-file=.env --env-file=.env.app.lichhop.local examples/sdk-foundation.mjs --enrolled
+node --env-file=.env.app.lichhop.local examples/sdk-foundation.mjs --enrolled
 ```
 
 It creates the confidential Keycloak client `app-lichhop` and its tenant service
 account, demo owner and independent approver identities
 (`junctura-demo-owner-<tenant>`, `junctura-demo-approver-<tenant>`) with separated
 permissions, the SQL enrollment bound to the verified service-account subject, then
-registers, approves and activates the application. Only the app's own settings are
-written to the Git-ignored `.env.app.lichhop.local`; operator credentials are never
-written. Options: `--tenant`, `--origin https://exact.origin`, `--display-name`.
+registers, approves and activates the application. The command issues an AppRole
+and writes its bootstrap settings to the Git-ignored `.env.app.lichhop.local`.
+The Compose override publishes OpenBao on loopback port 18200 for local development.
+Options include `--tenant`, `--origin https://exact.origin` and `--display-name`.
 Run it only on development/demo stacks; production enrollment follows the reviewed
 manual flow below.
 
@@ -109,9 +111,10 @@ A trusted local operator must perform the existing reviewed flow:
    and revision-bound application approval at `/v1/approvals`, then POSTs
    `/v1/applications/{appId}/approve` with that approval and exact `If-Match`.
    Follow the [complete API flow](CAPABILITIES.md#application-registration).
-5. Hand the application developer its own client ID and secret through a private
-   channel. Keep operator/database credentials out of the application. Record the
-   operator change. No default administrator or self-service enrollment is added.
+5. Once Core activates the app and writes its connection bundle, issue the app's
+   scoped AppRole as documented below. Deliver the OpenBao origin, RoleID and
+   SecretID through the deployment's private configuration channel. Record the
+   operator change.
 
 Use human authorization-code + PKCE for management and independent approval.
 Backend client-credentials tokens authenticate only their enrolled service account.
@@ -124,33 +127,43 @@ record/object/workflow/share example and removes its own identity fixtures. Run 
 only on a disposable development stack. It does not return reusable privileged
 credentials or grant self-service enrollment to normal applications.
 
-## Server-side Node SDK and first API call
+## Bootstrap a server-side application
 
-```sh
-npm run example:sdk
-```
+Core needs the Keycloak application synchronization account and OpenBao configured.
+Use the OpenBao operator identity to enable AppRole at `auth/approle` and install
+the Core policy for the deployment's KV v2 mount. In local Compose, `secrets-init`
+does both. For an active app, the operator can issue a RoleID and SecretID using
+`sh scripts/provision-app-bootstrap.sh issue "$TENANT" "$APP_ID"`. Run it in a trusted
+operator shell and direct its output to protected deployment configuration.
+Set `SECRETS_MOUNT` on Core and the operator command when using a custom mount and
+adapt the paths in [the Core policy](../infra/openbao/junctura-core.hcl).
 
-This prints only the synthetic local tenant-A subject, tenant and roles. It does not
-print a token or grant app-private resource access. The Core runtime and SDK need no
-npm packages. Keep SDK code in your application backend; the source client lives in
-`sdk/node/index.mjs`, with TypeScript declarations beside it. It imports only Node
-standard modules and uses public Gateway APIs, so it can be copied with LICENSE and
-NOTICE into an independent server project. It is private/unpublished on npm.
+The AppRole only reads `<mount>/data/tenants/<tenant>/connections/<appId>`. The
+operator-provided `junctura_bundle` metadata in the AppRole login response tells the
+SDK which path to read. See the [OpenBao AppRole API](https://openbao.org/docs/api/auth/approle/#generate-new-secret-id).
+The bundle contains the app and tenant IDs, Gateway origin,
+OIDC issuer and realm, token and discovery endpoints, and current client credentials.
+The bootstrap command issues two-minute OpenBao tokens and SecretIDs valid for 24 hours.
+Reissue a SecretID through the operator before expiry. For a retired deployment use
+`sh scripts/provision-app-bootstrap.sh revoke "$TENANT" "$APP_ID"` after confirming its
+identity. For an app activated before bundle provisioning was deployed, rotate its
+OIDC secret once through [Core](CORE_API.md#application-deployment-and-access).
 
-For an enrolled app, save only its own supplied credentials in ignored
-`.env.app.local` (never in browser code):
+Provide the following private settings to the backend process. Use HTTPS for a remote
+OpenBao service. Keep the SecretID and bundle in server-side configuration and memory.
 
 ```text
-JUNCTURA_APP_CLIENT_ID=REPLACE_WITH_ENROLLED_CLIENT
-JUNCTURA_APP_CLIENT_SECRET=REPLACE_WITH_PRIVATE_SECRET
+JUNCTURA_OPENBAO_URL=https://openbao.example.org
+JUNCTURA_OPENBAO_ROLE_ID=<app role ID>
+JUNCTURA_OPENBAO_SECRET_ID=<app secret ID>
 ```
 
 ```sh
-node --env-file=.env --env-file=.env.app.local examples/sdk-foundation.mjs --enrolled
+node --env-file=.env.app.lichhop.local examples/sdk-foundation.mjs --enrolled
 ```
 
-Expected: verified identity, then `Application-private record created, read and deleted
-through the public Gateway.` The sample deletes only the record it just created.
+The example prints the verified identity and a confirmation that it created, read and deleted
+its application-private record.
 The larger [HTTP example](../examples/foundation-http.mjs) covers objects, workflow
 and expiring read sharing; its required grantee settings are documented in
 [DEVELOPING](DEVELOPING.md#developer-journey-and-cleanup).
@@ -158,16 +171,26 @@ and expiring read sharing; its required grantee settings are documented in
 An independent application's server can use the client directly:
 
 ```js
-import { createJuncturaClient } from './sdk/node/index.mjs';
-const junctura = createJuncturaClient({
-  baseUrl: process.env.JUNCTURA_URL,
-  clientId: process.env.JUNCTURA_CLIENT_ID,
-  clientSecret: process.env.JUNCTURA_CLIENT_SECRET,
+import { createAppBootstrap, createJuncturaClient } from './sdk/node/index.mjs';
+const loadBundle = createAppBootstrap({
+  url: process.env.JUNCTURA_OPENBAO_URL,
+  roleId: process.env.JUNCTURA_OPENBAO_ROLE_ID,
+  secretId: process.env.JUNCTURA_OPENBAO_SECRET_ID,
 });
+let junctura = createJuncturaClient(await loadBundle());
 const identity = await junctura.identity();
 const record = await junctura.createRecord('documents', { synthetic: true });
 const read = await junctura.getRecord('documents', record.id);
+
+// After the operator confirms an OIDC rotation, replace the runtime client.
+junctura = createJuncturaClient(await loadBundle({ refresh: true }));
 ```
+
+The loader caches the bundle in memory for 30 seconds by default and coalesces concurrent
+reads. Set `cacheMs: 0` to fetch on each load. Use `refresh: true` to fetch immediately
+after rotation. If refresh fails, the load rejects. Recreate the Gateway client with
+the latest bundle to use updated credentials.
+See [SDK error codes](../sdk/node/README.md#bootstrap-errors).
 
 Convenience methods cover identity, v2 records/objects, workflow definitions/start,
 authorized capability discovery, invocation/composition submission and bounded status

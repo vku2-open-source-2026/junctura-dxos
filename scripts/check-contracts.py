@@ -292,6 +292,17 @@ def validate_document(spec, official=True):
     validate_references_and_inline_schemas(spec, dereference)
     for schema in spec['components']['schemas'].values():
         Draft202012Validator.check_schema(schema)
+    # App bootstrap is an OpenBao contract. Core rotation responses stay receipt-only.
+    rotation = spec['paths']['/v1/applications/{appId}/oidc-keys']
+    for method in ('get', 'post'):
+        response = dereference(rotation[method]['responses']['200'])
+        schema = dereference(response['content']['application/json']['schema'])
+        require(schema.get('additionalProperties') is False and set(schema['properties']) == {'items'},
+                'OIDC rotation response must contain only receipts')
+        receipt = dereference(schema['properties']['items']['items'])
+        require(receipt.get('additionalProperties') is False and
+                set(receipt['properties']) == {'rotationId', 'createdAt', 'appliedAt'},
+                'OIDC rotation receipts must exclude connection credentials')
     planned, count = validate_paths(spec, dereference, foundation=True)
     if official:
         validate_official_structure(spec, planned)

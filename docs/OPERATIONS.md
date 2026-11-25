@@ -82,7 +82,7 @@ take a coordinated backup and retain old pins. Older images may not read migrate
 | Runtime | Application integration credentials | OpenBao KV v2, under server-composed tenant/application paths |
 
 `secrets` persists Raft state at `/openbao/file`, with no host port. `secrets-init` initializes
-once with one share/threshold one, unseals, enables KV v2 at `secret/`, applies `junctura-core`
+once with one share/threshold one, unseals, enables KV v2 at `secret/` and AppRole, applies `junctura-core`
 policy and reuses a valid Core token or creates one. Core mounts `openbao-init` read-only and
 reads `/run/junctura/core-token` through `SECRETS_TOKEN_FILE`; root/unseal material stays separate.
 
@@ -97,6 +97,13 @@ Names match `[a-z][a-z0-9_-]{0,62}`. Paths are composed as `secret/data/tenants/
 callers cannot select arbitrary paths. Unverified authorization and unavailable OpenBao fail closed.
 Internal adapters may use `readSecretValue` in-process; never expose it to browsers or HTTP clients.
 Keep runtime values out of logs, Console payloads and audit bodies; see [Security](SECURITY.md).
+
+Application connection bundles live under `secret/data/tenants/<tenant>/connections/<appId>`.
+Issue read-only bootstrap AppRoles after activation for the exact app UUID and tenant.
+For a pre-existing Compose deployment, rerun `secrets-init` to apply the new Core ACL and enable
+AppRole before approving or rotating application clients. Local app developers can opt into
+the loopback listener through `infra/openbao/compose.bootstrap.yaml`. See
+[Application bootstrap](GETTING_STARTED.md#bootstrap-a-server-side-application).
 
 For Core token rotation, revoke the old token using operator credentials, remove `core-token`
 from `openbao-init`, run `docker compose run --rm secrets-init`, then

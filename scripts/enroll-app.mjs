@@ -9,6 +9,7 @@ import { isIP } from "node:net";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { APPROVER_PERMISSIONS, OWNER_PERMISSIONS, connectDemoStack, enrollApplication, step } from "./lib/demo-stack.mjs";
+import { localAppRole, localOpenBaoUrl } from "./lib/local-app-bootstrap.mjs";
 
 export function parseArgs(argv) {
   const options = { tenant: "tenant-a", origin: undefined, displayName: undefined, name: undefined, help: false };
@@ -34,29 +35,23 @@ export function parseArgs(argv) {
   return options;
 }
 
-export function renderEnv({ baseUrl, tenant, appId, clientId, clientSecret }) {
-  return [
-    "# Junctura application credentials - private, never commit or embed in a browser.",
-    `JUNCTURA_URL=${baseUrl}`,
-    `JUNCTURA_TENANT=${tenant}`,
-    `JUNCTURA_APP_ID=${appId}`,
-    `JUNCTURA_APP_CLIENT_ID=${clientId}`,
-    `JUNCTURA_APP_CLIENT_SECRET=${clientSecret}`,
-    "",
-  ].join("\n");
+export function renderEnv(baoUrl, { JUNCTURA_OPENBAO_ROLE_ID: roleId, JUNCTURA_OPENBAO_SECRET_ID: secretId }) {
+  if (!roleId || !secretId) throw new Error("OpenBao operator command did not issue bootstrap credentials");
+  return `JUNCTURA_OPENBAO_URL=${baoUrl}\nJUNCTURA_OPENBAO_ROLE_ID=${roleId}\nJUNCTURA_OPENBAO_SECRET_ID=${secretId}\n`;
 }
 
 const usage = `Usage: npm run app:enroll -- <name> [--tenant tenant-a] [--origin https://name.example.org] [--display-name "Name"]
 
 Creates Keycloak client "app-<name>", enrolls and approves it in Junctura, and writes
-its credentials to .env.app.<name>.local (ignored by Git). Requires a running local stack
-(npm run local:up) and the .env created by npm run setup.`;
+its OpenBao AppRole settings to .env.app.<name>.local (ignored by Git). Requires the
+local stack with the OpenBao bootstrap override documented in docs/GETTING_STARTED.md.`;
 
 async function main() {
   const options = parseArgs(process.argv.slice(2));
   if (options.help) { console.log(usage); return; }
   const output = resolve(`.env.app.${options.name}.local`);
   if (existsSync(output)) throw new Error(`${output} already exists; this app is probably enrolled already`);
+  const baoUrl = await localOpenBaoUrl();
 
   step("Operator sign-in to Keycloak");
   const stack = await connectDemoStack({ tenant: options.tenant });
@@ -68,11 +63,12 @@ async function main() {
   const owner = await stack.human("owner", OWNER_PERMISSIONS);
   const approver = await stack.human("approver", APPROVER_PERMISSIONS);
 
-  const { app, clientSecret } = await enrollApplication(stack, options, owner, approver);
-  writeFileSync(output, renderEnv({ baseUrl: stack.base, tenant: options.tenant, appId: app.appId, clientId: options.clientId, clientSecret }), { flag: "wx", mode: 0o600 });
+  const { app } = await enrollApplication(stack, options, owner, approver);
   console.log(`\n✔ ${options.displayName} is active (appId ${app.appId}, client ${options.clientId}).`);
-  console.log(`  Credentials: ${output}`);
-  console.log(`  Try: node --env-file=.env --env-file=.env.app.${options.name}.local examples/sdk-foundation.mjs --enrolled`);
+  const role = await localAppRole("issue", options.tenant, app.appId);
+  writeFileSync(output, renderEnv(baoUrl, role), { flag: "wx", mode: 0o600 });
+  console.log(`  Bootstrap settings: ${output}`);
+  console.log(`  Try: node --env-file=.env.app.${options.name}.local examples/sdk-foundation.mjs --enrolled`);
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {

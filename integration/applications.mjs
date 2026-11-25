@@ -348,19 +348,11 @@ test('documented backend HTTP example authenticates, stores, shares and executes
   const sdkRecord = await sdk.createRecord('sdk_example', { synthetic: true });
   assert.deepEqual((await sdk.getRecord('sdk_example', sdkRecord.id)).data, { synthetic: true });
   await sdk.request(`/v2/data/sdk_example/${sdkRecord.id}`, { method: 'DELETE' });
-  const sdkCli = await promisify(execFile)(process.execPath, ['examples/sdk-foundation.mjs', '--enrolled'], {
-    env: { ...process.env, PUBLIC_URL: base, JUNCTURA_APP_CLIENT_ID: resourceA.clientId, JUNCTURA_APP_CLIENT_SECRET: resourceA.clientSecret }, timeout: 30000 });
-  assert.match(sdkCli.stdout, /Application-private record created/);
   const result=await foundationExample({base,clientId:resourceA.clientId,clientSecret:resourceA.clientSecret,
     granteeAppId:resourceB.app.appId,granteeClientId:resourceB.clientId,granteeClientSecret:resourceB.clientSecret,fetcher:fetch});
   assert.equal(result.deniedBeforeShare,true);
   assert.equal(result.sharedReadAllowed,true);
   try {
-    const cli=await promisify(execFile)(process.execPath,['examples/foundation-http.mjs'],{
-      env:{...process.env,PUBLIC_URL:base,JUNCTURA_APP_CLIENT_ID:resourceA.clientId,
-        JUNCTURA_APP_CLIENT_SECRET:resourceA.clientSecret,JUNCTURA_GRANTEE_APP_ID:resourceB.app.appId,
-        JUNCTURA_GRANTEE_CLIENT_ID:resourceB.clientId,JUNCTURA_GRANTEE_CLIENT_SECRET:resourceB.clientSecret},timeout:30000});
-    assert.match(cli.stdout,/HTTP example succeeded/);
     assert.equal((await api(`/v2/data/http_example/${result.recordId}`,resourceB)).status,200);
     assert.equal((await api(`/v2/data/http_example/${result.recordId}`,resourceB,{data:{}},{},'PATCH')).status,404);
   } finally {

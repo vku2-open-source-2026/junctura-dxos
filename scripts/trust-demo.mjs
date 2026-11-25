@@ -10,7 +10,6 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { APPROVER_PERMISSIONS, OWNER_PERMISSIONS, connectDemoStack, enrollApplication, q, step } from "./lib/demo-stack.mjs";
-import { renderEnv } from "./enroll-app.mjs";
 
 export const DEMO_APPS = [
   { name: "danhba", displayName: "Danh bạ" },
@@ -94,7 +93,15 @@ export async function seedTrust(stack, { tenant = stack.tenant } = {}) {
     if (existsSync(output)) throw new Error(`${output} exists but ${clientId} is not registered; remove the stale file first`);
     const { app, clientSecret, subject } = await enrollApplication(stack,
       { clientId, origin: `https://${clientId}.junctura.local`, displayName: demo.displayName }, owner, approver);
-    writeFileSync(output, renderEnv({ baseUrl: stack.base, tenant, appId: app.appId, clientId, clientSecret }), { flag: "wx", mode: 0o600 });
+    writeFileSync(output, [
+      "# Junctura application credentials - private, never commit or embed in a browser.",
+      `JUNCTURA_URL=${stack.base}`,
+      `JUNCTURA_TENANT=${tenant}`,
+      `JUNCTURA_APP_ID=${app.appId}`,
+      `JUNCTURA_APP_CLIENT_ID=${clientId}`,
+      `JUNCTURA_APP_CLIENT_SECRET=${clientSecret}`,
+      "",
+    ].join("\n"), { flag: "wx", mode: 0o600 });
     ids[demo.name] = app.appId; subjects[demo.name] = subject;
   }
 

@@ -233,15 +233,11 @@ server-side example verifies identity, creates and reads a private record,
 uploads and downloads a private object, starts and completes the technical
 workflow, grants an expiring read share, and (when grantee credentials are
 supplied) proves a denied cross-app read before the share and an allowed read
-after it. It calls only the public Gateway.
+after it. It loads its connection bundle from OpenBao before calling the public Gateway.
 
 ```sh
-JUNCTURA_APP_CLIENT_ID=<enrolled-backend-client> \
-JUNCTURA_APP_CLIENT_SECRET=<backend-secret> \
-JUNCTURA_GRANTEE_APP_ID=<second-enrolled-app-uuid> \
-JUNCTURA_GRANTEE_CLIENT_ID=<grantee-client> \
-JUNCTURA_GRANTEE_CLIENT_SECRET=<grantee-secret> \
-node --env-file=.env examples/foundation-http.mjs
+JUNCTURA_GRANTEE_APP_ID='<second-enrolled-app-uuid>' \
+node --env-file=.env.app.lichhop.local examples/foundation-http.mjs
 ```
 
 Enrollment is operator-run; there is no self-service flow. The example does not

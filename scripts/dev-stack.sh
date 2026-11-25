@@ -38,6 +38,7 @@ else
   die "no .env; run '$0 up' first"
 fi
 export COMPOSE_PROJECT_NAME="$project"
+export COMPOSE_FILE="compose.yaml:infra/openbao/compose.bootstrap.yaml"
 # Contract checks spawn $PYTHON; hosts that only ship python3 still work.
 command -v python >/dev/null 2>&1 || export PYTHON="${PYTHON:-python3}"
 
