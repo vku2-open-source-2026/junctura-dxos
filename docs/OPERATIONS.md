@@ -188,6 +188,42 @@ Gateway emits JSON lines: `time`, `request_id`, `client`, `method`, `path`, `sta
 `duration_s`, `upstream_s`. Query strings, headers, bodies and `/health`/`/ready` probes are excluded.
 Match `request_id` to response `X-Request-ID`: `docker compose logs gateway --since 10m`.
 
+## Monitoring (Prometheus and Grafana)
+
+Core publishes `GET /metrics` in the Prometheus text format (version 0.0.4): request counters by
+method, route family and status, cumulative request duration and process uptime, start time and
+memory gauges. The endpoint is unauthenticated by design (Prometheus cannot speak OIDC) and only
+reachable on the internal `monitoring` compose network: the gateway never proxies it, so gateway
+callers receive `404`. `/health`, `/ready` and `/metrics` itself are never counted, so a scrape
+cannot inflate its own counters.
+
+The `monitoring` profile adds two optional services, both pinned by tag and digest, with dedicated
+data volumes, healthchecks and loopback-only host ports (`PROMETHEUS_PORT` defaults to `9090`,
+`GRAFANA_PORT` to `3300` to stay clear of the Console port `3000`):
+
+```sh
+docker compose --profile monitoring up --detach --wait prometheus grafana
+```
+
+Both services sit on the internal `monitoring` network, where the core scrape happens, and on a
+separate non-internal `monitoring-ui` network: without a non-internal network Docker would not
+publish their host ports at all, even with loopback-only bindings.
+
+Prometheus scrapes itself and `core:8080/metrics` every 15s
+([infra/monitoring/prometheus.yml](../infra/monitoring/prometheus.yml)). Grafana is provisioned
+read-only with the `Prometheus` datasource and the "Core overview" dashboard (request rate, 5xx
+errors, average latency, uptime, memory) from
+[infra/monitoring/grafana/provisioning](../infra/monitoring/grafana/provisioning). Sign in at
+`http://127.0.0.1:3300` with user `admin`. Grafana reads `GRAFANA_ADMIN_PASSWORD` from the
+environment (Compose picks up `.env` automatically); without it the local-only default `admin`
+applies, as recorded in [.env.example](../.env.example), which must be changed on any shared or
+exposed deployment.
+
+Stop the services with `docker compose --profile monitoring down` (add `--volumes` only when the
+retained series and Grafana state may be deleted; `scripts/dev-stack.sh` does not enable the
+profile). Prometheus keeps 15 days of samples in the `prometheus-data` volume. Core metrics are
+in-memory and reset when Core restarts; `process_start_time_seconds` makes restarts visible.
+
 ## Restore boundary and verification
 
 Keep records, application/enrollment authority, Registry versions, approvals, grants, execution/composition

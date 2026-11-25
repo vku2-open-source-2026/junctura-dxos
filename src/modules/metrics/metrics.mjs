@@ -9,6 +9,7 @@ import { HttpError, json } from "../../platform/http/http.mjs";
 export const METRICS_TRAFFIC_PATH = "/v1/metrics/traffic";
 export const METRICS_REQUESTS_PATH = "/v1/metrics/requests";
 export const METRICS_FEATURES_PATH = "/v1/metrics/features";
+export const PROMETHEUS_METRICS_PATH = "/metrics";
 
 const MINUTE_MS = 60_000;
 const MAX_MINUTES = 24 * 60;
@@ -39,6 +40,14 @@ const OTHER_FEATURE = "other";
 
 // Map insertion order tracks the last write; reads never retain idle stores.
 const stores = new Map();
+
+// Prometheus text format state. Keys are built from a fixed method set, the
+// fixed feature table and a numeric status, so label cardinality stays bounded.
+const PROMETHEUS_METHODS = new Set(["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]);
+const PROMETHEUS_EXCLUDED_PATHS = new Set(["/health", "/ready", PROMETHEUS_METRICS_PATH]);
+const prometheusCounters = new Map();
+const prometheusLatency = new Map();
+const prometheusStartTimeSeconds = Date.now() / 1000;
 
 function minuteOf(now) {
   return Math.floor(now / MINUTE_MS);
@@ -112,13 +121,75 @@ function safeStatus(statusCode) {
   return Number.isInteger(statusCode) && statusCode >= 100 && statusCode <= 599 ? statusCode : 0;
 }
 
+// One global accounting point shared by every request, valid tenant or not.
+// Excluded paths never reach the counters so Prometheus cannot scrape itself.
+function recordPrometheusRequest({ method, path, status, durationMs }) {
+  if (PROMETHEUS_EXCLUDED_PATHS.has(path)) return;
+  const safeMethod = PROMETHEUS_METHODS.has(method) ? method : "OTHER";
+  const route = featureForPath(path);
+  const counterKey = `${safeMethod}|${route}|${status}`;
+  prometheusCounters.set(counterKey, (prometheusCounters.get(counterKey) ?? 0) + 1);
+  const latencyKey = `${safeMethod}|${route}`;
+  prometheusLatency.set(latencyKey, (prometheusLatency.get(latencyKey) ?? 0) + durationMs / 1000);
+}
+
+function escapeLabelValue(value) {
+  return value.replaceAll("\\", "\\\\").replaceAll('"', '\\"').replaceAll("\n", "\\n");
+}
+
+function prometheusText() {
+  const memory = process.memoryUsage();
+  const lines = [
+    "# HELP junctura_core_requests_total Total number of HTTP requests processed by Core.",
+    "# TYPE junctura_core_requests_total counter",
+  ];
+  for (const [key, value] of prometheusCounters) {
+    const [method, route, code] = key.split("|");
+    lines.push(`junctura_core_requests_total{method="${escapeLabelValue(method)}",` +
+      `route="${escapeLabelValue(route)}",code="${code}"} ${value}`);
+  }
+  lines.push("# HELP junctura_core_request_duration_seconds_total Cumulative request duration in seconds.",
+    "# TYPE junctura_core_request_duration_seconds_total counter");
+  for (const [key, value] of prometheusLatency) {
+    const [method, route] = key.split("|");
+    lines.push(`junctura_core_request_duration_seconds_total{method="${escapeLabelValue(method)}",` +
+      `route="${escapeLabelValue(route)}"} ${value}`);
+  }
+  lines.push("# HELP process_uptime_seconds Process uptime in seconds.",
+    "# TYPE process_uptime_seconds gauge",
+    `process_uptime_seconds ${process.uptime()}`,
+    "# HELP process_start_time_seconds Process start time in seconds since the Unix epoch.",
+    "# TYPE process_start_time_seconds gauge",
+    `process_start_time_seconds ${prometheusStartTimeSeconds}`,
+    "# HELP process_resident_memory_bytes Resident memory size in bytes.",
+    "# TYPE process_resident_memory_bytes gauge",
+    `process_resident_memory_bytes ${memory.rss}`,
+    "# HELP process_heap_used_bytes Heap memory used in bytes.",
+    "# TYPE process_heap_used_bytes gauge",
+    `process_heap_used_bytes ${memory.heapUsed}`);
+  return `${lines.join("\n")}\n`;
+}
+
+// Unauthenticated by design: Prometheus cannot speak OIDC, the endpoint is only
+// reachable on the internal monitoring network and the gateway never proxies it.
+export function handlePrometheusMetrics(request, response) {
+  if (request.method !== "GET") {
+    response.setHeader("Allow", "GET");
+    throw new HttpError(405, "method_not_allowed");
+  }
+  response.setHeader("Content-Type", "text/plain; version=0.0.4; charset=utf-8");
+  response.setHeader("Cache-Control", "no-store");
+  response.end(prometheusText());
+}
+
 export function recordRequest({ tenantId, method, path, statusCode, durationMs, at = Date.now() } = {}) {
-  if (typeof tenantId !== "string" || !TENANT_PATTERN.test(tenantId)) return;
-  const now = Number.isFinite(at) ? at : Date.now();
   const status = safeStatus(statusCode);
   const duration = safeDuration(durationMs);
   const normalizedPath = normalizePath(path);
+  recordPrometheusRequest({ method, path: normalizedPath, status, durationMs: duration });
+  if (typeof tenantId !== "string" || !TENANT_PATTERN.test(tenantId)) return;
   if (status === 401 || normalizedPath === "/health" || normalizedPath === "/ready") return;
+  const now = Number.isFinite(at) ? at : Date.now();
   const store = stores.get(tenantId) ?? { buckets: new Array(MAX_MINUTES), recent: [] };
   stores.delete(tenantId);
   stores.set(tenantId, store);
@@ -244,6 +315,8 @@ export function recentRequests({ tenantId, limit } = {}) {
 // Tests use this to isolate cases; production code never calls it.
 export function resetMetrics() {
   stores.clear();
+  prometheusCounters.clear();
+  prometheusLatency.clear();
 }
 
 export function isMetricsPath(path) {

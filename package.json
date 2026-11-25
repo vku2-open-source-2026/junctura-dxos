@@ -81,6 +81,7 @@
     "test:consent": "node --env-file-if-exists=.env --test integration/consent.mjs",
     "test:consent-requests": "node --env-file-if-exists=.env --test integration/consent-requests.mjs",
     "test:access-requests": "node --env-file-if-exists=.env --test integration/access-requests.mjs",
-    "test:catalog-visibility": "node --env-file-if-exists=.env --test integration/catalog-visibility.mjs"
+    "test:catalog-visibility": "node --env-file-if-exists=.env --test integration/catalog-visibility.mjs",
+    "test:monitoring": "node --env-file-if-exists=.env --test integration/monitoring.mjs"
   }
 }
