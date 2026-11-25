@@ -87,6 +87,7 @@ function validate(value: any, inputSchema: any, at = "$"): void {
 
 function pathValue(name: string): string {
   if (name === "collection") return "widgets";
+  if (name === "queue") return "background-jobs";
   if (name === "executionId") return "junctura_checkpoint:1:example";
   if (name === "id" || name.endsWith("Id")) return "c3d4e5f6-7a8b-4c9d-0e1f-2a3b4c5d6e7f";
   return "example";

@@ -62,6 +62,7 @@
     "test:audit": "node --env-file=.env --test integration/audit.mjs",
     "test:audit-app": "node --env-file=.env --test integration/audit-app.mjs",
     "test:events": "node --env-file=.env --test integration/events.mjs",
+    "test:message-queue": "node --env-file=.env --test integration/message-queue.mjs",
     "test:object-metadata": "node --env-file=.env --test integration/object-metadata.mjs",
     "test:search": "node --env-file=.env --test integration/search.mjs",
     "test:subject-access": "node --env-file=.env --test integration/subject-access.mjs",

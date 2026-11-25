@@ -122,6 +122,7 @@ Methods are included with each family; action suffixes are described in the link
 | `/v1/me/emergency-accesses/{executionId}/feedback` (POST) | The subject's feedback on their own break-glass access | Verified client and own tenant, issuer and subject | [SECURITY.md](SECURITY.md) |
 | `/v1/emergency-accesses` (GET), `/{executionId}/review` (POST) | Review break-glass invocations | List: management `trust.approve` or `audit.read`; review: `trust.approve` and writer | [SECURITY.md](SECURITY.md) |
 | `/v1/events` (GET) | Live task, record status and consent references over SSE | Bearer with `core-reader` and current resource authorization | Live events below |
+| `/v1/queues/{queue}` and its message, lease and dead-letter routes | Deliver background jobs across applications | Active enrolled backend with queue access | Message queues below |
 | `/v1/audit-events` (GET, POST), `/v1/audit-events:export` (GET), `/v1/audit-events/verify` (POST) | Append, query, export and verify the tenant audit chain | Active app writer for append. App self, assigned regulator or management `audit.read` for reads. Management `audit.read` for verify. | Application audit log below and [SECURITY.md](SECURITY.md) |
 | `/v1/metrics/traffic`, `/requests`, `/features` (GET) | Per-tenant, process-local traffic observations | Management `audit.read`; verified client ID | Traffic metrics below |
 | `/v1/directory/principals`, `/organizations` (GET) | Tenant principal/application directory | Management `audit.read` | Tenant directory below |
@@ -957,6 +958,52 @@ top-level `status` publishes a reference, including creation with that field. Ta
 come from active Flowable tasks on confirmed executions. Core rechecks the bearer and resource authority
 before each delivery. The feed has no event IDs or replay. Refresh source lists after reconnecting.
 Core sends comment heartbeats and closes streams on credential expiry, backpressure or a journal gap.
+
+### Message queues
+
+Queues store background jobs in the existing PostgreSQL Data service. Leasing uses row locks with
+`SKIP LOCKED` so Core replicas can dispatch work concurrently. Delivery is at least once. Make job
+handlers safe to run again after a lease expires or a worker stops before acknowledgement.
+
+Queue names are unique per tenant and match `^[a-z][a-z0-9-]{0,62}$`. The backend that first configures
+a name owns the queue. Only that owner can replace its policy. The owner can also send, consume and
+manage dead letters. All callers use enrolled, active service accounts with `core-reader`. `POST`
+and `PUT` additionally require `core-writer`.
+
+The owner configures `producerAppIds` and `consumerAppIds` independently. A queue can also allow
+consumers of selected capabilities through `producerCapabilityVersionIds` and
+`consumerCapabilityVersionIds`. Each entry names a capability version UUID owned by the queue
+owner. The caller needs a currently valid `invoke` grant on that exact version under the existing
+trust policy. Configuring a queue replaces its policy. Omitted lists default to empty and each list
+accepts up to 100 UUIDs. Revocation, grant expiry and policy changes apply to subsequent operations,
+including ack and nack. Unauthorized operations on a queue return `403 queue_forbidden`.
+
+| Method and route | Body or query | Result |
+| --- | --- | --- |
+| `PUT /v1/queues/{queue}` | Policy lists and `maxAttempts` (1–10, default 5) | `200` with `queueId`, `name`, `ownerAppId` and `maxAttempts` |
+| `POST /v1/queues/{queue}/messages` | `Idempotency-Key` UUID header and `{"payload":{"task":"refresh-index"},"delaySeconds":5}` | `201` with `messageId` |
+| `POST /v1/queues/{queue}/lease` | `{"visibilityTimeoutSeconds":30}` or `{}` | `200` with `{ "message": null }` or a message with `messageId`, `payload`, `attempt`, `leaseToken` and `leaseExpiresAt` |
+| `POST /v1/queues/{queue}/messages/{messageId}/ack` | `{"leaseToken":"<uuid>"}` | `204` and removal of the payload |
+| `POST /v1/queues/{queue}/messages/{messageId}/nack` | `{"leaseToken":"<uuid>"}` | `204` and a scheduled retry or immediate dead-letter transition |
+| `GET /v1/queues/{queue}/dead-letters` | Optional `limit` (1–50, default 20) and `cursor` from `nextCursor` | `200` with `{ items, nextCursor }`, ordered by message UUID. Each item includes `messageId`, `payload`, `attempt`, `deadLetteredAt` and `reason` (`nack` or `lease_expired`). |
+| `POST /v1/queues/{queue}/dead-letters/{messageId}/replay` | `{}` | `204` and immediate availability under the same message ID, with attempts reset and the current attempt limit. `404 dead_letter_not_found` if the job is no longer in dead letters. |
+
+The payload may be any JSON value up to 64 KiB in compact UTF-8 JSON. The send request envelope
+has a 65 KiB limit. The optional `delaySeconds` is 0–86,400 and defaults to zero. The idempotency key
+is scoped to the producer app and queue. The same key, payload and delay return the original ID even
+after ack. Changing the payload or delay returns `409 idempotency_key_reused`. Acknowledged
+messages retain their idempotency receipts.
+
+Visibility timeouts are 1–3,600 seconds and default to 30. Lease tokens are unique to each delivery
+and tied to the consumer app. Stale or expired tokens return `409 queue_lease_lost`. A lease increments
+the attempt before delivery. Nack schedules a retry after `2^(attempt - 1)` seconds. An expired lease
+can be taken immediately. On the final attempt, nack or expiry makes the job a dead letter. A lease
+on the final attempt remains valid until its deadline. Jobs keep the attempt limit set at send or replay.
+
+Core records operations and queue authorization denials in the audit chain with actions under
+`audit.queue_*`. This includes empty polls and dead-letter reads. Queue operation events contain
+actor and resource metadata, with no payload, lease token or idempotency key. A final lease records
+its attempt at issuance and its deadline determines when a dead letter becomes visible.
 
 ### Application audit log
 

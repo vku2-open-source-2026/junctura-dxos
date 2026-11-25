@@ -2,6 +2,13 @@
 // SPDX-License-Identifier: Apache-2.0
 export type Json = null | boolean | number | string | Json[] | { [key: string]: Json };
 export type JsonObject = { [key: string]: Json };
+export type LeasedQueueMessage = {
+  messageId: string;
+  payload: Json;
+  attempt: number;
+  leaseToken: string;
+  leaseExpiresAt: string;
+};
 export type CapabilityReference = { capabilityId: string; version: string; manifestDigest: string };
 export type CapabilityCatalogItem = {
   capabilityId: string; versionId: string; providerAppId: string; version: string; digest: string;
@@ -202,6 +209,10 @@ export function inputDigest(input: Json): string;
 export class JuncturaError extends Error { status: number; code: string; requestId?: string; }
 export function createJuncturaClient(options: { baseUrl: string; clientId: string; clientSecret: string; timeoutMs?: number; fetcher?: typeof fetch }): Readonly<{
   request(path: string, options?: RequestOptions): Promise<Response>;
+  sendMessage(queue: string, payload: Json, options: { idempotencyKey: string; delaySeconds?: number; signal?: AbortSignal }): Promise<{ messageId: string }>;
+  leaseMessage(queue: string, options?: { visibilityTimeoutSeconds?: number; signal?: AbortSignal }): Promise<{ message: LeasedQueueMessage | null }>;
+  ackMessage(queue: string, id: string, leaseToken: string, options?: { signal?: AbortSignal }): Promise<void>;
+  nackMessage(queue: string, id: string, leaseToken: string, options?: { signal?: AbortSignal }): Promise<void>;
   identity(): Promise<VerifiedIdentity>;
   listDirectoryUnitTypes(page?: { limit?: number; cursor?: string }): Promise<DirectoryPage>;
   putDirectoryUnitType(unitType: string, name: string): Promise<DirectoryUnitType>;

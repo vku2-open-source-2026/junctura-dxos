@@ -74,6 +74,9 @@ def composition_inventory(spec, source=None):
 # When handlers change, review this inventory and add an observed positive case.
 EXPECTED = {
     '/health': {'get', 'head'}, '/ready': {'get'}, '/v1/identity': {'get'}, '/v1/events': {'get'}, '/v1/token-exchange': {'post'},
+    '/v1/queues/{queue}': {'put'}, '/v1/queues/{queue}/messages': {'post'}, '/v1/queues/{queue}/lease': {'post'},
+    '/v1/queues/{queue}/messages/{messageId}/ack': {'post'}, '/v1/queues/{queue}/messages/{messageId}/nack': {'post'},
+    '/v1/queues/{queue}/dead-letters': {'get'}, '/v1/queues/{queue}/dead-letters/{messageId}/replay': {'post'},
     '/v1/me/resource-consents': {'get', 'post'}, '/v1/me/resource-consents/{consentId}/revoke': {'post'},
     '/v1/resource-consent-requests': {'post'}, '/v1/resource-consent-requests/{requestId}': {'get'},
     '/v1/resource-consent-requests/{requestId}/cancel': {'post'},
@@ -241,7 +244,7 @@ def validate_paths(spec, dereference, *, foundation=False):
             return
         if not planned:
             require((ROOT / operation['x-junctura-source']).is_file(), oid + ': source missing')
-            require(operation['x-junctura-test-suite'] in ('core', 'applications', 'records', 'record-queries', 'record-archives', 'field-masking', 'app-group-shares', 'directory', 'workflow-tasks', 'events', 'object-metadata', 'search', 'subject-access', 'app-access', 'delegation', 'consent', 'consent-requests'), oid + ': coverage suite missing')
+            require(operation['x-junctura-test-suite'] in ('core', 'applications', 'records', 'record-queries', 'record-archives', 'field-masking', 'app-group-shares', 'directory', 'workflow-tasks', 'events', 'message-queue', 'object-metadata', 'search', 'subject-access', 'app-access', 'delegation', 'consent', 'consent-requests'), oid + ': coverage suite missing')
         parameters = [dereference(p) for p in operation.get('parameters', [])]
         require(len({(p['in'], p['name']) for p in parameters}) == len(parameters), oid + ': duplicate parameter')
         require({p['name'] for p in parameters if p['in'] == 'path'} == set(re.findall(r'{([^}]+)}', path)), oid + ': path parameters differ')
@@ -257,6 +260,10 @@ def validate_paths(spec, dereference, *, foundation=False):
             require(operation.get('deprecated') is True and operation['x-junctura-authority'] == 'legacy-tenant', oid + ': legacy boundary missing')
         if path.startswith('/v2/'):
             require(operation['x-junctura-authority'] == 'app-resource', oid + ': app boundary missing')
+        if operation.get('x-junctura-test-suite') == 'message-queue' and 'requestBody' in operation:
+            media = operation['requestBody']['content']['application/json']
+            require('example' in media, oid + ': request example missing')
+            check_value(spec, media['schema'], media['example'], oid + ' request example')
 
     planned_paths = {}
     for path, methods in spec['paths'].items():

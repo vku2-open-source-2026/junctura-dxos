@@ -38,6 +38,35 @@ test("SDK forbids remote cleartext and paths escaping Gateway APIs before sendin
   }
 });
 
+test("SDK sends, leases and settles a job through the public API", async () => {
+  const calls = [];
+  const messageId = "11111111-1111-4111-8111-111111111111";
+  const key = "22222222-2222-4222-8222-222222222222";
+  const leaseToken = "33333333-3333-4333-8333-333333333333";
+  const message = { messageId, leaseToken, attempt: 1, leaseExpiresAt: "2030-01-01T00:00:30Z", payload: [1, null] };
+  const client = createJuncturaClient({ ...options, fetcher: async (url, init) => {
+    if (url.pathname.includes("/token")) return auth();
+    assert.equal(init.method, "POST");
+    assert.equal(init.headers.get("Authorization"), "Bearer synthetic-token");
+    assert.equal(init.headers.get("Content-Type"), "application/json");
+    calls.push([url.pathname, JSON.parse(init.body), init.headers.get("Idempotency-Key")]);
+    if (url.pathname.endsWith("/messages")) return json({ messageId }, 201);
+    if (url.pathname.endsWith("/lease")) return json({ message });
+    return new Response(null, { status: 204 });
+  } });
+  await assert.rejects(client.sendMessage("jobs", null), TypeError);
+  assert.deepEqual(await client.sendMessage("jobs", message.payload, { idempotencyKey: key, delaySeconds: 3 }), { messageId });
+  assert.deepEqual(await client.leaseMessage("jobs", { visibilityTimeoutSeconds: 30 }), { message });
+  await client.ackMessage("jobs", messageId, leaseToken);
+  await client.nackMessage("jobs", messageId, leaseToken);
+  assert.deepEqual(calls, [
+    ["/v1/queues/jobs/messages", { payload: [1, null], delaySeconds: 3 }, key],
+    ["/v1/queues/jobs/lease", { visibilityTimeoutSeconds: 30 }, null],
+    [`/v1/queues/jobs/messages/${messageId}/ack`, { leaseToken }, null],
+    [`/v1/queues/jobs/messages/${messageId}/nack`, { leaseToken }, null],
+  ]);
+});
+
 test("SDK lists records with optional paging parameters and returns items and nextCursor unchanged", async () => {
   const calls = [];
   const page = { items: [{ id: "00000000-0000-4000-8000-000000000001", collection: "entries", data: { index: 1 }, created_at: "2026-01-01T00:00:00.123456+00:00" }], nextCursor: "opaque_next-cursor" };

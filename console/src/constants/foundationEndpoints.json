@@ -1,5 +1,405 @@
 [
   {
+    "path": "/v1/queues/{queue}",
+    "method": "PUT",
+    "operationId": "configureQueue",
+    "summary": "Create or configure a message queue",
+    "description": "The first active backend to configure a tenant-wide name becomes its owner. Only the owner can replace the policy. Omitted lists are empty. Explicit app allowlists and live invoke grants for selected owner capability versions are evaluated independently for producers and consumers. The owner can send, consume and manage dead letters. The attempt limit applies to new and replayed messages.",
+    "tags": [
+      "message-queues"
+    ],
+    "security": [
+      {
+        "coreBearer": []
+      }
+    ],
+    "responses": [
+      "200",
+      "400",
+      "401",
+      "403",
+      "404",
+      "405",
+      "413",
+      "415",
+      "429",
+      "502",
+      "503",
+      "504"
+    ],
+    "hasRequestBody": true,
+    "requestContentTypes": [
+      "application/json"
+    ],
+    "pathParameters": [
+      {
+        "name": "queue",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]{0,62}$"
+        },
+        "description": ""
+      }
+    ],
+    "queryParameters": [],
+    "headerParameters": [],
+    "successStatus": "200",
+    "successContentType": "application/json",
+    "successHasBody": true
+  },
+  {
+    "path": "/v1/queues/{queue}/messages",
+    "method": "POST",
+    "operationId": "sendQueueMessage",
+    "summary": "Send a job to a queue",
+    "description": "The compact UTF-8 JSON payload can occupy up to 65536 bytes. The request envelope can occupy up to 66560 bytes. A UUID idempotency key is scoped to the producer app and queue. Repeating the same payload and delay returns the original message ID, including after acknowledgement. A different payload or delay with the same key conflicts.",
+    "tags": [
+      "message-queues"
+    ],
+    "security": [
+      {
+        "coreBearer": []
+      }
+    ],
+    "responses": [
+      "201",
+      "400",
+      "401",
+      "403",
+      "404",
+      "405",
+      "409",
+      "413",
+      "415",
+      "429",
+      "502",
+      "503",
+      "504"
+    ],
+    "hasRequestBody": true,
+    "requestContentTypes": [
+      "application/json"
+    ],
+    "pathParameters": [
+      {
+        "name": "queue",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]{0,62}$"
+        },
+        "description": ""
+      }
+    ],
+    "queryParameters": [],
+    "headerParameters": [
+      {
+        "name": "Idempotency-Key",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        },
+        "description": "UUID scoped to the queue and producer app."
+      }
+    ],
+    "successStatus": "201",
+    "successContentType": "application/json",
+    "successHasBody": true
+  },
+  {
+    "path": "/v1/queues/{queue}/lease",
+    "method": "POST",
+    "operationId": "leaseQueueMessage",
+    "summary": "Lease one available job",
+    "description": "Poll for at most one job. The lease increments its attempt count and returns a fresh token. An expired lease becomes available again unless it was the final attempt, in which case the message moves to dead letters. The response message is null when no job can be leased.",
+    "tags": [
+      "message-queues"
+    ],
+    "security": [
+      {
+        "coreBearer": []
+      }
+    ],
+    "responses": [
+      "200",
+      "400",
+      "401",
+      "403",
+      "404",
+      "405",
+      "413",
+      "415",
+      "429",
+      "502",
+      "503",
+      "504"
+    ],
+    "hasRequestBody": true,
+    "requestContentTypes": [
+      "application/json"
+    ],
+    "pathParameters": [
+      {
+        "name": "queue",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]{0,62}$"
+        },
+        "description": ""
+      }
+    ],
+    "queryParameters": [],
+    "headerParameters": [],
+    "successStatus": "200",
+    "successContentType": "application/json",
+    "successHasBody": true
+  },
+  {
+    "path": "/v1/queues/{queue}/messages/{messageId}/ack",
+    "method": "POST",
+    "operationId": "ackQueueMessage",
+    "summary": "Acknowledge a leased job",
+    "description": "Only the app holding the current, unexpired lease may acknowledge this message. The completed payload is removed and the idempotency receipt remains.",
+    "tags": [
+      "message-queues"
+    ],
+    "security": [
+      {
+        "coreBearer": []
+      }
+    ],
+    "responses": [
+      "204",
+      "400",
+      "401",
+      "403",
+      "404",
+      "405",
+      "409",
+      "413",
+      "415",
+      "429",
+      "502",
+      "503",
+      "504"
+    ],
+    "hasRequestBody": true,
+    "requestContentTypes": [
+      "application/json"
+    ],
+    "pathParameters": [
+      {
+        "name": "queue",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]{0,62}$"
+        },
+        "description": ""
+      },
+      {
+        "name": "messageId",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        },
+        "description": ""
+      }
+    ],
+    "queryParameters": [],
+    "headerParameters": [],
+    "successStatus": "204",
+    "successContentType": null,
+    "successHasBody": false
+  },
+  {
+    "path": "/v1/queues/{queue}/messages/{messageId}/nack",
+    "method": "POST",
+    "operationId": "nackQueueMessage",
+    "summary": "Retry or dead-letter a leased job",
+    "description": "Only the app holding the current, unexpired lease may reject this message. The retry delay is 2^(attempt - 1) seconds. A rejection on the final attempt makes the message immediately visible in dead letters.",
+    "tags": [
+      "message-queues"
+    ],
+    "security": [
+      {
+        "coreBearer": []
+      }
+    ],
+    "responses": [
+      "204",
+      "400",
+      "401",
+      "403",
+      "404",
+      "405",
+      "409",
+      "413",
+      "415",
+      "429",
+      "502",
+      "503",
+      "504"
+    ],
+    "hasRequestBody": true,
+    "requestContentTypes": [
+      "application/json"
+    ],
+    "pathParameters": [
+      {
+        "name": "queue",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]{0,62}$"
+        },
+        "description": ""
+      },
+      {
+        "name": "messageId",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        },
+        "description": ""
+      }
+    ],
+    "queryParameters": [],
+    "headerParameters": [],
+    "successStatus": "204",
+    "successContentType": null,
+    "successHasBody": false
+  },
+  {
+    "path": "/v1/queues/{queue}/dead-letters",
+    "method": "GET",
+    "operationId": "listQueueDeadLetters",
+    "summary": "List a queue’s dead letters",
+    "description": "Only the queue owner can view dead letters. Results are ordered by message UUID. Pass nextCursor as cursor to continue. A replay removes the message from this list.",
+    "tags": [
+      "message-queues"
+    ],
+    "security": [
+      {
+        "coreBearer": []
+      }
+    ],
+    "responses": [
+      "200",
+      "400",
+      "401",
+      "403",
+      "404",
+      "405",
+      "429",
+      "502",
+      "503",
+      "504"
+    ],
+    "hasRequestBody": false,
+    "requestContentTypes": [],
+    "pathParameters": [
+      {
+        "name": "queue",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]{0,62}$"
+        },
+        "description": ""
+      }
+    ],
+    "queryParameters": [
+      {
+        "name": "limit",
+        "required": false,
+        "schema": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 50,
+          "default": 20
+        },
+        "description": ""
+      },
+      {
+        "name": "cursor",
+        "required": false,
+        "schema": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        },
+        "description": ""
+      }
+    ],
+    "headerParameters": [],
+    "successStatus": "200",
+    "successContentType": "application/json",
+    "successHasBody": true
+  },
+  {
+    "path": "/v1/queues/{queue}/dead-letters/{messageId}/replay",
+    "method": "POST",
+    "operationId": "replayQueueDeadLetter",
+    "summary": "Replay a dead letter",
+    "description": "Only the queue owner may replay a dead letter. It becomes available immediately with the same message ID and payload, a reset attempt count and the current queue attempt limit.",
+    "tags": [
+      "message-queues"
+    ],
+    "security": [
+      {
+        "coreBearer": []
+      }
+    ],
+    "responses": [
+      "204",
+      "400",
+      "401",
+      "403",
+      "404",
+      "405",
+      "413",
+      "415",
+      "429",
+      "502",
+      "503",
+      "504"
+    ],
+    "hasRequestBody": true,
+    "requestContentTypes": [
+      "application/json"
+    ],
+    "pathParameters": [
+      {
+        "name": "queue",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]{0,62}$"
+        },
+        "description": ""
+      },
+      {
+        "name": "messageId",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        },
+        "description": ""
+      }
+    ],
+    "queryParameters": [],
+    "headerParameters": [],
+    "successStatus": "204",
+    "successContentType": null,
+    "successHasBody": false
+  },
+  {
     "path": "/v2/data-schemas/{collection}",
     "method": "PUT",
     "operationId": "registerCollectionSchema",
