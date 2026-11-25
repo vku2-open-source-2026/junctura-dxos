@@ -135,6 +135,7 @@ services:
       - ./infra/postgres/061-capability-access-requests.sql:/migrations/061-capability-access-requests.sql:ro
       - ./infra/postgres/062-record-field-masking.sql:/migrations/062-record-field-masking.sql:ro
       - ./infra/postgres/063-record-mask-response.sql:/migrations/063-record-mask-response.sql:ro
+      - ./infra/postgres/064-app-bootstrap-lease.sql:/migrations/064-app-bootstrap-lease.sql:ro
     depends_on:
       database:
         condition: service_healthy
