@@ -43,7 +43,7 @@ test("identity reports the verified organization context with empty defaults", a
   const response = await get();
   assert.equal(response.status, 200);
   assert.deepEqual(await response.json(), { subject: "login-1", tenantId: "tenant-a", roles: ["core-reader"],
-    units: ["unit-a"], groups: ["/unit-a/reviewers"] });
+    units: ["unit-a"], unitPaths: [{ id: "unit-a", path: "/tenant-a/unit-a" }], groups: ["/unit-a/reviewers"] });
   assert.deepEqual(seen, [], "no binding lookup without a subjectId claim");
 });
 
@@ -52,7 +52,7 @@ test("subjectId appears only through the operator binding of this login subject"
   seen = []; reply = { status: 200, value: { subjectId: "person-1" } };
   const bound = await get();
   assert.deepEqual(await bound.json(), { subject: "login-1", tenantId: "tenant-a", roles: ["core-reader"],
-    units: ["unit-a"], groups: ["/unit-a/reviewers"], subjectId: "person-1" });
+    units: ["unit-a"], unitPaths: [{ id: "unit-a", path: "/tenant-a/unit-a" }], groups: ["/unit-a/reviewers"], subjectId: "person-1" });
   assert.deepEqual(seen[0], { url: "/rpc/subject_binding", role: "junctura_subject_api",
     sub: "login-1", subjectId: "person-1" });
 

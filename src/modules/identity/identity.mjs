@@ -38,6 +38,7 @@ export async function handleIdentity(request, response, identity, config) {
     tenantId: identity.tenantId,
     roles: identity.roles.filter(role => role === "core-reader" || role === "core-writer"),
     units: identity.units,
+    unitPaths: identity.units.map(id => ({ id, path: `/${identity.tenantId}/${id}` })),
     ...(identity.consoleRole ? { consoleRole: identity.consoleRole } : {}),
     ...(identity.appRoles ? { appRoles: identity.appRoles } : {}),
     groups: identity.groups,

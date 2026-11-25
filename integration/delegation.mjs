@@ -129,6 +129,7 @@ test("delegation uses the current user assignment and the narrower authority of 
   assert.equal(identity.subject, userA.id);
   assert.equal(identity.tenantId, tenant);
   assert.deepEqual(identity.units, [unitA]);
+  assert.deepEqual(identity.unitPaths, [{ id: unitA, path: `/${tenant}/${unitA}` }]);
   assert.deepEqual(identity.roles, ["core-reader", "core-writer"]);
   audit.push({ event: "delegation.authorized", reasonCode: null, requestId: identityResponse.headers.get("x-request-id"), user: userA });
 

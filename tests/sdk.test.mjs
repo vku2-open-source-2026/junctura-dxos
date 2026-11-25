@@ -81,20 +81,24 @@ test("AppRole bootstrap rejects unsafe URLs and reports sanitized login, policy 
 });
 
 test("SDK shares memory-only authentication and sends only public API requests", async () => {
-  let issued = 0; const paths = [];
+  let issued = 0; const calls = [];
   const client = createJuncturaClient({ ...options, fetcher: async (url, init) => {
     assert.equal(init.redirect, "error");
     if (url.pathname.includes("/token")) {
       issued++; assert.equal(init.body.get("client_secret"), options.clientSecret);
       return auth();
     }
-    assert.equal(init.headers.get("Authorization"), "Bearer synthetic-token");
     assert.ok(!JSON.stringify(init).includes(options.clientSecret));
-    paths.push(url.pathname);
+    calls.push({ path: url.pathname, bearer: init.headers.get("Authorization") });
     return json({ subject: "synthetic", tenantId: "tenant-a", roles: ["core-reader"] });
   } });
+  await client.identity({ userToken: "synthetic-user" });
+  assert.equal(issued, 0);
+  assert.deepEqual(calls.shift(), { path: "/v1/identity", bearer: "Bearer synthetic-user" });
   await Promise.all([client.identity(), client.identity(), client.discover({ limit: 2 })]);
-  assert.equal(issued, 1); assert.equal(paths.length, 3);
+  assert.equal(issued, 1);
+  assert.equal(calls.length, 3);
+  assert.ok(calls.every(call => call.bearer === "Bearer synthetic-token"));
   assert.ok(!JSON.stringify(client).includes("synthetic-token"));
 });
 
