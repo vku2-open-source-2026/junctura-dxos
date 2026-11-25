@@ -89,6 +89,7 @@ export type VerifiedIdentity = {
   tenantId: string;
   roles: string[];
   units: string[];
+  unitPaths: { id: string; path: string }[];
   groups: string[];
   subjectId?: string;
   preferredUsername?: string;
@@ -220,7 +221,7 @@ export function createJuncturaClient(options: { baseUrl: string; issuer?: string
   leaseMessage(queue: string, options?: { visibilityTimeoutSeconds?: number; signal?: AbortSignal }): Promise<{ message: LeasedQueueMessage | null }>;
   ackMessage(queue: string, id: string, leaseToken: string, options?: { signal?: AbortSignal }): Promise<void>;
   nackMessage(queue: string, id: string, leaseToken: string, options?: { signal?: AbortSignal }): Promise<void>;
-  identity(): Promise<VerifiedIdentity>;
+  identity(options?: { userToken?: string }): Promise<VerifiedIdentity>;
   listDirectoryUnitTypes(page?: { limit?: number; cursor?: string }): Promise<DirectoryPage>;
   putDirectoryUnitType(unitType: string, name: string): Promise<DirectoryUnitType>;
   deleteDirectoryUnitType(unitType: string): Promise<void>;

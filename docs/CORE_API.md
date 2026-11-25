@@ -147,10 +147,12 @@ Authentication or gateway errors can precede these responses. See [CAPABILITIES.
   routes, while `/health`, `/ready` and `/metrics` itself are excluded so a scrape never counts itself. Route labels
   reuse the fixed feature families of the traffic metrics below. Query strings are ignored; other methods return
   `405` with `Allow: GET`. Unit tests in tests/metrics.test.mjs exercise the response format.
-- `GET /v1/identity` returns `{subject,tenantId,roles,units,groups}` and optional `preferredUsername` from the caller's own
+- `GET /v1/identity` returns `{subject,tenantId,roles,units,unitPaths,groups}` and optional `preferredUsername` from the caller's own
   safe `preferred_username` claim (well-formed, nonblank, at most 255 code points, without C0/DEL controls).
-  `units` and `groups` come from the token's verified group paths under the tenant namespace, default to `[]`,
-  and use `/unit/group` paths. An operator-bound `subjectId` claim appears only while the binding maps it to the
+  `units` lists the caller's verified unit IDs. `unitPaths` pairs each ID with its full provider group path
+  (`/{tenant}/{unit}`). `groups` uses tenant-relative `/unit/group` paths. These arrays default to `[]`.
+  For an app-scoped bearer, Core resolves the effective unit from the verified token and current assignment
+  and limits all three arrays to that unit. An operator-bound `subjectId` claim appears only while the binding maps it to the
   caller's own login subject in this tenant and issuer; it is distinct from `subject` and never looked up from
   provider administration.
 - `/identity/realms/junctura/.well-known/openid-configuration` provides upstream discovery;
@@ -179,6 +181,16 @@ The application backend sends `POST /v1/token-exchange` with its enrolled servic
 Present the returned `access_token` as a bearer to `/v1/identity`, `/v1/search`, the resource consent request routes for the requester, or the v2 record, schema and object routes permitted by the current assignment. It carries the user in `sub`, the app client and its service account in `act`, and the verified tenant and selected unit. Changes to v2 resources require `core-writer` in both input tokens and a current assignment that permits the operation. The bearer lasts at most 60 seconds and expires by the earlier input expiry. To renew access, exchange an active login token and an active service account token again. Token exchange accepts only those two input credentials.
 
 Core uses Keycloak Standard Token Exchange V2 to obtain an access-only user proof and checks it on every delegated call. Core also checks the active app, enrollment, assignment and unit on every call. For an existing realm, apply the token exchange attributes and audience mapper on `junctura-core` from the realm configuration. [Realm configuration](../infra/keycloak/realm.json)
+
+Use the bearer that represents the actor for each route family. Route permissions still apply.
+
+| Route family | Bearer |
+| --- | --- |
+| Identity | Keycloak login for the user, exchanged bearer for the user acting through an app, or the service account for the app's own identity. |
+| V2 records and objects | App login or exchanged bearer with the current unit assignment for user operations. Use the enrolled backend bearer for backend operations. |
+| Workflow tasks | Keycloak login with the task's verified unit and candidate group. Claim and completion also require write authority. |
+| Audit | Verified management or regulator bearer for its read scope. An enrolled app bearer can read its own events and append with write authority. |
+| Capability invocation | Enrolled consumer bearer with the exact invocation grant and write authority. |
 
 Policy refusals return `403` with `requestId`. `not_assigned_to_app` means the current user assignment is missing, `unit_mismatch` means the selected unit is invalid for the call, and `capability_not_granted` means the effective roles or supported route set exclude the operation. `delegation_not_allowed` covers an invalid delegation pairing or a delegated credential whose user proof has become inactive, including a locked user. Tenant audit records `delegation.exchanged`, `delegation.authorized` and `authorization.denied` with the request ID in `reason`, the login in `subject`, the app client in `managementClient` and the application ID in `actorAppId` when the enrollment is verified.
 

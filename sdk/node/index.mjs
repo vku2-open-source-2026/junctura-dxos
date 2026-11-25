@@ -267,7 +267,7 @@ export function createJuncturaClient({ baseUrl, issuer, clientId, clientSecret, 
         method: "POST", json: {}, idempotencyKey, bearer: userToken,
       })).json();
     },
-    async identity() { return (await request("/v1/identity")).json(); },
+    async identity({ userToken } = {}) { return (await request("/v1/identity", { bearer: userToken })).json(); },
     async createRecord(collection, data) { return (await request(`/v2/data/${segment(collection)}`, { method: "POST", json: { data } })).json(); },
     async getRecord(collection, id) { return (await request(`/v2/data/${segment(collection)}/${segment(id)}`)).json(); },
     async listRecords(collection, { limit, order, cursor } = {}) {

@@ -89,7 +89,7 @@ const { purpose, dataSubject, emergency } = redeemed.context;
 
 | Method | Purpose |
 | --- | --- |
-| `identity()` | The application's verified identity |
+| `identity({ userToken }?)` | The caller's verified identity, including unit IDs and full provider group paths. Pass a login or exchanged user bearer to read the user's scope. Omit it to read the application's identity. |
 | `sendMessage(queue, payload, { idempotencyKey, delaySeconds })` | Enqueue a job and return `{ messageId }`. Reuse the UUID key and original input when retrying a send. |
 | `leaseMessage(queue, { visibilityTimeoutSeconds })` | Poll for one job. The response is `{ message }` with the lease token and expiry, or `{ message: null }`. |
 | `ackMessage(queue, id, leaseToken)`, `nackMessage(queue, id, leaseToken)` | Complete or reject a job using its current lease token. |

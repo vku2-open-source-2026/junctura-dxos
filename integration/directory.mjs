@@ -149,12 +149,27 @@ test("directory changes store desired state, sync Keycloak and confirm only the 
   assert.ok(memberGroups.some(item => item.path === `/tenant-a/${unit}/${group}`),
     JSON.stringify(memberGroups.map(item => item.path)));
 
-  // A renewed token carries the verified organization context.
-  const renewed = await login(member.username, member.password, member.clientId);
-  const identity = await (await api("/v1/identity", renewed)).json();
-  assert.deepEqual(identity.units, [unit]);
-  assert.deepEqual(identity.groups, [`/${unit}/${group}`]);
-  assert.equal(identity.subject, member.id);
+  const secondUnit = `${prefix}-unit-b`;
+  assert.equal((await api(`/v1/directory/units/${secondUnit}`, manager,
+    { unitType, name: "Unit B" }, {}, "PUT")).status, 201);
+  try {
+    assert.equal((await api(`/v1/directory/units/${secondUnit}/members/${member.id}`, manager,
+      { groups: [] }, {}, "PUT")).status, 201);
+
+    const renewed = await login(member.username, member.password, member.clientId);
+    const response = await api("/v1/identity", renewed, undefined, { "X-Junctura-Unit": `${prefix}-outside` });
+    assert.equal(response.status, 200);
+    const identity = await response.json();
+    assert.deepEqual(identity.units, [unit, secondUnit]);
+    assert.deepEqual(identity.unitPaths, [{ id: unit, path: `/tenant-a/${unit}` },
+      { id: secondUnit, path: `/tenant-a/${secondUnit}` }]);
+    assert.deepEqual(identity.groups, [`/${unit}/${group}`]);
+    assert.equal(identity.subject, member.id);
+  } finally {
+    assert.equal((await api(`/v1/directory/units/${secondUnit}/members/${member.id}`, manager,
+      undefined, {}, "DELETE")).status, 204);
+    assert.equal((await api(`/v1/directory/units/${secondUnit}`, manager, undefined, {}, "DELETE")).status, 204);
+  }
 });
 
 test("lists paginate in ascending order with cursors and require the permission", async () => {

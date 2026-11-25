@@ -3777,7 +3777,7 @@
       "get": {
         "operationId": "getVerifiedIdentity",
         "summary": "Get the caller's verified subject and organization context",
-        "description": "subjectId is optional and comes from the verified token claim of a bound data-subject account. It is distinct from the login subject. units and groups reflect verified provider membership (empty when absent). Group paths have the form /unit/group.",
+        "description": "subjectId is optional and comes from the verified token claim of a bound data-subject account. It is distinct from the login subject. units, unitPaths and groups reflect verified provider membership and are restricted to the effective unit for app-scoped bearers. unitPaths entries pair an ID with its full /tenant/unit provider group path. Group paths have the form /unit/group.",
         "tags": [
           "tenant"
         ],
@@ -3816,6 +3816,12 @@
                   "subjectId": "subject-42",
                   "units": [
                     "unit-a"
+                  ],
+                  "unitPaths": [
+                    {
+                      "id": "unit-a",
+                      "path": "/tenant-a/unit-a"
+                    }
                   ],
                   "groups": [
                     "/unit-a/reviewers"
@@ -13105,6 +13111,25 @@
             },
             "uniqueItems": true
           },
+          "unitPaths": {
+            "type": "array",
+            "uniqueItems": true,
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "pattern": "^[a-z][a-z0-9-]{1,63}$"
+                },
+                "path": {
+                  "type": "string",
+                  "pattern": "^/[a-z][a-z0-9-]{0,62}/[a-z][a-z0-9-]{1,63}$"
+                }
+              },
+              "required": ["id", "path"],
+              "additionalProperties": false
+            }
+          },
           "groups": {
             "type": "array",
             "items": {
@@ -13137,6 +13162,7 @@
           "tenantId",
           "roles",
           "units",
+          "unitPaths",
           "groups"
         ],
         "additionalProperties": false
