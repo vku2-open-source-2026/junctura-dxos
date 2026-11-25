@@ -82,6 +82,9 @@ export function createApplicationProvider(config, beforeWrite, fetcher = fetch) 
     return (await get(clientPath(item.id))) ?? fail();
   }
 
+  const usesClientSecret = item => !item.publicClient && item.clientAuthenticatorType === "client-secret";
+  const readClientSecret = path => get(`${path}/client-secret`, value => typeof value?.value === "string" && value.value.length > 0);
+
   async function role(path, name, attributes) {
     const target = `${path}/roles/${encodeURIComponent(name)}`;
     let value = await get(target);
@@ -182,6 +185,11 @@ export function createApplicationProvider(config, beforeWrite, fetcher = fetch) 
   let consoleClientId;
   return {
     configure,
+    async getConnectionSecret(clientId) {
+      const item = await client(clientId);
+      if (!usesClientSecret(item)) return undefined;
+      return (await readClientSecret(clientPath(item.id)))?.value ?? fail();
+    },
     async consoleRoles(subject) {
       consoleClientId ??= (await client("junctura-console")).id;
       const mapping = await get(`/users/${encodeURIComponent(subject)}/role-mappings/clients/${consoleClientId}/composite`, isList);
@@ -207,12 +215,12 @@ export function createApplicationProvider(config, beforeWrite, fetcher = fetch) 
     },
     async prepareRotation(clientId) {
       const item = await client(clientId);
-      if (item.publicClient || item.clientAuthenticatorType !== "client-secret") throw new Error("oidc_secret_unsupported");
+      if (!usesClientSecret(item)) throw new Error("oidc_secret_unsupported");
       const path = clientPath(item.id);
       return async secret => {
         await write(path, "PUT", { id: item.id, clientId, type: item.type, secret,
           ...(item.authorizationServicesEnabled ? { authorizationServicesEnabled: true } : {}) });
-        const stored = await get(`${path}/client-secret`, value => typeof value?.value === "string");
+        const stored = await readClientSecret(path);
         if (stored?.value !== secret) fail();
         await write(`${path}/client-secret/rotated`, "DELETE");
       };

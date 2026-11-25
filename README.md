@@ -171,27 +171,26 @@ Lần chạy đầu cần tải image và bộ nhận diện mã độc của Cl
 ### Đăng ký ứng dụng đầu tiên
 
 ```sh
+docker compose -f compose.yaml -f infra/openbao/compose.bootstrap.yaml up -d --wait
 npm run app:enroll -- lichhop --display-name "Lịch họp"
 ```
 
-Lệnh tạo tài khoản dịch vụ cho ứng dụng, đăng ký và phê duyệt nó (người duyệt độc lập với người đăng ký), rồi ghi thông tin đăng nhập riêng của ứng dụng vào `.env.app.lichhop.local`.
+Lệnh đăng ký ứng dụng với phê duyệt độc lập và ghi thông tin chạy AppRole của ứng dụng vào
+`.env.app.lichhop.local`. Core ghi thông tin kết nối Gateway và OIDC vào OpenBao khi kích hoạt.
 
 ### Gọi API từ ứng dụng
 
-SDK Node.js được phát hành trên npm ([`@junctura/server-client`](https://www.npmjs.com/package/@junctura/server-client)), không cần chép mã vào ứng dụng:
-
-```sh
-npm install @junctura/server-client
-```
+Ví dụ sau dùng SDK Node.js trong repo. Xem [hướng dẫn khởi động ứng dụng](docs/GETTING_STARTED.md#bootstrap-a-server-side-application).
 
 ```js
-import { createJuncturaClient } from "@junctura/server-client";
+import { createAppBootstrap, createJuncturaClient } from "./sdk/node/index.mjs";
 
-const junctura = createJuncturaClient({
-  baseUrl: process.env.JUNCTURA_URL,
-  clientId: process.env.JUNCTURA_APP_CLIENT_ID,
-  clientSecret: process.env.JUNCTURA_APP_CLIENT_SECRET,
+const loadBundle = createAppBootstrap({
+  url: process.env.JUNCTURA_OPENBAO_URL,
+  roleId: process.env.JUNCTURA_OPENBAO_ROLE_ID,
+  secretId: process.env.JUNCTURA_OPENBAO_SECRET_ID,
 });
+const junctura = createJuncturaClient(await loadBundle());
 
 const record = await junctura.createRecord("contacts", { name: "Nguyễn Văn A" });
 const same = await junctura.getRecord("contacts", record.id);

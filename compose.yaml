@@ -135,6 +135,7 @@ services:
       - ./infra/postgres/061-capability-access-requests.sql:/migrations/061-capability-access-requests.sql:ro
       - ./infra/postgres/062-record-field-masking.sql:/migrations/062-record-field-masking.sql:ro
       - ./infra/postgres/063-record-mask-response.sql:/migrations/063-record-mask-response.sql:ro
+      - ./infra/postgres/064-app-bootstrap-lease.sql:/migrations/064-app-bootstrap-lease.sql:ro
       - ./infra/postgres/065-message-queues.sql:/migrations/065-message-queues.sql:ro
     depends_on:
       database:
@@ -226,6 +227,7 @@ services:
       - openbao-operator:/operator
       - openbao-init:/token
       - ./scripts/init-openbao.sh:/scripts/init-openbao.sh:ro
+      - ./scripts/provision-app-bootstrap.sh:/scripts/provision-app-bootstrap.sh:ro
       - ./infra/openbao/junctura-core.hcl:/policy/junctura-core.hcl:ro
     depends_on:
       secrets:

@@ -4,6 +4,7 @@ import { isIP } from "node:net";
 import { createHash, randomUUID } from "node:crypto";
 import { HttpError, json, readFlatJsonObject, uuidPattern } from "../../platform/http/http.mjs";
 import { handleApplicationManagement, withProvider } from "./management.mjs";
+import { writeConnectionBundle } from "../secrets/secrets.mjs";
 import { signInternalToken } from "../../platform/security/internal-token.mjs";
 
 // Application proposals contain only objects and well-formed strings. This is
@@ -150,10 +151,14 @@ export async function handleApplications(request, response, identity, config, ur
   if (syncApproval) await command("approve_check", payload, "application_command");
   const apply = () => command(operation, payload, "application_command");
   const result = syncApproval
-    ? await withProvider(config, command, payload.appId, async (fenced, provider, clientId, ready) => {
+    ? await withProvider(config, command, payload.appId, async (fenced, provider, clientId, ready, renew) => {
       if (!ready) {
         await provider.configure(clientId, payload.appId);
         await fenced("provider_confirm");
+      }
+      if (config.secretsUrl) {
+        const secret = await provider.getConnectionSecret(clientId);
+        if (secret) await writeConnectionBundle(config, identity.tenantId, payload.appId, clientId, secret, renew);
       }
       return apply();
     }) : await apply();

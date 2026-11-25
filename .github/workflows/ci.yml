@@ -82,7 +82,7 @@ jobs:
           npm run setup
           docker compose config --quiet
       - name: Build and start the local container
-        run: docker compose up --build --detach --wait --wait-timeout 900
+        run: docker compose -f compose.yaml -f infra/openbao/compose.bootstrap.yaml up --build --detach --wait --wait-timeout 900
       - name: Provision directory and application identity synchronization
         run: npm run directory:provision
       - name: Probe host and container endpoints
@@ -107,6 +107,8 @@ jobs:
         run: npm run test:field-masking
       - name: Verify application access, unit isolation and denial reasons
         run: npm run test:app-access
+      - name: Verify application startup and key rotation through OpenBao
+        run: npm run test:app-bootstrap
       - name: Verify token exchange and delegated access
         run: npm run test:delegation
       - name: Verify resource consent and subject access history
@@ -163,4 +165,4 @@ jobs:
         run: docker compose logs --no-color
       - name: Stop test containers
         if: always() && steps.compose-config.outcome == 'success'
-        run: docker compose down
+        run: docker compose -f compose.yaml -f infra/openbao/compose.bootstrap.yaml down

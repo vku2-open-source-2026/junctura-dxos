@@ -54,16 +54,15 @@ npm run setup -- --port=28080 --console-port=23000 --project=junctura-release-sm
 npm run doctor
 npm run local:up
 npm run healthcheck
-npm run example:sdk
 npm run local:down
 ```
 
 Open `http://127.0.0.1:23000/#/getting-started`. Setup writes the fresh directory's
 `.env`, Compose creates new project-qualified volumes, and `local:down` retains
 them. Never reuse another installation's project name with new credentials.
-The SDK identity example uses only synthetic local fixture credentials. App-private
-resources need separate operator enrollment and independent approval; see
-[onboarding](GETTING_STARTED.md). `local:up` waits for Foundation and Console health.
+The SDK example uses an enrolled app's OpenBao AppRole. See
+[onboarding](GETTING_STARTED.md#bootstrap-a-server-side-application).
+`local:up` waits for Foundation and Console health.
 
 For regression tests install `requirements-contracts.txt`, host OpenSSL and Console
 dependencies. Run the commands in [DEVELOPING](DEVELOPING.md) sequentially whenever

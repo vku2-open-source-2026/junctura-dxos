@@ -39,6 +39,10 @@ if ! bao secrets list 2>/dev/null | grep -q '^secret/'; then
   bao secrets enable -path=secret kv-v2 >/dev/null
 fi
 
+if ! bao auth list | grep -q '^approle/'; then
+  bao auth enable approle >/dev/null
+fi
+
 bao policy write junctura-core /policy/junctura-core.hcl >/dev/null
 
 if [ -f "$TOKEN_DIR/core-token" ]; then
