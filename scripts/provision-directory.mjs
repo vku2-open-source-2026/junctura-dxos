@@ -109,7 +109,7 @@ export function bindingStatement({ tenant, issuer, subjectId, loginSubject }) {
       WHERE app_private.subject_bindings.login_subject=${literal(loginSubject)};`;
 }
 
-async function operator(base, password) {
+export async function operator(base, password) {
   const issued = await fetch(`${base}/identity/realms/master/protocol/openid-connect/token`, { method: "POST",
     body: new URLSearchParams({ grant_type: "password", client_id: "admin-cli", username: "junctura-admin", password }) });
   if (issued.status !== 200) throw new Error(`Keycloak operator login failed (${issued.status}); is the stack running?`);

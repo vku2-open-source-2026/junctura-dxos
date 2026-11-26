@@ -54,6 +54,21 @@ npm run test:audit
 They share the source database; integration tests stop dependencies and recreate
 containers. Audit tests restart PostgreSQL, so run them after session-dependent suites.
 
+## Check managed configuration and recovery
+
+Run `npm run reconcile -- --check` against a running stack to report differences and return a nonzero
+status. It checks the declared Console client, required scopes, realm and Console roles and mappers,
+the `junctura-core` OpenBao policy, migration versions and checksums, and the installed schema fingerprint.
+Output identifies the affected configuration by name. Run with the operator credentials for that stack.
+
+`npm run reconcile -- --apply` adds missing Keycloak entries and updates the managed OpenBao policy.
+Review divergent existing Keycloak settings before changing them. For database differences, use the
+migration runner as described in [Database migrations](DEVELOPING.md#database-migrations).
+
+Core, Data, SeaweedFS and the other long-running services use the Compose restart policy.
+`test:self-heal` runs on an isolated development stack or CI. It exits the running Core process and checks
+that the same container restarts and Gateway `/ready` returns within 45 seconds.
+
 ## Persistent state and upgrades
 
 | Volume | Retain |
