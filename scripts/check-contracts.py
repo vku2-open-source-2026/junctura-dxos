@@ -92,6 +92,7 @@ EXPECTED = {
     '/v1/approvals/{approvalId}/revoke': {'post'},
     '/v2/data-schemas/{collection}': {'put'},
     '/v2/data-masking/{collection}': {'get', 'put'},
+    '/v2/data/{collection}/{id}:archive': {'post'},
     '/v2/data/{collection}/{id}:lock': {'post', 'delete'},
     '/v2/data/{collection}/aggregate': {'get'},
     '/v2/data/{collection}/by-key/{key}': {'put'}, '/v2/data:batch': {'post'},
