@@ -296,6 +296,16 @@ npm run check && npm test          # kiểm tra mã nguồn và kiểm thử đ�
 npm run test:integration           # kiểm thử tích hợp
 ```
 
+### Diễn tập cài từ gói nguồn
+
+Gói nguồn `0.3.0-rc.1` từ commit `400437b` được giải nén và cài trên máy Linux
+có 2 vCPU, 15.6 GiB RAM, Node.js 24 và Docker Compose. `setup` hoàn tất
+trong dưới một giây, `doctor` mất 2 giây và `local:up` mất 391 giây đến khi
+Foundation và Console sẵn sàng. `healthcheck` mất 2 giây. Cả 10 ca smoke tích
+hợp qua trong 158 giây. Hạ stack mất 18 giây.
+
+Quy trình tái hiện và định dạng báo cáo nằm trong [hướng dẫn phát hành](docs/RELEASE.md#fresh-isolated-installation).
+
 ## Lộ trình
 
 - [x] **v0.1.0 — Tầng 1:** Foundation, chia sẻ năng lực (Registry, Trust, Invocation, Composition), kiểm toán, sao lưu/khôi phục, CI.
