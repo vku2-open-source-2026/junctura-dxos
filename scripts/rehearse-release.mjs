@@ -40,7 +40,7 @@ if (!values.prepare) {
 const directory = mkdtempSync(join(tmpdir(), "jx-release-rehearsal-"));
 execFileSync("tar", ["-xzf", archive, "-C", directory], { stdio: "inherit" });
 const [root] = readdirSync(directory);
-if (readdirSync(directory).length !== 1 || !root.startsWith("junctura-dxos-")) throw new Error("Unexpected source archive root");
+if (readdirSync(directory).length !== 1 || root !== basename(archive, ".tar.gz")) throw new Error("Unexpected source archive root");
 const cwd = join(directory, root);
 const elapsed = {};
 function npm(command, options = []) {

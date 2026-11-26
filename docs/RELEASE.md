@@ -61,7 +61,7 @@ The rehearsal command verifies the packaged checksum, extracts a new checkout, a
 records elapsed times for setup, doctor, local startup, health and smoke checks.
 
 ```sh
-npm run release:rehearse -- dist/releases/junctura-dxos-v0.3.0-rc.1.tar.gz \
+npm run release:rehearse -- dist/releases/junctura-0.3.0-rc.1.tar.gz \
   --project jx-release-smoke --port 28080 --console-port 23000 --report rehearsal.json
 ```
 
