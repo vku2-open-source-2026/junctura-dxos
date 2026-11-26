@@ -548,8 +548,8 @@
     "path": "/v2/data/{collection}/aggregate",
     "method": "GET",
     "operationId": "aggregateRecords",
-    "summary": "Count or group records",
-    "description": "Count all readable matching records in the selected owner scope. groups is empty for count-only requests. Group keys follow the requested dimension order and missing values group as null. Queries that would return more than 1,000 groups return 400 invalid_query. Fields with masking rules are excluded from filtering and grouping. Sensitive schema fields are also unavailable to management viewers.",
+    "summary": "Count, sum, average or group records",
+    "description": "Aggregate readable matching records in the selected owner scope. Use exactly one of count, sum or avg. Count includes all readable matching records. Numeric aggregates ignore missing and null values and return null if no numeric values match. Group keys are ordered by the request dimensions. Masked fields and sensitive fields hidden from management viewers cannot be used. Queries with more than 1,000 groups return 400 invalid_query. Source describes the same filters and UTC bounds for use in a list request.",
     "tags": [
       "app-resource"
     ],
@@ -585,7 +585,7 @@
     "queryParameters": [
       {
         "name": "count",
-        "required": true,
+        "required": false,
         "schema": {
           "type": "string",
           "enum": [
@@ -635,6 +635,44 @@
           "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
         },
         "description": "Defaults to the calling app. Another app's collection yields only records explicitly shared with the caller, including live app-group shares with current membership."
+      },
+      {
+        "name": "createdFrom",
+        "required": false,
+        "schema": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "description": "Inclusive lower bound on system created_at. Converted to UTC. Millisecond precision."
+      },
+      {
+        "name": "createdTo",
+        "required": false,
+        "schema": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "description": "Exclusive upper bound on system created_at. Converted to UTC. Millisecond precision."
+      },
+      {
+        "name": "sum",
+        "required": false,
+        "schema": {
+          "type": "string",
+          "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,63}$",
+          "description": "Case-sensitive top-level field in data."
+        },
+        "description": "Indexed number or integer field for the aggregate."
+      },
+      {
+        "name": "avg",
+        "required": false,
+        "schema": {
+          "type": "string",
+          "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,63}$",
+          "description": "Case-sensitive top-level field in data."
+        },
+        "description": "Indexed number or integer field for the aggregate."
       }
     ],
     "headerParameters": [],
@@ -2661,6 +2699,24 @@
           "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
         },
         "description": "Defaults to the calling app. Another app's collection yields only records explicitly shared with the caller, including live app-group shares with current membership."
+      },
+      {
+        "name": "createdFrom",
+        "required": false,
+        "schema": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "description": "Inclusive lower bound on system created_at. Converted to UTC. Millisecond precision."
+      },
+      {
+        "name": "createdTo",
+        "required": false,
+        "schema": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "description": "Exclusive upper bound on system created_at. Converted to UTC. Millisecond precision."
       }
     ],
     "headerParameters": [],

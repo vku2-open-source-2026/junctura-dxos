@@ -36,8 +36,10 @@ function normaliseWhere(where) {
   return conditions.sort((left, right) => left[0] < right[0] ? -1 : left[0] > right[0] ? 1 : 0);
 }
 
-function filterDigest(where) {
-  return createHash("sha256").update(JSON.stringify(normaliseWhere(where))).digest("base64url");
+function filterDigest(where, createdFrom, createdTo) {
+  const conditions = normaliseWhere(where);
+  const filters = createdFrom || createdTo ? [conditions, createdFrom ?? null, createdTo ?? null] : conditions;
+  return createHash("sha256").update(JSON.stringify(filters)).digest("base64url");
 }
 
 function normaliseKey(key) {
@@ -45,11 +47,11 @@ function normaliseKey(key) {
   return key.map(scalar);
 }
 
-function bindingPrefix({ ownerAppId, where, sort, schemaRevision }) {
+function bindingPrefix({ ownerAppId, where, sort, schemaRevision, createdFrom, createdTo }) {
   if (typeof ownerAppId !== "string" || !uuidPattern.test(ownerAppId)) throw new TypeError("ownerAppId must be a UUID");
   if (typeof sort !== "string" || !sortPattern.test(sort)) throw new TypeError("sort must be field.asc or field.desc");
   if (!Number.isSafeInteger(schemaRevision) || schemaRevision < 0) throw new TypeError("schemaRevision must be a non-negative integer");
-  return { v: 1, o: ownerAppId, f: filterDigest(where), s: sort, r: schemaRevision };
+  return { v: 1, o: ownerAppId, f: filterDigest(where, createdFrom, createdTo), s: sort, r: schemaRevision };
 }
 
 function assertCommon(payload) {
@@ -121,7 +123,7 @@ export function createQueryCursor(secret) {
         assertListPayload(payload);
         const wanted = expect(expected);
         if (payload.o !== wanted.ownerAppId || payload.s !== wanted.sort ||
-            payload.r !== wanted.schemaRevision || payload.f !== filterDigest(wanted.where)) throw invalidCursor();
+            payload.r !== wanted.schemaRevision || payload.f !== filterDigest(wanted.where, wanted.createdFrom, wanted.createdTo)) throw invalidCursor();
         return { key: payload.k, id: payload.i };
       } catch (error) {
         if (error instanceof HttpError && error.status === 400) throw error;
@@ -138,7 +140,7 @@ export function createQueryCursor(secret) {
         assertStatePayload(payload);
         const wanted = expect(expected);
         if (payload.o !== wanted.ownerAppId || payload.s !== wanted.sort ||
-            payload.r !== wanted.schemaRevision || payload.f !== filterDigest(wanted.where)) throw invalidCursor();
+            payload.r !== wanted.schemaRevision || payload.f !== filterDigest(wanted.where, wanted.createdFrom, wanted.createdTo)) throw invalidCursor();
         return { stateId: payload.c };
       } catch (error) {
         if (error instanceof HttpError && error.status === 400) throw error;

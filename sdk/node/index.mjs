@@ -312,7 +312,7 @@ export function createJuncturaClient({ baseUrl, issuer, clientId, clientSecret, 
       if (!Array.isArray(operations) || operations.length === 0) throw new TypeError("operations must be a non-empty array");
       return (await request("/v2/data:batch", { method: "POST", json: { operations }, idempotencyKey })).json();
     },
-    async listFilteredRecords(collection, { limit, order, cursor, sort, where, ownerAppId } = {}) {
+    async listFilteredRecords(collection, { limit, order, cursor, sort, where, ownerAppId, createdFrom, createdTo } = {}) {
       const query = new URLSearchParams();
       if (limit !== undefined) query.set("limit", String(limit));
       if (order !== undefined) query.set("order", order);
@@ -320,12 +320,20 @@ export function createJuncturaClient({ baseUrl, issuer, clientId, clientSecret, 
       if (sort !== undefined) query.set("sort", sort);
       addWhere(query, where);
       addOwner(query, ownerAppId);
+      if (createdFrom !== undefined) query.set("createdFrom", createdFrom);
+      if (createdTo !== undefined) query.set("createdTo", createdTo);
       return (await request(`/v2/data/${segment(collection)}${query.size ? `?${query}` : ""}`)).json();
     },
-    async aggregateRecords(collection, { count = true, groupBy = [], where, ownerAppId } = {}) {
-      if (count !== true) throw new TypeError("count must be true");
+    async aggregateRecords(collection, { count, sum, avg, groupBy = [], where, ownerAppId, createdFrom, createdTo } = {}) {
+      if (count !== undefined && count !== true) throw new TypeError("count must be true");
+      const measures = Object.entries({ count, sum, avg }).filter(([, value]) => value !== undefined);
+      if (measures.length > 1) throw new TypeError("select one aggregate");
+      const [measure, field] = measures[0] ?? ["count", true];
+      if (measure !== "count" && typeof field !== "string") throw new TypeError("aggregate field must be a string");
       if (!Array.isArray(groupBy)) throw new TypeError("groupBy must be an array");
-      const query = new URLSearchParams({ count: "" });
+      const query = new URLSearchParams({ [measure]: measure === "count" ? "" : field });
+      if (createdFrom !== undefined) query.set("createdFrom", createdFrom);
+      if (createdTo !== undefined) query.set("createdTo", createdTo);
       for (const dimension of groupBy) {
         if (typeof dimension !== "string") throw new TypeError("groupBy dimensions must be strings");
         query.append("groupBy", dimension);

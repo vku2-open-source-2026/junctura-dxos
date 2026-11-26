@@ -103,7 +103,7 @@ const { purpose, dataSubject, emergency } = redeemed.context;
 | `upsertRecordByKey(collection, key, data, { ifMatch, idempotencyKey })` | Create or replace by the registered unique key; returns `{ record, etag, created }` |
 | `writeRecordBatch(operations, { idempotencyKey })` | Atomic batch of create, replace, delete and increment operations |
 | `listFilteredRecords(collection, { limit, order, cursor, sort, where, ownerAppId })` | Filter by indexed fields and sort by one indexed field |
-| `aggregateRecords(collection, { groupBy, where, ownerAppId })` | Count readable records, optionally grouped by up to two fields or UTC days |
+| `aggregateRecords(collection, { groupBy, where, ownerAppId })` | Count, sum or average readable records. Supports grouping, UTC creation bounds and source metadata |
 | `lockRecord(collection, id, { ttlSeconds, lockId, idempotencyKey })`, `releaseRecordLock(collection, id, lockId)` | Acquire, renew or release an expiring record lock |
 | `exportAppRecords({ collection })` | Stream the owner's records as NDJSON |
 | `importAppRecords(ndjson, { idempotencyKey })` | Import NDJSON records in one transaction |

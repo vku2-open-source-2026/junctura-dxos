@@ -53,7 +53,16 @@ export type RecordBatchOperation =
   | { op: 'increment'; collection: string; id: string; operations: RecordIncrement[]; ifMatch?: string };
 export type RecordBatchResult = { results: { op: 'create' | 'replace' | 'delete' | 'increment'; id: string; version: number | null }[] };
 export type RecordLock = { lockId: string; lockedUntil: string };
-export type RecordAggregate = { count: number; groups: { key: (string | number | boolean | null)[]; count: number }[] };
+export type RecordAggregateSource = {
+  collection: string; ownerAppId: string; measure: "count" | "sum" | "avg"; field: string | null;
+  filters: { field: string; op: "eq" | "in" | "gte" | "lte" | "prefix"; value: unknown }[];
+  groupBy: { field: string; day: boolean }[]; createdFrom: string | null; createdTo: string | null;
+};
+export type RecordAggregate = {
+  count: number; value?: number | null;
+  groups: { key: (string | number | boolean | null)[]; count: number; value?: number | null }[];
+  source: RecordAggregateSource;
+};
 export type RecordImportResult = { created: number };
 export type ExactResourceShareTarget = {
   resourceType: 'record' | 'object';
@@ -76,6 +85,8 @@ export type ExactResourceShareResult = { shareId: string; resourceType: 'record'
 export type GroupResourceShareResult = { shareId: string; resourceType: 'record'; resourceId: string; granteeAppGroup: string; action: 'read'; expiresAt: string };
 export type ResourceShareResult = ExactResourceShareResult | GroupResourceShareResult;
 export type RecordListFilter = {
+  createdFrom?: string;
+  createdTo?: string;
   limit?: number;
   order?: 'asc' | 'desc';
   cursor?: string;
@@ -83,7 +94,11 @@ export type RecordListFilter = {
   where?: Record<string, string>;
   ownerAppId?: string;
 };
-export type RecordAggregateFilter = { count?: true; groupBy?: string[]; where?: Record<string, string>; ownerAppId?: string };
+export type RecordAggregateFilter = {
+  groupBy?: string[]; where?: Record<string, string>; ownerAppId?: string;
+  createdFrom?: string; createdTo?: string;
+} & ({ count?: true; sum?: never; avg?: never } | { sum: string; count?: never; avg?: never } |
+     { avg: string; count?: never; sum?: never });
 export type VerifiedIdentity = {
   subject: string;
   tenantId: string;

@@ -389,7 +389,14 @@ both expose `created_at`.
 
 `GET /v2/data/{collection}/aggregate?count` counts readable matches. Repeat `groupBy` for up to two
 indexed fields or UTC day buckets such as `day(createdOn)`; day buckets require a date or date-time field.
-Missing values group as `null`. Queries that would return more than 1,000 groups return
+Choose `sum=field` or `avg=field` for one indexed numeric field. Numeric aggregates
+omit missing and null values and return `null` for an empty numeric set. The overall and grouped
+`count` still count all readable matching rows. Masked fields cannot be used.
+Both list and aggregate accept `createdFrom` inclusive and `createdTo` exclusive over system
+`created_at`. Bounds accept timezone offsets and up to three fractional digits. Core normalizes
+them to UTC. An aggregate's `source` identifies the resolved owner, collection, measure, field,
+filters, groups and UTC bounds for a repeat query under current access.
+Missing group keys are `null`. Queries that would return more than 1,000 groups return
 `400 invalid_query`. Each query reads matching rows from one snapshot. Core holds the collection's
 schema and masking policy for the duration of a filtered list request.
 
@@ -397,8 +404,8 @@ Management readers with an explicit app-level grant can list or aggregate anothe
 `ownerAppId`. Schema-sensitive fields and fields with masking rules are unavailable for these readers'
 filters, sort keys and group dimensions. A scope the caller may not read returns `404 not_found`.
 
-In compatibility mode (`STRICT_RECORD_WRITES=false`), a list without `sort`, any `where[...]` or
-`ownerAppId` keeps the legacy body and cursor without `version` fields. Strict mode and any filtered list
+In compatibility mode (`STRICT_RECORD_WRITES=false`), a list without `sort`, any `where[...]`, `ownerAppId` or
+creation bounds keeps the legacy body and cursor without `version` fields. Strict mode and any filtered list
 return the versioned page. Restart pagination after switching modes.
 
 #### Read-only record lifecycle

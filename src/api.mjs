@@ -340,6 +340,7 @@ export function createApi(config) {
       const listing = request.method === "GET" && /^\/v2\/data\/[^/]+$/.test(path);
       if (/^\/v2\/data\/[^/]+\/aggregate$/.test(path) || (listing && (config.strictRecords ||
           url.searchParams.has("sort") || url.searchParams.has("ownerAppId") ||
+          url.searchParams.has("createdFrom") || url.searchParams.has("createdTo") ||
           [...url.searchParams.keys()].some(key => key.startsWith("where["))))) {
         return handleRecordQuery(request, response, { ...await authorize(request, true), requestId: requestIdFor(request) }, config, url);
       }
