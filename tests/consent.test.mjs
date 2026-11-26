@@ -75,6 +75,24 @@ test("people list, create and revoke only their own consents through the subject
   assert.deepEqual(seen[2].body.payload, { consentId: CONSENT });
 });
 
+test("a verified subject can create a capability consent with one unit recipient", async () => {
+  seen = [];
+  const proposal = { recipientUnit: "unit-a", capabilityId: "urn:junctura:capability:22222222-2222-4222-8222-222222222222:lookup",
+    purposes: ["review"], expiresAt: "2026-12-01T00:00:00.000Z" };
+  const headers = { "content-type": "application/json", "idempotency-key": "11111111-1111-4111-8111-111111111111" };
+  reply = () => ({ status: 201, value: { consentId: CONSENT, recipientUnit: proposal.recipientUnit, state: "active" } });
+  assert.equal((await call("/v1/me/consents", "POST", proposal, headers)).status, 201);
+  assert.deepEqual(seen[0].body.payload.consent, proposal);
+  assert.equal((await call("/v1/me/consents", "POST", { ...proposal, consumerAppId: CONSENT }, headers)).status, 400);
+  assert.equal((await call("/v1/me/consents", "POST", { ...proposal, recipientUnit: "/other/unit-a" }, headers)).status, 400);
+  const verified = identity;
+  try {
+    identity = { ...verified, subjectId: undefined };
+    assert.equal((await call("/v1/me/consents", "POST", proposal, headers)).status, 403);
+    assert.equal(seen.length, 1);
+  } finally { identity = verified; }
+});
+
 test("consent requests are strict and failures stay closed", async () => {
   assert.equal((await call("/v1/me/consents?subject=other")).status, 400);
   assert.equal((await call("/v1/me/consents", "POST", '{"purposes":["a"],"purposes":["b"]}')).status, 400, "duplicate keys");

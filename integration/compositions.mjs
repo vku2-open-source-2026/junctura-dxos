@@ -22,7 +22,9 @@ async function publicApi(path, who, body, headers = {}, method = body === undefi
   return fetch(base + path, { method, headers: { Authorization: `Bearer ${who.token ?? who}`, "Content-Type": "application/json", ...headers },
     body: body === undefined ? undefined : JSON.stringify(body), signal: AbortSignal.timeout(15000) });
 }
-const authority = createAuthorityFixture({ base, prefix, sql, q, api: publicApi, clientIds, users });
+// The full suite crosses the realm's five-minute default on a slow runner.
+const fixtureTokenLifespan = 900;
+const authority = createAuthorityFixture({ base, prefix, sql, q, api: publicApi, clientIds, users, backendTokenLifespan: fixtureTokenLifespan });
 let owner, approver, publisher, consumer, other, foreign, providers, runtime, published;
 let version = 0;
 const manifestFixture = JSON.parse(readFileSync(new URL("../docs/contracts/examples/capability-manifest.json", import.meta.url)));
@@ -124,7 +126,7 @@ before(async () => {
     for (const mapper of protocolMappers) delete mapper.id;
     protocolMappers.find(m => m.name === "tenant").config["claim.value"] = tenant;
     const r = await authority.admin("clients", { clientId: `${prefix}-management-${tenant}`, enabled: true, protocol: "openid-connect", publicClient: true,
-      standardFlowEnabled: true, directAccessGrantsEnabled: false, redirectUris: ["http://127.0.0.1:9876/callback"], attributes: { "pkce.code.challenge.method": "S256" }, protocolMappers }, "POST");
+      standardFlowEnabled: true, directAccessGrantsEnabled: false, redirectUris: ["http://127.0.0.1:9876/callback"], attributes: { "pkce.code.challenge.method": "S256", "access.token.lifespan": String(fixtureTokenLifespan) }, protocolMappers }, "POST");
     assert.equal(r.status, 201); clientIds.push(r.headers.get("location").split("/").at(-1));
   }
   owner = await authority.human("owner", "tenant-a", ["applications.register", "capabilities.write", "trust.write"]);

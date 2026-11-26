@@ -56,8 +56,8 @@ export const ConsentsScreen: React.FC = () => {
     void load();
   }, [load]);
 
-  const appName = (consent: SubjectConsent) =>
-    consent.consumer.displayName ?? consent.consumer.appId;
+  const recipientName = (consent: SubjectConsent) =>
+    consent.recipientUnit ?? consent.consumer.displayName ?? consent.consumer.appId;
   const formatDate = (iso: string) =>
     new Date(iso).toLocaleDateString(numberLocale);
 
@@ -77,7 +77,7 @@ export const ConsentsScreen: React.FC = () => {
       .filter((consent) => {
         if (!needle) return true;
         return [
-          appName(consent),
+          recipientName(consent),
           consent.capabilityId,
           consent.capabilityTitle ?? "",
           consent.purposes.join(" "),
@@ -171,7 +171,7 @@ export const ConsentsScreen: React.FC = () => {
             <Card key={consent.consentId}>
               <CardHeader>
                 <div>
-                  <CardTitle>{appName(consent)}</CardTitle>
+                  <CardTitle>{recipientName(consent)}</CardTitle>
                   <p className="mt-0.5 text-sm text-slate-500 dark:text-slate-400">
                     {consent.capabilityTitle ?? consent.capabilityId}
                   </p>

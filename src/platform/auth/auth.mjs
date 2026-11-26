@@ -56,6 +56,7 @@ export function validateIdentity(claims, issuer, now = Date.now() / 1000) {
 }
 
 const scopedRoute = /^\/v2\/(?:data(?:[/:-]|$)|objects(?:\/|$))/;
+const delegatedExecutionRoute = /^\/v1\/capability-executions(?:\/[0-9a-f-]{36})?$/;
 const consentRequestRoute = /^\/v1\/(?:resource-consent-requests(?:\/[0-9a-f-]+(?:\/cancel)?)?|me\/resource-consent-requests(?:\/[0-9a-f-]+\/(?:accept|decline))?)$/;
 const consoleRoles = ["admin", "manager", "viewer"];
 const consoleRoleTtlMs = 3000;
@@ -120,7 +121,8 @@ async function enforceAccess(config, fetcher, request, identity, claims, exchang
       managementAppId: identity.actor ? undefined : checkOnly ? null : managementAppId(path, request.method),
       userRoute: Boolean(exchange) || checkOnly || path === "/v1/identity" || path === "/v1/search" ||
         path === "/v1/capabilities/catalog" || path === "/v1/trust/access-requests" ||
-        path?.startsWith("/v1/trust/access-requests/") || scopedRoute.test(path) || consentRequest,
+        path?.startsWith("/v1/trust/access-requests/") || scopedRoute.test(path) || consentRequest ||
+        (Boolean(identity.actor) && delegatedExecutionRoute.test(path)),
       managerOnly: write && (path?.startsWith("/v2/data-schemas/") || path?.startsWith("/v2/data-masking/")),
       sourceClient: exchange ? claims.client_id : undefined,
       delegationEvent: exchange === "issue" ? "exchanged" : identity.actor && !exchange && !checkOnly ? "authorized" : undefined,

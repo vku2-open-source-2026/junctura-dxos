@@ -2,12 +2,11 @@
 // SPDX-License-Identifier: Apache-2.0
 import { createHash, randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
-import { createAuthorizer } from "../../../platform/auth/auth.mjs";
 import { parseStrictJson } from "../compatibility/compatibility.mjs";
 import { validatePayload } from "../registry/payload.mjs";
 import { createProviderNetwork, ProviderNetworkError } from "./provider-network.mjs";
 import { HttpError, json, readBody, requireWriter, uuidPattern } from "../../../platform/http/http.mjs";
-import { createAuthenticationLeases, executionCommand, jsonDigest, prepareProviderTicket, recheckLease,
+import { authorizeExecutionLease, createAuthenticationLeases, executionCommand, jsonDigest, prepareProviderTicket, recheckLease,
   redeemProviderTicket, reserveExecution, resolveExecution } from "./execution.mjs";
 
 export const CAPABILITY_PROCESS_KEY = "junctura_c4a_single";
@@ -137,8 +136,7 @@ export function createCapabilityRuntime(config, networkOptions, { workerEnabled 
 
   async function finish(entry, state, error, output) {
     return leases.use(entry.id, null, async (original, authorization) => {
-      const identity = await createAuthorizer(config)({ headers: { authorization } }, true);
-      if (["tenantId", "issuer", "subject", "clientId"].some(key => identity[key] !== original[key])) throw new HttpError(403, "initiator_mismatch");
+      const identity = await authorizeExecutionLease(config, authorization, original);
       return executionCommand(config, identity, "finish", { executionId: entry.id, state, ...(error ? { error } : {}), ...(state === "succeeded" ? { output } : {}) });
     });
   }

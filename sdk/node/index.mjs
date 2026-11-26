@@ -527,8 +527,8 @@ export function createJuncturaClient({ baseUrl, issuer, clientId, clientSecret, 
       return (await request(`${accessRequestPath(requestId)}/accept`, { method: "POST", bearer: userToken })).json();
     },
     // context: optional { purpose, dataSubject, emergency?, justification? } — why the call is made and whose data it concerns.
-    async execute(target, input, idempotencyKey = randomUUID(), context) {
-      return (await request("/v1/capability-executions", { method: "POST",
+    async execute(target, input, idempotencyKey = randomUUID(), context, { userToken } = {}) {
+      return (await request("/v1/capability-executions", { method: "POST", bearer: userToken,
         json: context === undefined ? { target, input } : { target, input, context }, idempotencyKey })).json();
     },
     // Provider side: redeem the single-use ticket Junctura sent with an invocation
@@ -540,14 +540,16 @@ export function createJuncturaClient({ baseUrl, issuer, clientId, clientSecret, 
       return (await request("/v1/capability-authorizations/introspect", { method: "POST",
         json: { ticket, invocationId, inputDigest: inputDigest(input) } })).json();
     },
-    async execution(id) { return (await request(`/v1/capability-executions/${segment(id)}`)).json(); },
-    async waitForExecution(id, { timeoutMs: pollTimeout = 60000, intervalMs = 500, signal } = {}) {
+    async execution(id, { userToken } = {}) {
+      return (await request(`/v1/capability-executions/${segment(id)}`, { bearer: userToken })).json();
+    },
+    async waitForExecution(id, { timeoutMs: pollTimeout = 60000, intervalMs = 500, signal, userToken } = {}) {
       if (!Number.isInteger(pollTimeout) || pollTimeout < 1 || pollTimeout > 300000 || !Number.isInteger(intervalMs) || intervalMs < 100 || intervalMs > 10000) throw new TypeError("Polling bounds are invalid");
       const deadline = AbortSignal.timeout(pollTimeout);
       const combined = signal ? AbortSignal.any([signal, deadline]) : deadline;
       while (true) {
         combined.throwIfAborted();
-        const value = await (await request(`/v1/capability-executions/${segment(id)}`, { signal: combined })).json();
+        const value = await (await request(`/v1/capability-executions/${segment(id)}`, { signal: combined, bearer: userToken })).json();
         if (!["accepted", "running"].includes(value.state)) return value;
         await delay(intervalMs, undefined, { signal: combined });
       }
