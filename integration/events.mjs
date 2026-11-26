@@ -173,10 +173,11 @@ test("gateway sends a new Flowable task to its eligible group across Core replic
       VALUES('tenant-a',${q(definitionId)},${q(unit)},ARRAY[${q(unit)}]);`);
     ownerStream = await connect(owner);
     peerStream = await connect(peer);
+    const dueAt = new Date(Date.now() + 16000).toISOString();
     const started = await fetch(`${base}/v1/workflows/executions`, {
       method: "POST",
       headers: { Authorization: `Bearer ${owner.token}`, "Content-Type": "application/json", "Idempotency-Key": requestKey },
-      body: JSON.stringify({ definitionId }), signal: AbortSignal.timeout(15000),
+      body: JSON.stringify({ definitionId, dueAt }), signal: AbortSignal.timeout(15000),
     });
     assert.equal(started.status, 201, await started.clone().text());
     const execution = await started.json();
@@ -184,6 +185,15 @@ test("gateway sends a new Flowable task to its eligible group across Core replic
     assert.equal(task.event, "workflow.task.created");
     assert.equal(task.data.executionId, execution.id);
     assert.deepEqual(Object.keys(task.data).sort(), ["executionId", "taskId"]);
+    for (const event of ["workflow.task.due_soon", "workflow.task.overdue"]) {
+      const reminder = await ownerStream.event();
+      assert.equal(reminder.event, event);
+      assert.deepEqual(reminder.data, { ...task.data, dueAt: reminder.data.dueAt });
+      assert.equal(Date.parse(reminder.data.dueAt), Date.parse(dueAt));
+    }
+    const milestones = await sql(`SELECT array_agg(milestone ORDER BY milestone)
+      FROM app_private.workflow_reminders WHERE tenant_id='tenant-a' AND task_id=${q(task.data.taskId)};`);
+    assert.equal(milestones.trim(), "{due_soon,overdue}");
 
     await sql(`INSERT INTO core.app_records(tenant_id,id,owner_app_id,collection,data)
       VALUES('tenant-a',${q(barrier)},${q(peer.appId)},'entries','{"status":"peer-only"}');`);

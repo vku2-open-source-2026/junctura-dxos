@@ -7,7 +7,8 @@ import { workflowRequest } from "../workflow/client.mjs";
 
 export const EVENTS_PATH = "/v1/events";
 const taskId = /^[A-Za-z0-9:_-]{1,128}$/;
-const eventNames = new Set(["record.status.changed", "consent.revoked", "workflow.task.created"]);
+const taskEvents = new Set(["workflow.task.created", "workflow.task.due_soon", "workflow.task.overdue"]);
+const eventNames = new Set(["record.status.changed", "consent.revoked", ...taskEvents]);
 const heartbeatMs = 10000;
 const taskPageSize = 100;
 // One scan walks at most a bounded page count and reports at most the batch
@@ -18,8 +19,9 @@ const maxScanPages = 40;
 const maxObservedTaskIds = 4096;
 
 async function eventRpc(config, identity, name, body, signal) {
+  const observer = name === "event_observe_tasks" || name === "event_remind_tasks";
   const jwt = signInternalToken(config.dataSecret, {
-    role: name === "event_observe_tasks" ? "junctura_event_observer" : "junctura_event_api",
+    role: observer ? "junctura_event_observer" : "junctura_event_api",
     aud: "junctura-data", exp: Math.floor(Date.now() / 1000) + 30,
     tenant_id: identity.tenantId, iss: identity.issuer, sub: identity.subject, client_id: identity.clientId,
     subject_id: identity.subjectId, groups: identity.groups,
@@ -33,7 +35,7 @@ async function eventRpc(config, identity, name, body, signal) {
     });
     if (response.ok) {
       const result = await response.json();
-      if (result.status === (name === "event_observe_tasks" ? 204 : 200)) return result.value;
+      if (result.status === (observer ? 204 : 200)) return result.value;
     }
   } catch { /* Pass a single provider error through the stream boundary. */ }
   throw new HttpError(503, "events_unavailable");
@@ -106,6 +108,53 @@ async function observeTasks(config, tenantId, startedAt, state, signal) {
   }
   if (state.observed.size > maxObservedTaskIds) state.observed.clear();
   if (tasks.length) await eventRpc(config, { tenantId }, "event_observe_tasks", { payload: tasks }, signal);
+}
+
+// The scan makes progress without an open stream. Journal publication remains
+// transactional, so a restart or another scanner can revisit the same page.
+export function startWorkflowReminders(config, interval = 5000) {
+  if (!config.workflowUrl || !config.dataUrl) return;
+  const control = new AbortController();
+  let start = 0;
+  let busy = false;
+  let nextLog = 0;
+  const timer = setInterval(async () => {
+    if (busy) return;
+    busy = true;
+    try {
+      const params = new URLSearchParams({ start: String(start), size: String(taskPageSize),
+        sort: "id", order: "asc", active: "true" });
+      const result = await workflowRequest(config, `runtime/tasks?${params}`);
+      if (!Array.isArray(result?.data) || result.data.length > taskPageSize ||
+          !Number.isSafeInteger(result.total) || result.total < 0) throw new Error("invalid task page");
+      const tenants = new Map();
+      for (const row of result.data) {
+        if (typeof row?.tenantId !== "string" || !row.tenantId) continue;
+        const task = taskReference(row, row.tenantId);
+        if (!task) continue;
+        const tasks = tenants.get(row.tenantId) ?? [];
+        tasks.push(task);
+        tenants.set(row.tenantId, tasks);
+      }
+      for (const [tenantId, payload] of tenants) {
+        control.signal.throwIfAborted();
+        await eventRpc(config, { tenantId }, "event_remind_tasks", {
+          payload, lead_seconds: config.workflowReminderLeadSeconds ?? 3600,
+        }, control.signal);
+      }
+      start += result.data.length;
+      if (!result.data.length || start >= result.total) start = 0;
+    } catch {
+      if (!control.signal.aborted && Date.now() >= nextLog) {
+        console.warn("Workflow reminder scan will retry");
+        nextLog = Date.now() + 60000;
+      }
+    } finally { busy = false; }
+  }, interval).unref();
+  return () => {
+    control.abort();
+    clearInterval(timer);
+  };
 }
 
 export function createEventStreams(config) {
@@ -190,8 +239,9 @@ export function createEventStreams(config) {
           if (!eventNames.has(item.event) || typeof item.sequence !== "string" || !/^\d+$/.test(item.sequence) ||
               BigInt(item.sequence) !== BigInt(after) + 1n) throw new HttpError(503, "events_unavailable");
           after = item.sequence;
-          if (item.event === "workflow.task.created") {
-            if (!item.task || !(Date.parse(item.task.createdAt) > startedAt) || !await taskStillActive(config, tenantId, item.task)) continue;
+          if (taskEvents.has(item.event)) {
+            if (!item.task || (item.event === "workflow.task.created" && !(Date.parse(item.task.createdAt) > startedAt)) ||
+                !await taskStillActive(config, tenantId, item.task)) continue;
           }
           const caller = await currentIdentity();
           const data = await command("deliver", { sequence: after }, caller);
