@@ -57,6 +57,18 @@ npm run healthcheck
 npm run local:down
 ```
 
+The rehearsal command verifies the packaged checksum, extracts a new checkout, and
+records elapsed times for setup, doctor, local startup, health and smoke checks.
+
+```sh
+npm run release:rehearse -- dist/releases/junctura-dxos-v0.3.0-rc.1.tar.gz \
+  --project jx-release-smoke --port 28080 --console-port 23000 --report rehearsal.json
+```
+
+Use `--prepare` when validating extraction and setup on a host without a free Docker
+project. For a release candidate, run the complete rehearsal on a clean runner.
+The report records CPU count, host memory and elapsed seconds for each completed step.
+
 Open `http://127.0.0.1:23000/#/getting-started`. Setup writes the fresh directory's
 `.env`, Compose creates new project-qualified volumes, and `local:down` retains
 them. Never reuse another installation's project name with new credentials.
@@ -67,6 +79,24 @@ The SDK example uses an enrolled app's OpenBao AppRole. See
 For regression tests install `requirements-contracts.txt`, host OpenSSL and Console
 dependencies. Run the commands in [DEVELOPING](DEVELOPING.md) sequentially whenever
 they restart shared services. Do not run recovery/fault suites on a real data stack.
+
+## Tenant transfer preflight
+
+Run the preflight on an isolated restore of the tenant and pass both IDs and the
+new display name. The report inventories Core and Flowable rows and Keycloak tenant
+groups. A populated target namespace produces a failing exit status.
+
+```sh
+npm run tenant:preflight -- --from old-tenant --to new-tenant --name "New tenant"
+```
+
+Before authorizing a transfer, inventory SeaweedFS object versions, OpenBao policy
+bindings and any external registrations for those IDs. Take and verify a coordinated
+restore point, close writes, preserve audit evidence and verify object checksums,
+permissions, in-flight workflow state and login on the isolated copy. Record the
+original and proposed identifiers with the restore point and the expected counts.
+Reopen writes only after the checks pass. Restore the verified source if a check
+fails before reopening.
 
 ## Upgrade and rollback
 

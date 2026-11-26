@@ -51,7 +51,7 @@ export function verifyManifest(manifest, actual) {
   return true;
 }
 
-const sha256 = path => new Promise((done, fail) => {
+export const sha256 = path => new Promise((done, fail) => {
   const hash = createHash("sha256");
   createReadStream(path).on("data", chunk => hash.update(chunk)).on("error", fail).on("end", () => done(hash.digest("hex")));
 });

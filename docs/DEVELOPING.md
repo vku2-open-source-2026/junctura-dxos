@@ -386,3 +386,9 @@ Update the README opening for product-model changes; preserve licensing records,
 
 Deployment is single-host Compose with loopback HTTP. Foundation workflows are tenant-scoped.
 Metrics reset on restart; no downgrade migrations are supplied. See [Release](RELEASE.md) for rollback.
+
+
+## Source installation rehearsal
+
+After packaging a release candidate, run the clean installation and save the timings
+on its release PR. See [Fresh isolated installation](RELEASE.md#fresh-isolated-installation).
