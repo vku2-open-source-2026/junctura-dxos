@@ -456,6 +456,14 @@ export function createJuncturaClient({ baseUrl, issuer, clientId, clientSecret, 
         },
       });
     },
+    async listExceptionalAccesses({ userToken } = {}) {
+      return (await request("/v1/exceptional-accesses", { bearer: userToken })).json();
+    },
+    async reviewExceptionalAccess(executionId, { decision, reason }, { userToken } = {}) {
+      return (await request(`/v1/exceptional-accesses/${segment(executionId)}/review`, {
+        method: "POST", json: { decision, reason }, bearer: userToken,
+      })).json();
+    },
     async appendAppAuditEvent(body, { idempotencyKey = randomUUID(), userToken } = {}) {
       return (await request("/v1/audit-events", { method: "POST", json: body, idempotencyKey, bearer: userToken })).json();
     },

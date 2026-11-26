@@ -26,9 +26,9 @@ export type CapabilityAccessRequest = CapabilityAccessRequestCreate & {
 export type ExecutionTarget = { kind: 'capability'; capability: CapabilityReference }
   | { kind: 'composition'; compositionId: string; version: string; compositionDigest: string };
 export type Execution = { executionId: string; state: 'accepted' | 'running' | 'auth_required' | 'succeeded' | 'failed' | 'timed_out' | 'outcome_unknown' | 'cancelled'; output?: Json; [key: string]: unknown };
-export type ExecutionContext = { purpose: string; dataSubject?: string; emergency?: boolean; justification?: string };
+export type ExecutionContext = { purpose: string; dataSubject?: string; exceptionalAccess?: boolean; emergency?: boolean; justification?: string };
 export type RequestOptions = { method?: string; json?: Json; body?: BodyInit; contentType?: string; ifMatch?: string; idempotencyKey?: string; lockId?: string; signal?: AbortSignal };
-export type TicketContext = { active: false } | { active: true; context: { tenantId: string; executionId: string; purpose?: string; dataSubject?: string; emergency?: boolean; [key: string]: unknown }; [key: string]: unknown };
+export type TicketContext = { active: false } | { active: true; context: { tenantId: string; executionId: string; purpose?: string; dataSubject?: string; exceptionalAccess?: boolean; emergency?: boolean; [key: string]: unknown }; [key: string]: unknown };
 
 export type VersionedRecord = { id: string; collection: string; created_at: string; archivedAt?: string; version: number; data: JsonObject };
 export type CompatibilityRecord = { id: string; collection: string; created_at: string; archivedAt?: string; data: JsonObject };
@@ -103,7 +103,7 @@ export type ObjectUpload = { file: Blob | Uint8Array | ArrayBuffer | string; rec
 export type ObjectListFilter = { recordRef?: RecordRef; tag?: string; limit?: number; cursor?: string };
 export type CapabilitySubjectAccessEntry = {
   source: 'capability'; accessId: string; executionId: string; accessedAt: string; purpose: string;
-  flaggedAt: string | null; state: string; emergency: boolean; review: 'pending' | 'justified' | 'unjustified' | null;
+  flaggedAt: string | null; state: string; exceptionalAccess?: boolean; emergency: boolean; review: 'pending' | 'justified' | 'unjustified' | null;
   consumer: { appId: string; displayName: string | null }; provider: { appId: string; displayName: string | null };
   capability: { capabilityId: string; version: string; title: string | null };
 };
@@ -270,6 +270,13 @@ export function createJuncturaClient(options: { baseUrl: string; issuer?: string
   listObjectsByMetadata(filters?: ObjectListFilter): Promise<ObjectMetadataPage>;
   searchReadableResources(query: string, options?: { limit?: number; cursor?: string }): Promise<SearchPage>;
   getObject(id: string): Promise<ArrayBuffer>;
+  listExceptionalAccesses(options?: { userToken?: string }): Promise<{ tasks: Array<{
+    taskId: string; executionId: string; state: "pending" | "valid" | "invalid";
+    actor: string; capabilityId: string; subjectId: string; accessedAt: string;
+    justification: string; reviewedAt: string | null; reason: string | null;
+  }> }>;
+  reviewExceptionalAccess(executionId: string, review: { decision: "valid" | "invalid"; reason: string },
+    options?: { userToken?: string }): Promise<{ taskId: string; executionId: string; state: "valid" | "invalid"; reviewedAt: string }>;
   appendAppAuditEvent(body: AppAuditWrite, options?: { idempotencyKey?: string; userToken?: string }): Promise<AppAuditReceipt>;
   queryAppAuditEvents(options?: AuditFilter & { since?: string; until?: string; limit?: number; cursor?: string; userToken?: string }): Promise<AuditPage>;
   exportAppAuditEvents(options?: AuditFilter & { userToken?: string; signal?: AbortSignal }): Promise<Response>;

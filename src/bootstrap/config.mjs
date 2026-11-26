@@ -37,6 +37,10 @@ export function loadConfig(env = process.env) {
   if (env.DIRECTORY_SYNC_CLIENT_SECRET && !env.DIRECTORY_SYNC_CLIENT_ID) {
     throw new Error("Directory synchronization configuration is incomplete");
   }
+  const reminderLead = env.WORKFLOW_REMINDER_LEAD_SECONDS ?? "3600";
+  if (!/^\d+$/.test(reminderLead) || Number(reminderLead) < 1 || Number(reminderLead) > 604800) {
+    throw new Error("WORKFLOW_REMINDER_LEAD_SECONDS must be an integer between 1 and 604800");
+  }
   const config = Object.freeze({
     issuer: env.OIDC_ISSUER,
     identityUrl: env.IDENTITY_URL,
@@ -59,6 +63,7 @@ export function loadConfig(env = process.env) {
     searchKey: env.MEILI_MASTER_KEY,
     workflowUrl: env.WORKFLOW_URL,
     workflowPassword: env.WORKFLOW_ADMIN_PASSWORD,
+    workflowReminderLeadSeconds: Number(reminderLead),
     // Without a client secret the directory sync stays disabled and Core still
     // serves read-only traffic; configuring the secret enables the provider.
     directorySyncClientId: env.DIRECTORY_SYNC_CLIENT_SECRET ? (env.DIRECTORY_SYNC_CLIENT_ID || undefined) : undefined,

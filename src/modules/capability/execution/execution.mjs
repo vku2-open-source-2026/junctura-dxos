@@ -45,7 +45,15 @@ export function validateExecutionCreate(body) {
   if (keys !== "input,target" && keys !== "context,input,target") {
     throw new HttpError(400, "invalid_execution_request");
   }
-  if (keys === "context,input,target") validateExecutionContext(body.context);
+  if (keys === "context,input,target") {
+    const context = body.context;
+    if (context && Object.hasOwn(context, "exceptionalAccess")) {
+      if (Object.hasOwn(context, "emergency")) throw new HttpError(422, "invalid_execution_context");
+      const { exceptionalAccess, ...fields } = context;
+      body = { ...body, context: { ...fields, emergency: exceptionalAccess } };
+    }
+    validateExecutionContext(body.context);
+  }
   const target = body.target;
   if (!target || typeof target !== "object" || Array.isArray(target) || Object.keys(target).sort().join(",") !== "capability,kind" || target.kind !== "capability") {
     throw new HttpError(422, "single_capability_required");
@@ -142,7 +150,7 @@ export async function resolveExecution(config, identity, body) {
 
 export async function reserveExecution(config, identity, request, body, leases, resolved) {
   requireWriter(identity);
-  validateExecutionCreate(body);
+  body = validateExecutionCreate(body);
   const key = request.headers["idempotency-key"];
   if (typeof key !== "string" || !uuidPattern.test(key)) throw new HttpError(400, "uuid_idempotency_key_required");
   resolved ??= await resolveExecution(config, identity, body);
