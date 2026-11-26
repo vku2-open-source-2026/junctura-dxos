@@ -58,6 +58,31 @@ test("fresh install records every checksum atomically", async () => {
   assert.equal(await sql("SELECT last_version FROM core.schema_migration_state WHERE id = 1"), latestVersion);
 });
 
+test("a confirmed unit is the sole recipient of its capability consent and retirement revokes it", async () => {
+  const tenant = "consent-unit-migration";
+  const consentId = randomUUID();
+  const capabilityId = `urn:junctura:capability:${randomUUID()}:lookup`;
+  await sql(`INSERT INTO app_private.directory_unit_types(tenant_id,unit_type,name,generation,synced_generation)
+    VALUES ('${tenant}','office','Office',1,1);
+    INSERT INTO app_private.directory_units(tenant_id,unit,unit_type,name,generation,synced_generation,confirmed_value)
+    VALUES ('${tenant}','unit-a','office','Unit A',1,1,'{"name":"Unit A","unitType":"office"}'::jsonb);
+    INSERT INTO execution_private.subject_consents(tenant_id,consent_id,issuer,data_subject,canonical_subject,
+      recipient_unit,capability_id,purposes,expires_at)
+    VALUES ('${tenant}','${consentId}','https://id.example.invalid','login-a','subject-a',
+      'unit-a','${capabilityId}','{review}',clock_timestamp()+interval '1 day');`);
+  const read = async () => JSON.parse(await sql(`SELECT execution_private.consent_view(s)
+    FROM execution_private.subject_consents s WHERE tenant_id='${tenant}' AND consent_id='${consentId}';`));
+  const before = await read();
+  assert.equal(before.recipientUnit, "unit-a");
+  assert.equal(before.state, "active");
+  assert.equal(Object.hasOwn(before, "consumer"), false);
+  await assert.rejects(sql(`UPDATE execution_private.subject_consents SET canonical_subject=NULL
+    WHERE tenant_id='${tenant}' AND consent_id='${consentId}';`), /subject_consent_recipient_check/);
+  await sql(`UPDATE app_private.directory_units SET pending_delete=true
+    WHERE tenant_id='${tenant}' AND unit='unit-a';`);
+  assert.equal((await read()).state, "revoked");
+});
+
 test("workflow migration preserves legacy reservations and scopes worker leases", async () => {
   const tenant = "workflow-migration";
   const key = randomUUID();
