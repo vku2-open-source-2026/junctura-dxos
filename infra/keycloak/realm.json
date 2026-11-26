@@ -463,6 +463,10 @@
         "browser": "c4cfd46b-dd47-30e6-3ae4-58332b553fa3",
         "direct_grant": "0687a97e-b3e5-685c-d23a-b858e471ac58"
       },
+      "defaultClientScopes": [
+        "basic",
+        "roles"
+      ],
       "optionalClientScopes": [
         "address",
         "phone",

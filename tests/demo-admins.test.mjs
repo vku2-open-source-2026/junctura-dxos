@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import {
-  ADMIN_PERMISSIONS, DEFAULT_JUDGE_EXPIRY, DEMO_ACCOUNT, DEMO_ADMINS,
+  ADMIN_PERMISSIONS, DEFAULT_JUDGE_EXPIRY, DEMO_ACCOUNT, DEMO_ADMINS, DEMO_INSPECTOR,
   ENVIRONMENT_ACCOUNTS, JUDGE_ACCOUNT, READER_PERMISSIONS,
   accountsFor, buildDisablePrincipalStatement, buildPrincipalStatement, buildUserUpdate,
   disableJudge, disableLegacyViewer, knownPasswords, main, mergeCredentials,
@@ -20,7 +20,7 @@ const credential = (account, password = `simulated-${account.username}`) => ({
 });
 
 test("environment profiles keep demo public and all production accounts private", () => {
-  assert.deepEqual(accountsFor(["demo"]), [DEMO_ACCOUNT]);
+  assert.deepEqual(accountsFor(["demo"]), [DEMO_ACCOUNT, DEMO_INSPECTOR]);
   assert.deepEqual(accountsFor(["production"]), [...DEMO_ADMINS, JUDGE_ACCOUNT]);
   assert.deepEqual(accountsFor(), ENVIRONMENT_ACCOUNTS);
   assert.deepEqual(DEMO_ADMINS.map(account => account.username), ["admin1", "admin2", "admin3"]);
@@ -29,6 +29,7 @@ test("environment profiles keep demo public and all production accounts private"
     assert.equal(account.public, false);
   }
   assert.equal(DEMO_ACCOUNT.label, "Tài khoản demo (chỉ xem)");
+  assert.equal(DEMO_INSPECTOR.public, false);
   assert.equal(JUDGE_ACCOUNT.displayName, "Giám khảo");
   assert.equal(JUDGE_ACCOUNT.jobTitle, "Chỉ xem");
 });
@@ -147,7 +148,7 @@ test("admin principal SQL grants the full permission set and escapes every text 
 
 test("demo and judge principal SQL grants audit.read only and preserves disabled expiry state", () => {
   assert.deepEqual(READER_PERMISSIONS, ["audit.read"]);
-  for (const profile of [DEMO_ACCOUNT, JUDGE_ACCOUNT]) {
+  for (const profile of [DEMO_ACCOUNT, DEMO_INSPECTOR, JUDGE_ACCOUNT]) {
     const statement = buildPrincipalStatement({ tenant: profile.tenant, issuer: ISSUER, subject: `${profile.username}-id`, profile });
     assert.ok(statement.includes("ARRAY['audit.read']::text[]"));
     for (const permission of ADMIN_PERMISSIONS.filter(name => name !== "audit.read")) assert.ok(!statement.includes(`'${permission}'`));
@@ -173,15 +174,17 @@ test("user updates merge tenant attributes while retaining the full existing rep
 
 // Keycloak and filesystem operations below stay in memory. No running stack or
 // credential file is contacted, and every password is a simulated fixture.
-function fakeStack({ tenant = "demo", users = [], memberships = {} } = {}) {
+function fakeStack({ tenant = "demo", users = [], memberships = {}, consoleScopes = ["basic", "roles"] } = {}) {
   const calls = [];
   const statements = [];
   const records = new Map(users.map(user => [user.id, structuredClone(user)]));
   const groups = structuredClone(memberships);
   const consoleRoles = ["console-admin", "console-viewer"].map(name => ({ id: `${name}-role`, name }));
+  const availableScopes = ["basic", "roles", "profile"].map(name => ({ id: `${name}-scope`, name }));
+  const defaultScopes = new Set(consoleScopes);
   const response = (value, status = 200, headers) => new Response(value === undefined ? null : JSON.stringify(value), { status, headers });
   const stack = {
-    calls, statements, records,
+    calls, statements, records, defaultScopes,
     group: { id: `${tenant}-group`, name: tenant },
     roles: [{ id: "reader-role", name: "core-reader" }, { id: "writer-role", name: "core-writer" }],
     idFrom: result => result.headers.get("location").split("/").at(-1),
@@ -190,6 +193,14 @@ function fakeStack({ tenant = "demo", users = [], memberships = {} } = {}) {
       calls.push({ path, body: structuredClone(body), method });
       if (path === "clients?clientId=junctura-console") return response([{ id: "console-id", clientId: "junctura-console" }]);
       if (path === "clients/console-id/roles") return response(consoleRoles);
+      if (path === "client-scopes") return response(availableScopes);
+      if (path === "clients/console-id/default-client-scopes") return response(availableScopes.filter(scope => defaultScopes.has(scope.name)));
+      if (path.startsWith("clients/console-id/default-client-scopes/") && method === "PUT") {
+        const scope = availableScopes.find(candidate => path.endsWith(`/${candidate.id}`));
+        if (!scope) throw new Error(`Unexpected simulated scope: ${path}`);
+        defaultScopes.add(scope.name);
+        return response(undefined, 204);
+      }
       if (path.startsWith("users?")) {
         const username = new URLSearchParams(path.split("?")[1]).get("username");
         return response([...records.values()].filter(user => user.username === username));
@@ -240,8 +251,19 @@ test("existing admins migrate attributes and environment membership without chan
   assert.ok(!stack.statements[0].includes("tenant-b"));
 });
 
+test("provisioning adds missing Console subject and role scopes once while keeping existing scopes", async () => {
+  const stack = fakeStack({ consoleScopes: ["profile"] });
+  const options = { tenant: "demo", accounts: [{ ...DEMO_INSPECTOR, password: "simulated" }],
+    existing: new Map([[DEMO_INSPECTOR.username, "simulated"]]), issuer: ISSUER };
+  await provisionTenant(stack, options);
+  await provisionTenant(stack, options);
+  assert.deepEqual([...stack.defaultScopes], ["profile", "basic", "roles"]);
+  assert.deepEqual(stack.calls.filter(call => call.method === "PUT" && call.path.includes("default-client-scopes"))
+    .map(call => call.path.split("/").at(-1)), ["basic-scope", "roles-scope"]);
+});
+
 test("read-only accounts receive only core-reader and have writer roles removed", async () => {
-  for (const profile of [DEMO_ACCOUNT, JUDGE_ACCOUNT]) {
+  for (const profile of [DEMO_ACCOUNT, DEMO_INSPECTOR, JUDGE_ACCOUNT]) {
     const stack = fakeStack({ tenant: profile.tenant });
     const account = { ...profile, password: "simulated", accessExpiresAt: "2026-12-15" };
     const result = await provisionTenant(stack, { tenant: profile.tenant, accounts: [account], existing: new Map(), issuer: ISSUER });
@@ -367,7 +389,7 @@ test("default provisioning connects both environments and never publishes produc
   await main(run.args, run.dependencies);
   assert.deepEqual(run.connections.map(options => [options.tenant, options.createGroup]), [["demo", true], ["production", true]]);
   const saved = JSON.parse(run.files.get("simulated-private.json")).accounts;
-  assert.deepEqual(saved.map(account => account.username), ["demo", "admin1", "admin2", "admin3", "giamkhao"]);
+  assert.deepEqual(saved.map(account => account.username), ["demo", "audit-inspector", "admin1", "admin2", "admin3", "giamkhao"]);
   assert.deepEqual(JSON.parse(run.files.get("simulated-hints.json")).accounts.map(account => account.username), ["demo"]);
   for (const { password } of saved) assert.ok(!run.logs.join("\n").includes(password));
 });
@@ -412,6 +434,8 @@ test("realm retains CI tenants and includes both environment groups", () => {
   const realm = JSON.parse(readFileSync(new URL("../infra/keycloak/realm.json", import.meta.url), "utf8"));
   assert.deepEqual(realm.groups, [{ name: "tenant-a" }, { name: "tenant-b" }, { name: "demo" }, { name: "production" }]);
   for (const account of ENVIRONMENT_ACCOUNTS) assert.ok(!realm.users.some(user => user.username === account.username));
+  const consoleClient = realm.clients.find(client => client.clientId === "junctura-console");
+  assert.deepEqual(consoleClient.defaultClientScopes, ["basic", "roles"]);
 });
 
 test("only an explicit judge expiry may re-enable a locked judge", () => {
