@@ -26,7 +26,7 @@ test("important SQL operations audit once per commit, and failures and retries d
       assert.equal(result, expected, event);
     };
     const key = () => ({ "Idempotency-Key": randomUUID() });
-    const declaration = { schema: { type: "object", properties: { code: { type: "string" } }, required: ["code"] },
+    const declaration = { schema: { type: "object", properties: { code: { type: "string" }, label: { type: "string" } }, required: ["code"] },
       indexed: ["code"], uniqueKey: "code", sensitive: [], searchable: [] };
     const schemaPath = `/v2/data-schemas/${prefix}`;
     const schemaRequest = { method: "PUT", headers: key(), body: declaration };
@@ -35,6 +35,9 @@ test("important SQL operations audit once per commit, and failures and retries d
     const maskPath = `/v2/data-masking/${prefix}`;
     const mask = { method: "PUT", body: { fields: { code: { mask: "full" } } } };
     await confirm("audit.record_masking_changed", await observe(await api(maskPath, actor, mask), 409), "0");
+    const validMask = { method: "PUT", body: { fields: { label: { mask: "full" } } } };
+    observed.push(["audit.record_masking_changed", await observe(await api(maskPath, actor, validMask), 200)]);
+    await confirm("audit.record_masking_changed", await observe(await api(maskPath, actor, validMask), 200), "0");
     const body = { operations: [{ op: "create", collection: prefix, data: { code: "one" } }] };
     const batch = { method: "POST", headers: key(), body };
     observed.push(["audit.record_batch", await observe(await api("/v2/data:batch", actor, batch), 200)]);
