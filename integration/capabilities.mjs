@@ -633,11 +633,11 @@ async function c4aApi(path, who = c4aConsumer, body, headers = {}, method) {
 async function c4aStart(body = executionBody(), key = crypto.randomUUID(), who = c4aConsumer) {
   return c4aApi("/v1/capability-executions", who, body, { "Idempotency-Key": key });
 }
-async function c4aWait(executionId, expected) {
+async function c4aWait(executionId, expected, who = c4aConsumer) {
   const deadline = Date.now() + 15000;
   let result;
   do {
-    result = await c4aApi(`/v1/capability-executions/${executionId}`);
+    result = await c4aApi(`/v1/capability-executions/${executionId}`, who);
     if (result.status === 200 && expected.includes(result.body.state)) return result.body;
     await new Promise(resolve => setTimeout(resolve, 100));
   } while (Date.now() < deadline);
@@ -660,8 +660,8 @@ async function c4aCreateGrant(reference = c4aReference, provider = c4aProvider, 
   const active = await activate(proposed, (await decision.json()).approvalId); assert.equal(active.status, 200);
   return { ...await active.json(), etag: active.headers.get("etag") };
 }
-async function c4aPublish(provider, version = "1.0.0") {
-  const id = `urn:junctura:capability:${provider.app.appId}:guarded-echo`;
+async function c4aPublish(provider, version = "1.0.0", slug = "guarded-echo") {
+  const id = `urn:junctura:capability:${provider.app.appId}:${slug}`;
   const body = { ...structuredClone(fixture), capabilityId: id, providerAppId: provider.app.appId, version, timeoutMs: 10000,
     requiredPermissions: [`urn:junctura:permission:${provider.app.appId}:invoke`] };
   const created = await api(`/v1/capabilities/${encodeURIComponent(id)}/versions`, owner, body); assert.equal(created.status, 201);
@@ -684,7 +684,7 @@ test("C4A real two-application OIDC invocation redeems a ticket and completes th
   c4aGrant = await c4aCreateGrant();
   assert.equal((await api("/v1/capability-executions", c4aConsumer, executionBody(), { "Idempotency-Key": crypto.randomUUID() })).status, 404, "normal gateway still has execution disabled");
   c4aFixture = await createRuntimeFixture({ origin, token: c4aProvider.token, providerAppId: c4aProvider.app.appId,
-    capability: c4aReference, tenantId: "tenant-a" });
+    capability: c4aReference, tenantId: "tenant-a", enforceAppAccess: true });
   const foreignProcess = await c4aFixture.forgeJob("tenant-b");
   assert.equal((await c4aFixture.engine(`/service/runtime/process-instances/${foreignProcess}`)).body.tenantId, "tenant-b");
   await c4aFixture.control("resume");
@@ -838,6 +838,108 @@ test("C4A real two-application OIDC invocation redeems a ticket and completes th
   const emergencyEntry = ownLog.entries.find(item => item.executionId === emergency.body.executionId);
   assert.deepEqual([emergencyEntry.emergency, emergencyEntry.review], [true, "justified"], "the person sees the emergency access and its review");
   trustCases.push({ schema: "SubjectAccessPage", value: ownLog });
+});
+
+test("one verified unit consent covers two independently authorized apps and follows the live assignment", { timeout: 120000 }, async () => {
+  const tenant = "tenant-a";
+  const unit = `${prefix}-recipient`, otherUnit = `${prefix}-other`;
+  const subjectId = `${prefix}:subject`;
+  const person = await verifiedSubject(await human("unit-subject", tenant, []), subjectId);
+  const user = await human("unit-reader", tenant, []);
+  const directory = await human("unit-directory", tenant, ["directory.write"]);
+  const consumers = [];
+  async function read(response, status) {
+    const body = await response.json();
+    assert.equal(response.status, status, body.error ?? "unexpected response status");
+    return body;
+  }
+  const setDirectory = async (path, body) => read(await api(`/v1/directory/${path}`, directory, body, {}, "PUT"), 201);
+  const callback = "http://127.0.0.1:9876/callback";
+  const capabilityId = c4aReference.capabilityId;
+  const consentPath = "/v1/me/consents";
+  const expiresAt = new Date(Date.now() + 3_600_000).toISOString();
+  const createConsent = async (recipientUnit, purpose = "unit_review") => api(consentPath, person, {
+    recipientUnit, capabilityId, purposes: [purpose], expiresAt,
+  }, { "Idempotency-Key": crypto.randomUUID() });
+  const context = { dataSubject: subjectId, dataSubjectKind: "canonical", purpose: "unit_review" };
+  const execution = executionBody("recipient-unit");
+  const call = (token, details = context, body = execution) => c4aStart({ ...body, context: details }, crypto.randomUUID(), token);
+  const deny = (result, status, code) => assert.deepEqual([result.status, result.body?.error], [status, code]);
+  try {
+    await setDirectory(`unit-types/${prefix}`, { name: "Capability consent fixture" });
+    for (const id of [unit, otherUnit]) {
+      await setDirectory(`units/${id}`, { name: id, unitType: prefix });
+      await setDirectory(`units/${id}/members/${user.id}`, { groups: [] });
+    }
+    await read(await createConsent(`${prefix}-missing`), 404);
+    const consent = await read(await createConsent(unit), 201);
+    trustCases.push({ schema: "SubjectConsent", value: consent });
+    assert.deepEqual([consent.recipientUnit, consent.state], [unit, "active"]);
+    for (const suffix of ["first", "second"]) {
+      const receiver = await authority.backend(`unit-${suffix}`, owner, approver, tenant, true, undefined, callback);
+      consumers.push(receiver);
+      const path = `/v1/applications/${receiver.app.appId}`;
+      await read(await api(path, owner, { ownerUnit: unit, deploymentUnits: [unit, otherUnit] }, { "If-Match": receiver.etag }, "PATCH"), 200);
+      receiver.assign = async id => read(await api(`${path}/assignments`, owner,
+        { unit: id, targetType: "subject", target: user.id, role: "editor" }), 200);
+      receiver.revoke = id => api(`${path}/assignments/${id}`, owner, undefined, {}, "DELETE");
+      receiver.exchange = async () => {
+        const subjectToken = await login(user.username, user.password, receiver.clientId, receiver.clientSecret);
+        return (await read(await api("/v1/token-exchange", await receiver.issueToken(), { subjectToken }), 200)).access_token;
+      };
+      receiver.assignment = await receiver.assign(unit);
+    }
+    const [first, second] = consumers;
+    deny(await call(await second.exchange()), 403, "capability_not_granted");
+    for (const receiver of consumers) await c4aCreateGrant(c4aReference, c4aProvider, receiver);
+    const alternate = (await c4aPublish(c4aProvider, "1.0.0", "alternate")).reference;
+    await c4aCreateGrant(alternate, c4aProvider, first);
+    const firstToken = await first.exchange();
+    deny(await call(firstToken, { ...context, purpose: "another_review" }), 403, "consent_missing");
+    deny(await call(firstToken, { ...context, dataSubject: `${prefix}:unknown` }), 404, "not_found");
+    deny(await call(firstToken, context, { ...execution, target: { kind: "capability", capability: alternate } }), 403, "consent_missing");
+    const firstExecution = await call(firstToken);
+    assert.equal(firstExecution.status, 202, firstExecution.body?.error);
+    const secondToken = await second.exchange();
+    const secondExecution = await call(secondToken);
+    assert.equal(secondExecution.status, 202, secondExecution.body?.error);
+    for (const [token, started] of [[firstToken, firstExecution], [secondToken, secondExecution]]) {
+      const completed = await c4aWait(started.body.executionId, ["succeeded"], token);
+      assert.deepEqual(completed.output, execution.input);
+    }
+    const { body: providerState } = await c4aFixture.providerState();
+    const used = providerState.last.authorization.context;
+    assert.equal(used.principalType, "user");
+    assert.equal(used.initiatingSubject, user.id);
+    assert.ok(consumers.some(receiver => receiver.app.appId === used.initiatingAppId));
+    assert.equal((await second.revoke(second.assignment.assignmentId)).status, 204);
+    deny(await call(secondToken), 403, "not_assigned_to_app");
+    await second.assign(otherUnit);
+    deny(await call(await second.exchange()), 403, "consent_missing");
+    await read(await api(`${consentPath}/${consent.consentId}/revoke`, person, {}), 200);
+    deny(await call(await first.exchange()), 403, "consent_revoked");
+    const expiring = await read(await createConsent(unit, "unit_expiry"), 201);
+    await sql(`UPDATE execution_private.subject_consents SET created_at=clock_timestamp()-interval '2 days',
+      expires_at=clock_timestamp()-interval '1 day' WHERE tenant_id='tenant-a' AND consent_id=${q(expiring.consentId)};`);
+    const firstTokenRenewed = await first.exchange();
+    deny(await call(firstTokenRenewed, { ...context, purpose: "unit_expiry" }), 403, "consent_expired");
+    deny(await c4aApi(`/v1/capability-executions/${firstExecution.body.executionId}`, firstTokenRenewed), 403, "consent_revoked");
+  } finally {
+    const units = [unit, otherUnit].map(q).join(",");
+    const appIds = consumers.map(receiver => q(receiver.app.appId)).join(",") || "NULL";
+    await sql(`DELETE FROM execution_private.subject_consents WHERE tenant_id='tenant-a' AND recipient_unit IN (${units});
+      DELETE FROM app_private.app_assignments WHERE tenant_id='tenant-a' AND app_id IN (${appIds});
+      UPDATE app_private.applications SET owner_unit=NULL,deployment_units='{}' WHERE tenant_id='tenant-a' AND app_id IN (${appIds});
+      DELETE FROM app_private.directory_memberships WHERE tenant_id='tenant-a' AND unit IN (${units});
+      DELETE FROM app_private.directory_members WHERE tenant_id='tenant-a' AND unit IN (${units});
+      DELETE FROM app_private.directory_units WHERE tenant_id='tenant-a' AND unit IN (${units});
+      DELETE FROM app_private.directory_unit_types WHERE tenant_id='tenant-a' AND unit_type=${q(prefix)};`);
+    const roots = await (await admin("groups?search=tenant-a&exact=true")).json();
+    const root = roots.find(group => group.path === "/tenant-a");
+    if (root) for (const group of await (await admin(`groups/${root.id}/children`)).json()) {
+      if (group.name === unit || group.name === otherUnit) await admin(`groups/${group.id}`, undefined, "DELETE");
+    }
+  }
 });
 
 test("verified identity preserves legacy consent isolation and gates planned routes", async () => {

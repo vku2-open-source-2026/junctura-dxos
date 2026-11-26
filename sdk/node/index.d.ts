@@ -293,8 +293,8 @@ export function createJuncturaClient(options: { baseUrl: string; issuer?: string
   withdrawCapabilityAccessRequest(requestId: string): Promise<CapabilityAccessRequest>;
   declineCapabilityAccessRequest(requestId: string, reason: string, options?: { userToken?: string }): Promise<CapabilityAccessRequest>;
   acceptCapabilityAccessRequest(requestId: string, options?: { userToken?: string }): Promise<CapabilityAccessRequest>;
-  execute(target: ExecutionTarget, input: Json, idempotencyKey?: string, context?: ExecutionContext): Promise<Execution>;
+  execute(target: ExecutionTarget, input: Json, idempotencyKey?: string, context?: ExecutionContext, options?: { userToken?: string }): Promise<Execution>;
   redeemTicket(invocation: { authorization: string | undefined; invocationId: string; input: Json }): Promise<TicketContext>;
-  execution(id: string): Promise<Execution>;
-  waitForExecution(id: string, options?: { timeoutMs?: number; intervalMs?: number; signal?: AbortSignal }): Promise<Execution>;
+  execution(id: string, options?: { userToken?: string }): Promise<Execution>;
+  waitForExecution(id: string, options?: { timeoutMs?: number; intervalMs?: number; signal?: AbortSignal; userToken?: string }): Promise<Execution>;
 }>;
