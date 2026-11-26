@@ -58,7 +58,7 @@ export function applicationToken(identity, secret, role = "junctura_app_api") {
       record_roles: identity.roles, app_roles: identity.appRoles, display_name: identity.preferredUsername,
     } : {}),
     ...(["junctura_capability_api", "junctura_trust_api"].includes(role) ? {
-      trust_writer: identity.roles.includes("core-writer"), units: identity.units,
+      trust_writer: identity.roles.includes("core-writer"), units: identity.units, groups: identity.groups,
     } : {}),
     ...(role === "junctura_directory_api" ? { directory_writer: identity.roles.includes("core-writer") } : {}),
     // The candidate subjectId travels to RPCs that verify the operator binding.

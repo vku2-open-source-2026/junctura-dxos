@@ -14,8 +14,9 @@ export const CONSENTS_PATH = "/v1/me/consents";
 const RESOURCE_CONSENTS_PATH = "/v1/me/resource-consents";
 const RESOURCE_REQUESTS_PATH = "/v1/resource-consent-requests";
 const SUBJECT_REQUESTS_PATH = "/v1/me/resource-consent-requests";
-export const isPlannedSubjectPath = path => /^\/v1\/me\/(?:data-access\/[^/]+\/flag|emergency-accesses\/[^/]+\/feedback)$/.test(path);
+export const isPlannedSubjectPath = path => /^\/v1\/me\/(?:data-access\/[^/]+\/flag|(?:emergency|exceptional)-accesses\/[^/]+\/feedback)$/.test(path);
 export const EMERGENCY_PATH = "/v1/emergency-accesses";
+const EXCEPTIONAL_PATH = "/v1/exceptional-accesses";
 
 const capabilityPattern = /^urn:junctura:capability:[0-9a-f-]{36}:[a-z][a-z0-9-]{0,62}$/;
 const purposePattern = /^[a-z][a-z0-9_]{1,62}$/;
@@ -95,7 +96,7 @@ async function command(config, identity, role, rpc, operation, payload) {
 
 export function isConsentPath(path) {
   if (typeof path !== "string") return false;
-  return [RESOURCE_CONSENTS_PATH, RESOURCE_REQUESTS_PATH, SUBJECT_REQUESTS_PATH, CONSENTS_PATH, EMERGENCY_PATH]
+  return [RESOURCE_CONSENTS_PATH, RESOURCE_REQUESTS_PATH, SUBJECT_REQUESTS_PATH, CONSENTS_PATH, EMERGENCY_PATH, EXCEPTIONAL_PATH]
     .some(base => path === base || path.startsWith(`${base}/`));
 }
 
@@ -184,12 +185,28 @@ export async function handleConsent(request, response, identity, config, url) {
     if (Object.keys(body).length) throw new HttpError(400, "invalid_consent");
     return json(response, 200, (await command(config, identity, "junctura_subject_api", "subject_consent", "revoke", { consentId: revoke[1] })).value);
   }
+  if (path === EXCEPTIONAL_PATH) {
+    if (request.method !== "GET") throw new HttpError(405, "method_not_allowed");
+    return json(response, 200, (await command(config, identity, "junctura_trust_api", "exceptional_review", "list", {})).value);
+  }
+  const exceptional = path.match(/^\/v1\/exceptional-accesses\/([^/]+)\/review$/);
+  if (exceptional) {
+    if (!uuidPattern.test(exceptional[1])) throw new HttpError(400, "invalid_exceptional_path");
+    if (request.method !== "POST") throw new HttpError(405, "method_not_allowed");
+    const body = await readObject(request);
+    if (Object.keys(body).sort().join(",") !== "decision,reason") throw new HttpError(400, "invalid_exceptional_review");
+    const result = await command(config, identity, "junctura_trust_api", "exceptional_review", "review",
+      { executionId: exceptional[1], ...body });
+    return json(response, 200, result.value);
+  }
   if (path === EMERGENCY_PATH) {
+    response.setHeader("Deprecation", "@1795651200");
     if (request.method !== "GET") throw new HttpError(405, "method_not_allowed");
     return json(response, 200, (await command(config, identity, "junctura_trust_api", "emergency_review", "list", {})).value);
   }
   const review = path.match(/^\/v1\/emergency-accesses\/([^/]+)\/review$/);
   if (review) {
+    response.setHeader("Deprecation", "@1795651200");
     if (review[1].length !== 36 || !uuidPattern.test(review[1])) throw new HttpError(400, "invalid_emergency_path");
     if (request.method !== "POST") throw new HttpError(405, "method_not_allowed");
     requireWriter(identity);

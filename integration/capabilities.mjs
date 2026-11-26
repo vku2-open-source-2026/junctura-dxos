@@ -840,6 +840,82 @@ test("C4A real two-application OIDC invocation redeems a ticket and completes th
   trustCases.push({ schema: "SubjectAccessPage", value: ownLog });
 });
 
+test("exceptional access queues one review for an eligible reader and preserves the legacy result", { timeout: 120000 }, async () => {
+  const unit = `${prefix}-review`, tenant = "tenant-a", group = "inspectors";
+  const reviewer = await human("exception-reviewer", tenant, ["audit.read"]);
+  const writerRole = await (await admin("roles/core-writer")).json();
+  assert.equal((await admin(`users/${reviewer.id}/role-mappings/realm`, [writerRole], "DELETE")).status, 204);
+  const [root] = await (await admin("groups?search=tenant-a&exact=true")).json();
+  const newGroup = async (parent, name) => {
+    const response = await admin(`groups/${parent}/children`, { name }, "POST");
+    assert.equal(response.status, 201);
+    return response.headers.get("location").split("/").at(-1);
+  };
+  const unitGroup = await newGroup(root.id, unit);
+  try {
+    const candidate = await newGroup(unitGroup, group);
+    await sql(`INSERT INTO app_private.directory_unit_types(tenant_id,unit_type,name,generation,synced_generation)
+      VALUES('tenant-a',${q(unit)},'Review type',1,1);
+      INSERT INTO app_private.directory_units(tenant_id,unit,unit_type,name,generation,synced_generation)
+      VALUES('tenant-a',${q(unit)},${q(unit)},'Review team',1,1);
+      INSERT INTO app_private.directory_groups(tenant_id,unit,unit_group,name,generation,synced_generation)
+      VALUES('tenant-a',${q(unit)},${q(group)},'Inspectors',1,1);
+      INSERT INTO app_private.exceptional_review_groups VALUES('tenant-a',${q(unit)},${q(group)});`);
+    const inbox = "/v1/exceptional-accesses";
+    reviewer.token = await login(reviewer.username, reviewer.password, reviewer.clientId);
+    assert.equal((await api(inbox, reviewer)).status, 403);
+    assert.equal((await admin(`users/${reviewer.id}/groups/${candidate}`, undefined, "PUT")).status, 204);
+    reviewer.token = await login(reviewer.username, reviewer.password, reviewer.clientId);
+
+    const body = { ...executionBody("exceptional"), context: {
+      purpose: "urgent_response", dataSubject: owner.id, exceptionalAccess: true,
+      justification: "Person unreachable during the review fixture",
+    } };
+    const key = crypto.randomUUID();
+    const started = await c4aStart(body, key);
+    assert.equal(started.status, 202, started.body?.error);
+    await c4aWait(started.body.executionId, ["succeeded"]);
+    const redeemed = (await c4aFixture.providerState()).body.last.authorization;
+    trustCases.push({ schema: "TicketResult", value: redeemed });
+    assert.deepEqual([redeemed.context.exceptionalAccess, redeemed.context.emergency], [true, true]);
+    const executionId = started.body.executionId;
+    const listed = await api(inbox, reviewer);
+    assert.equal(listed.status, 200, await listed.clone().text());
+    const tasks = (await listed.json()).tasks.filter(task => task.executionId === executionId);
+    assert.equal(tasks.length, 1);
+    assert.equal(tasks[0].taskId, executionId);
+    assert.equal(tasks[0].state, "pending");
+    assert.equal(tasks[0].capabilityId, c4aReference.capabilityId);
+    assert.equal(tasks[0].subjectId, owner.id);
+    assert.equal(tasks[0].actor, c4aConsumer.subject);
+
+    const path = `${inbox}/${executionId}/review`;
+    const invalid = await api(path, reviewer, { decision: "valid", reason: " " });
+    assert.equal(invalid.status, 400);
+    const decision = { decision: "valid", reason: "Verified against the request" };
+    assert.equal((await api(path, stranger, decision)).status, 403);
+    const reviewed = await api(path, reviewer, decision);
+    assert.equal(reviewed.status, 200, await reviewed.clone().text());
+    const receipt = await reviewed.json();
+    assert.equal(receipt.state, "valid");
+    assert.deepEqual(await (await api(path, reviewer, decision)).json(), receipt);
+    assert.equal((await api(path, reviewer, { ...decision, decision: "invalid" })).status, 409);
+    const legacy = await api("/v1/emergency-accesses", approver);
+    assert.match(legacy.headers.get("deprecation"), /^@/);
+    assert.ok((await legacy.json()).reviews.some(item => item.executionId === executionId && item.state === "justified"));
+    const events = await sql(`SELECT string_agg(event, ',' ORDER BY occurred_at) FROM app_private.audit
+      WHERE tenant_id='tenant-a' AND resource_id=${q(executionId)}
+      AND event IN ('execution.exceptional_review_queued','execution.exceptional_reviewed');`);
+    assert.equal(events.stdout.trim(), "execution.exceptional_review_queued,execution.exceptional_reviewed");
+  } finally {
+    await sql(`DELETE FROM app_private.exceptional_review_groups WHERE tenant_id='tenant-a' AND unit=${q(unit)};
+      DELETE FROM app_private.directory_groups WHERE tenant_id='tenant-a' AND unit=${q(unit)};
+      DELETE FROM app_private.directory_units WHERE tenant_id='tenant-a' AND unit=${q(unit)};
+      DELETE FROM app_private.directory_unit_types WHERE tenant_id='tenant-a' AND unit_type=${q(unit)};`);
+    await admin(`groups/${unitGroup}`, undefined, "DELETE");
+  }
+});
+
 test("verified identity preserves legacy consent isolation and gates planned routes", async () => {
   const identity = await (await api("/v1/identity", owner)).json();
   assert.equal(identity.subjectId, stranger.id);
