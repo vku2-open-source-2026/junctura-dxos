@@ -474,3 +474,19 @@ npm run test:recovery
 - App suspension/revocation blocks consumer discovery/invocation and v2 use (owners/publishers keep registry
   management), but does not disable OAuth clients or change generic legacy record access. Owner transfer/physical deletion have no API; returned metadata cannot be recalled.
 - Trusted database/host operators remain necessary; a `junctura_data`-only restore excludes identity, engine history and object data (use `npm run backup`/`restore` for all stores).
+
+
+### Exceptional access review
+
+Use `context.exceptionalAccess: true` with a verified context, subject and
+justification. Core records one review task after a provider redeems the access
+ticket. A reader with `audit.read` and membership in the configured reviewer
+group can list tasks at `GET /v1/exceptional-accesses` and submit a `valid` or
+`invalid` decision with a reason at `POST /v1/exceptional-accesses/{executionId}/review`.
+Identical decisions from the same reviewer return the original receipt.
+
+Operators bind each tenant to a live directory group in
+`app_private.exceptional_review_groups`. The group binding applies to all tasks
+in that tenant. The `emergency` context flag, `/v1/emergency-accesses` and its
+review route remain available for one release. New and legacy review links use
+the same terminal state.
