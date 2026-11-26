@@ -49,7 +49,7 @@ globalThis.fetch = async (url, init) => {
 };
 const config = { issuer: process.env.OIDC_ISSUER, identityUrl: process.env.IDENTITY_URL, clientSecret: process.env.CORE_CLIENT_SECRET,
   dataUrl: process.env.DATA_URL, dataSecret: process.env.DATA_JWT_SECRET, workflowUrl: process.env.WORKFLOW_URL,
-  workflowPassword: process.env.WORKFLOW_ADMIN_PASSWORD, legacyResourceClients: [] };
+  workflowPassword: process.env.WORKFLOW_ADMIN_PASSWORD, legacyResourceClients: [], enforceAppAccess: options.enforceAppAccess };
 const runtime = (options.composition ? createCompositionRuntime : createCapabilityRuntime)(config, { origins: [], testOrigins: options.origins ?? [options.origin], testAddresses: options.addresses ?? [options.address],
   allowTestNetwork: true, ca: readFileSync("/tls/provider-ca.pem") }, { workerEnabled: false });
 if (options.composition) config.compositionRuntime = runtime; else config.executionRuntime = runtime;

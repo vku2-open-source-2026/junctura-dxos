@@ -55,8 +55,12 @@ export async function readResourceConsent(request, config, identity, target) {
 }
 
 function validateConsentBody(body) {
-  if (Object.keys(body).sort().join(",") !== "capabilityId,consumerAppId,expiresAt,purposes" ||
-    !uuidPattern.test(body.consumerAppId) || !capabilityPattern.test(body.capabilityId) ||
+  const keys = Object.keys(body).sort().join(",");
+  const appRecipient = keys === "capabilityId,consumerAppId,expiresAt,purposes" &&
+    typeof body.consumerAppId === "string" && uuidPattern.test(body.consumerAppId);
+  const unitRecipient = keys === "capabilityId,expiresAt,purposes,recipientUnit" &&
+    typeof body.recipientUnit === "string" && /^[a-z][a-z0-9-]{1,63}$/.test(body.recipientUnit);
+  if ((!appRecipient && !unitRecipient) || typeof body.capabilityId !== "string" || !capabilityPattern.test(body.capabilityId) ||
     !Array.isArray(body.purposes) || body.purposes.length < 1 || body.purposes.length > 8 ||
     body.purposes.some(purpose => !purposePattern.test(purpose)) ||
     typeof body.expiresAt !== "string" ||
@@ -64,8 +68,7 @@ function validateConsentBody(body) {
     !Number.isFinite(Date.parse(body.expiresAt))) {
     throw new HttpError(400, "invalid_consent");
   }
-  return { consumerAppId: body.consumerAppId, capabilityId: body.capabilityId,
-    purposes: body.purposes, expiresAt: body.expiresAt };
+  return body;
 }
 
 async function readObject(request) {
@@ -170,6 +173,7 @@ export async function handleConsent(request, response, identity, config, url) {
     }
     if (request.method !== "POST") throw new HttpError(405, "method_not_allowed");
     const consent = validateConsentBody(await readObject(request));
+    if (consent.recipientUnit && (identity.actor || !identity.subjectId)) throw new HttpError(403, "verified_subject_required");
     const key = request.headers["idempotency-key"];
     if (!uuidPattern.test(key ?? "")) throw new HttpError(400, "invalid_request");
     const result = await command(config, identity, "junctura_subject_api", "subject_consent", "create",
