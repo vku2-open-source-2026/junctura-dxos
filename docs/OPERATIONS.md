@@ -253,8 +253,10 @@ The Vite development server proxies both `/identity` and `/api` instead. See the
 Use a dedicated host with synthetic data, Node 24, Docker Compose, a domain and an HTTPS proxy.
 Provisioning creates two environment tenants:
 
-- `demo`: one read-only account `demo` (`core-reader`, `audit.read`), the only account in
-  public login hints.
+- `demo`: read-only accounts `demo` and `audit-inspector` (`core-reader`, `audit.read`).
+  The inspector reads and verifies audit in the `demo` tenant. Public login hints include only `demo`.
+  Provisioning restores the Console's `basic` and `roles` scopes on existing realms so Core receives
+  the login subject and roles during token introspection.
 - `production`: `admin1`–`admin3` and the read-only judge `giamkhao`; never published.
 
 `tenant-a`/`tenant-b` remain test/CI fixtures and are not environment tenants. Provisioning
@@ -301,7 +303,7 @@ curl -fsS -H 'Accept: application/json' https://demo.example/login-hints.json
 
 Open `https://demo.example/`. Public hints prefill `demo` (`core-reader`, `audit.read`);
 Core denies its registrations, approvals and revocations. Type passwords from
-`.junctura/demo-accounts.json` for `admin1`–`admin3` and `giamkhao`. Console tokens stay in
+`.junctura/demo-accounts.json` for `audit-inspector`, `admin1`–`admin3` and `giamkhao`. Console tokens stay in
 tab memory; reload signs out.
 
 `demo:seed` writes simulated data through the real Gateway as the demo backend applications.

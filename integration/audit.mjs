@@ -29,8 +29,8 @@ const claims = (tenant, actor, actorIssuer = issuer) => ({
 const asRole = (role, actorClaims, statement) =>
   `SET ROLE ${role}; SELECT set_config('request.jwt.claims',${q(JSON.stringify(actorClaims))},false); ${statement}`;
 const asOwner = (actorClaims, statement) => asRole("junctura_app_owner", actorClaims, statement);
-const read = async (tenant, actor, payload) => {
-  const output = await sql(asRole("junctura_audit_api", claims(tenant, actor),
+const read = async (tenant, actor, payload, actorIssuer = issuer) => {
+  const output = await sql(asRole("junctura_audit_api", claims(tenant, actor, actorIssuer),
     `SELECT core.audit_query(${q(JSON.stringify(payload))}::jsonb);`));
   return JSON.parse(lastLine(output));
 };
@@ -199,6 +199,18 @@ test("tenant/time filtered pagination rejects foreign tenants, unknown filters a
   assert.equal(foreign.status, 200);
   assert.ok(foreign.value.items.length > 0);
   assert.ok(foreign.value.items.every(item => item.tenantId === tenantB));
+  const filters = { actor: readerA.subject, action: "audit.page_fixture", limit: 2 };
+  const filtered = await read(tenantA, readerA, filters);
+  assert.equal(filtered.status, 200);
+  assert.equal(filtered.value.items.length, 2);
+  assert.ok(filtered.value.items.every(item => item.subject === readerA.subject && expected.includes(item.resourceId)));
+  const next = await read(tenantA, readerA, { ...filters, cursor: filtered.value.nextCursor });
+  assert.equal(next.value.items.length, 2);
+  assert.equal((await read(tenantA, readerA, { ...filters, actor: readerB.subject,
+    cursor: filtered.value.nextCursor })).error, "invalid_cursor");
+  assert.equal((await read(tenantA, { ...readerA, client: readerB.client }, filters)).status, 403);
+  assert.equal((await read(tenantA, readerA, filters, "https://other.example.invalid")).status, 403);
+  assert.equal((await read(tenantB, readerA, filters)).status, 403);
   const unauthorized = await read(tenantA, stranger, { limit: 1 });
   assert.equal(unauthorized.status, 403);
   const unknown = await read(tenantA, { subject: `unknown-${suffix}`, client: "unknown" }, { limit: 1 });
