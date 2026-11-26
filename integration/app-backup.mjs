@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Junctura Contributors
 // SPDX-License-Identifier: Apache-2.0
 import assert from "node:assert/strict";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -59,7 +59,30 @@ test("backup restore preserves record/file data, another app and the original au
     writeFileSync(unexpected, "");
     await assert.rejects(validateArchive(archive), /Unexpected archive contents/);
     rmSync(unexpected);
-    assert.ok(readFileSync(manifest).length > 0);
+    const originalManifest = readFileSync(manifest);
+    async function rejectBackupEdit(edit, failure) {
+      const document = JSON.parse(original);
+      const receipt = JSON.parse(originalManifest);
+      edit(document, receipt);
+      const bytes = JSON.stringify(document);
+      receipt.files.find(file => file.name === "snapshot.json").sha256 = createHash("sha256").update(bytes).digest("hex");
+      try {
+        writeFileSync(snapshot, bytes);
+        writeFileSync(manifest, JSON.stringify(receipt));
+        await assert.rejects(main(["restore", archive, "--yes", "--replace"]), failure);
+      } finally {
+        writeFileSync(snapshot, original);
+        writeFileSync(manifest, originalManifest);
+      }
+    }
+    await rejectBackupEdit(document => {
+      document.rows["app_private.resource_shares"].push({ tenant_id: "tenant-a", owner_app_id: first.appId,
+        share_id: randomUUID(), grantee_app_id: randomUUID(), resource_type: "record", resource_id: known.id, action: "read" });
+    }, /Missing dependency/);
+    await rejectBackupEdit((document, receipt) => {
+      document.schemaVersion += 100;
+      receipt.schemaVersion = document.schemaVersion;
+    }, /Target database is older/);
     const added = await jsonResult(await create(first, "after backup"), 201);
     const blocker = `fail_${prefix}`;
     await sql(`CREATE FUNCTION app_private.${blocker}() RETURNS trigger LANGUAGE plpgsql AS $body$

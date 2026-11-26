@@ -203,7 +203,7 @@ object metadata. The transaction keeps source audit evidence separate from the t
 chain and writes one restore event. A failed transaction leaves the previous object
 versions available. Existing archives retain their read-only lifecycle.
 
-The CLI refuses backup or restore with unresolved uploads, owned queues, owned
+The CLI refuses backup or restore with unresolved uploads, app assignments, owned queues,
 published capability state or consumer executions. It does not capture enrollment
 credentials, identity secrets, active Keycloak sessions or a Flowable execution. The
 archive may contain application data and requires the same access control as the source.

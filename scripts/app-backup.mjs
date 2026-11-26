@@ -117,6 +117,7 @@ async function objectBytes(method, tenant, appId, id, version, transfer = {}) {
 function unsupported(tenant, app) {
   return [
     ["app_private.object_upload_staging", "owner_app_id"],
+    ["app_private.app_assignments", "app_id"],
     ["app_private.message_queues", "owner_app_id"],
     ["app_private.capability_versions", "provider_app_id"],
     ["execution_private.executions", "consumer_app_id"],
@@ -181,6 +182,26 @@ async function backup(options, scratch) {
   } finally { if (!audited) rmSync(temporary, { recursive: true, force: true }); }
 }
 
+function requireDependencies(snapshot) {
+  const source = table => `jsonb_populate_recordset(NULL::${table}, ${sqlQuote(JSON.stringify(snapshot.rows[table]))}::jsonb)`;
+  return `
+    IF EXISTS (SELECT FROM ${source("app_private.resource_shares")} s
+      WHERE (s.grantee_app_id IS NOT NULL AND NOT EXISTS (SELECT FROM app_private.applications a
+              WHERE (a.tenant_id,a.app_id)=(s.tenant_id,s.grantee_app_id)))
+        OR (s.grantee_app_group IS NOT NULL AND NOT EXISTS (SELECT FROM app_private.app_groups g
+              WHERE (g.tenant_id,g.app_group)=(s.tenant_id,s.grantee_app_group))))
+      THEN RAISE EXCEPTION 'Missing dependency for a resource share'; END IF;
+    IF EXISTS (SELECT FROM ${source("app_private.record_read_grants")} r
+      WHERE NOT EXISTS (SELECT FROM app_private.principals p
+        WHERE (p.tenant_id,p.issuer,p.subject,p.management_client)=(r.tenant_id,r.issuer,r.subject,r.management_client)))
+      THEN RAISE EXCEPTION 'Missing dependency for a record read grant'; END IF;
+    IF EXISTS (SELECT FROM ${source("app_private.audit_app_units")} r
+      WHERE NOT EXISTS (SELECT FROM app_private.directory_units u
+        WHERE (u.tenant_id,u.unit)=(r.tenant_id,r.unit) AND NOT u.pending_delete))
+      THEN RAISE EXCEPTION 'Missing dependency for an audit unit'; END IF;
+  `;
+}
+
 function targetChecks(snapshot, replace) {
   const { tenant, appId, schemaVersion, issuer, client, owner, provider } = snapshot;
   const t = sqlQuote(tenant), a = sqlQuote(appId);
@@ -198,6 +219,7 @@ function targetChecks(snapshot, replace) {
     IF (SELECT max(version) FROM core.schema_migrations)<${schemaVersion}
       THEN RAISE EXCEPTION 'Target database is older than the backup'; END IF;
     IF ${unsupported(t, a)} THEN RAISE EXCEPTION 'Target application has unsupported state'; END IF;
+    ${requireDependencies(snapshot)}
     ${replace ? "" : `IF ${dataTables.map(([table, column]) => `EXISTS (SELECT FROM ${table} WHERE ${owned(column)})`).join(" OR ")}
         THEN RAISE EXCEPTION 'Target application has existing state, use --replace'; END IF;`}
     `;
