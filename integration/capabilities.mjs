@@ -163,7 +163,7 @@ before(async () => {
   }
 
   owner = await human("owner", "tenant-a", ["applications.register", "capabilities.write", "capabilities.approve", "trust.write", "trust.approve"]);
-  approver = await human("approver", "tenant-a", ["applications.approve", "trust.approve", "capabilities.approve"]);
+  approver = await human("approver", "tenant-a", ["applications.approve", "trust.approve", "capabilities.approve", "audit.read"]);
   publisher = await human("publisher", "tenant-a", ["capabilities.write", "capabilities.publish"]);
   stranger = await human("stranger", "tenant-a", ["capabilities.write", "trust.write"]);
   foreign = await human("foreign", "tenant-b", ["applications.register", "capabilities.write", "capabilities.approve", "trust.write"]);
@@ -380,6 +380,21 @@ test("separate exact approval is consumed once under concurrent activation; revo
   assert.equal((await activate({ ...g, etag: revoked.headers.get("etag") }, approvalIds[1 - consumedIndex])).status, 409);
   const history = await sql(`SELECT count(*) FROM app_private.audit WHERE resource_id=${q(g.grantId)} AND event IN ('grant.proposed','grant.activated','grant.revoked');`);
   assert.equal(history.stdout.trim(), "3"); assert.equal(active.revision, 2);
+  // The audit events correlate to the HTTP response request id; replayed
+  // activations and revocations answer 409 and never add a second event.
+  const requestId = response => response.headers.get("x-request-id").split(",").at(-1).trim();
+  const grantEvents = async action => (await api(`/v1/audit-events?limit=100&action=${action}`, approver)).json()
+    .then(page => page.items.filter(item => item.resourceId === g.grantId));
+  const [proposedEvents, activated, revokedEvents] = await Promise.all(
+    ["grant.proposed", "grant.activated", "grant.revoked"].map(grantEvents));
+  assert.equal(proposedEvents.length, 1);
+  assert.ok(!("requestId" in proposedEvents[0]), "out-of-scope events keep their historical projection");
+  assert.equal(activated.length, 1, "the replayed activation adds no second event");
+  assert.equal(activated[0].requestId, requestId(activeResponse), "activation correlates to its HTTP response request id");
+  assert.equal(activated[0].reason, null);
+  assert.equal(revokedEvents.length, 1, "the replayed revocation adds no second event");
+  assert.equal(revokedEvents[0].requestId, requestId(revoked), "revocation correlates to its HTTP response request id");
+  assert.equal(revokedEvents[0].reason, "technical terminal revocation", "the revoke reason stays separate from the correlation");
 });
 
 test("trust graph shows exact grants to administrators and owned providers only", async () => {

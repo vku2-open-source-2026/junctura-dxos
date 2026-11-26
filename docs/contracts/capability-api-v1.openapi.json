@@ -8207,6 +8207,16 @@
                 "type": "null"
               }
             ]
+          },
+          "requestId": {
+            "anyOf": [
+              {
+                "$ref": "./foundation-api.openapi.json#/components/schemas/Uuid"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "required": [

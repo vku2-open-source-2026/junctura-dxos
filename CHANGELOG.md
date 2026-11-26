@@ -12,6 +12,13 @@ All notable changes to Junctura are recorded here. Versions follow
 
 ## Unreleased
 
+- **Audit request correlation (issue #97):** migration 075 seals an optional server-derived
+  `request_id` into the audit chain for `grant.activated`, `grant.revoked`,
+  `application.assignment_granted` and `application.assignment_revoked`, correlated with the
+  `X-Request-Id` of the initiating HTTP response and preserved across pending provider retries.
+  Historical version 1/2 hashes are unchanged and `reason` keeps its existing semantics;
+  management listing and export expose the correlation as `requestId`.
+
 - **Capability catalog and access requests (issue #49)** adds a cursor-paged catalog of latest
   visible published versions with caller access status and discover-gated manifests. Migration 061
   adds tenant-scoped requests with audited withdrawal, decline and acceptance. Acceptance creates

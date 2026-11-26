@@ -158,7 +158,8 @@ export function createApi(config) {
       const requestId = requestIdFor(request);
       response.setHeader("X-Request-Id", requestId);
       try {
-        const identity = await authorize(request, true);
+        // The request id rides the internal token so application audit events correlate to this response.
+        const identity = { ...await authorize(request, true), requestId };
         return await handleApplications(request, response, identity, config, new URL(request.url, "http://core"));
       } catch (error) {
         if (error.status === 413) response.setHeader("Connection", "close");
@@ -299,7 +300,7 @@ export function createApi(config) {
       response.setHeader("X-Request-Id", requestId);
       try {
         const handler = accessRequest ? handleCapabilityAccessRequests : handleTrust;
-        return await handler(request, response, await authorize(request, true), config, new URL(request.url, "http://core"));
+        return await handler(request, response, { ...await authorize(request, true), requestId }, config, new URL(request.url, "http://core"));
       } catch (error) {
         if (error.status === 413) response.setHeader("Connection", "close");
         return json(response, error instanceof HttpError ? error.status : 503,
