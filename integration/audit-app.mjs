@@ -101,6 +101,36 @@ test("application audit shares the platform chain and enforces archive, regulato
   assert.equal((await query({ subjectId: body.subjectId }, regulator)).value.items.length, 1);
   assert.equal((await query({ unit: "unit-b" }, regulator)).status, 403);
   assert.deepEqual((await query({}, { ...regulator, units: ["unit-b"] })).value.items, []);
+  const inspector = { ...management, resource_writer: false };
+  const unitPage = await query({ unit: "unit-a", limit: 1 }, inspector);
+  assert.ok(unitPage.value.nextCursor);
+  const nextUnitPage = await query({ unit: "unit-a", limit: 1, cursor: unitPage.value.nextCursor }, inspector);
+  assert.deepEqual([...unitPage.value.items, ...nextUnitPage.value.items], managementItems.slice(0, 2));
+  assert.ok(unitPage.value.items.every(item => !("actor" in item) && !("subjectId" in item)));
+  assert.deepEqual((await query({ unit: "unit-b" }, inspector)).value.items, []);
+  assert.deepEqual((await query({ actor: management.sub }, inspector)).value.items, [managementItems[2]]);
+  assert.deepEqual((await query({ actor: claims.sub }, inspector)).value.items, []);
+  assert.equal((await audit(`core.audit_app_append(${sqlJson({ body, key: randomUUID() })})`, inspector)).status, 403);
+  const filters = { unit: "unit-a", actor: claims.sub, action: body.action,
+    from: accepted.value.occurredAt, to: accepted.value.occurredAt };
+  const selected = (await query(filters, regulator)).value.items;
+  assert.deepEqual(selected.map(item => item.eventId), [accepted.value.eventId]);
+  assert.deepEqual((await query({ unit: "unit-a", actor: claims.sub, action: "record.restricted" }, regulator)).value.items, []);
+  assert.equal((await archive("start", { unit: "unit-b", actor: claims.sub }, regulator)).status, 403);
+  for (const [who, filter, expected] of [[inspector, { unit: "unit-a" }, managementItems.slice(0, 2)],
+    [regulator, filters, selected]]) {
+    const exportSnapshot = await archive("start", filter, who);
+    assert.equal(exportSnapshot.status, 200);
+    assert.equal(exportSnapshot.value.head.sequence, 3);
+    const payload = { snapshotId: exportSnapshot.value.snapshotId };
+    try {
+      const exported = await archive("page", payload, who);
+      assert.deepEqual(exported.value.lines.map(line => line.event).sort((a, b) => a.eventId.localeCompare(b.eventId)),
+        [...expected].sort((a, b) => a.eventId.localeCompare(b.eventId)));
+    } finally {
+      await archive("end", payload, who);
+    }
+  }
   // Every cursor failure class answers invalid_cursor, not invalid_audit_query.
   assert.equal((await query({ app: "self", cursor: "zz" }, claims)).error, "invalid_cursor");
   assert.equal((await query({ app: "self", cursor: "ff".repeat(70) }, claims)).error, "invalid_cursor");
@@ -139,7 +169,8 @@ test("application audit shares the platform chain and enforces archive, regulato
 
   await sql(`UPDATE app_private.audit_app_payloads SET visible_to_subject=false
     WHERE tenant_id=${q(tenant)} AND event_id=${q(accepted.value.eventId)};`);
-  assert.equal((await verify()).value.firstBreak.reason, "content_modified");
+  assert.deepEqual((await verify()).value.firstBreak, { reason: "content_modified",
+    eventId: accepted.value.eventId, chainSeq: page.value.lines.find(line => line.event.eventId === accepted.value.eventId).sequence });
   await sql(`UPDATE app_private.audit_app_payloads SET visible_to_subject=true
     WHERE tenant_id=${q(tenant)} AND event_id=${q(accepted.value.eventId)};
     DELETE FROM app_private.audit_app_payloads WHERE tenant_id=${q(tenant)} AND event_id=${q(restricted.value.eventId)};
@@ -225,11 +256,12 @@ test("gateway append, self query and NDJSON export match the application audit c
     assert.equal(posted.status, 201, await posted.clone().text());
     const receipt = await posted.json();
     assert.deepEqual(await (await send(body, key)).json(), receipt);
-    const listed = await get("/v1/audit-events?app=self&action=record.viewed");
+    const auditFilters = new URLSearchParams({ app: "self", action: body.action, actor: login });
+    const listed = await get(`/v1/audit-events?${auditFilters}`);
     assert.equal(listed.status, 200, await listed.clone().text());
     const page = await listed.json();
     assert.deepEqual(page.items.map(item => item.eventId), [receipt.eventId]);
-    const exported = await get("/v1/audit-events:export?app=self");
+    const exported = await get(`/v1/audit-events:export?${auditFilters}`);
     assert.equal(exported.status, 200, await exported.clone().text());
     assert.match(exported.headers.get("content-type"), /^application\/x-ndjson/);
     const lines = (await exported.text()).trimEnd().split("\n").map(line => JSON.parse(line));

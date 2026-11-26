@@ -4530,7 +4530,7 @@
       "get": {
         "operationId": "queryAppAuditEvents",
         "summary": "Query authorized audit events",
-        "description": "app=self selects only events of the verified app. Otherwise a caller with the verified regulator role sees application events for assigned units, with actor, subjectId, resourceRef, purpose and meta withheld for restricted events. A management principal with audit.read can see tenant platform audit items and the structural projection of app events. subjectId filtering is unavailable in the management view. Unit and actor context come from verified identity. Results are ordered by occurredAt and eventId descending. Keep scope and filters unchanged with nextCursor. Existing management clients may use since and until and keep the same platform item fields. The action filter matches the event field on platform items.",
+        "description": "app=self selects only events of the verified app. Otherwise a caller with the verified regulator role sees application events for assigned units, with actor, subjectId, resourceRef, purpose and meta withheld for restricted events. A management principal with audit.read can see tenant platform audit items and the structural projection of app events. The actor filter matches the stored login or service actor. Management can match platform actors and filter app metadata by unit within the tenant. Regulators can match actors on standard events in their assigned units. The app self view can match its own actors. subjectId filtering remains unavailable in the management view. Results are ordered by occurredAt and eventId descending. Keep scope and filters unchanged with nextCursor. Existing management clients may use since and until and keep the same platform item fields. The action filter matches the event field on platform items.",
         "tags": [
           "audit-events"
         ],
@@ -4566,6 +4566,18 @@
             "example": "record.viewed"
           },
           {
+            "name": "actor",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255,
+              "pattern": "^[^\\u0000-\\u001f\\u007f]+$"
+            },
+            "example": "login-42",
+            "description": "Exact actor ID from the verified audit entry. Redacted actors do not match."
+          },
+          {
             "name": "subjectId",
             "in": "query",
             "schema": {
@@ -4582,7 +4594,7 @@
               "pattern": "^[a-z][a-z0-9-]{1,63}$"
             },
             "example": "unit-a",
-            "description": "Regulator filter for an assigned unit."
+            "description": "Management can filter within its tenant. Regulators can filter only an assigned unit."
           },
           {
             "name": "from",
@@ -4822,7 +4834,7 @@
       "get": {
         "operationId": "exportAppAuditEvents",
         "summary": "Export an authorized audit view",
-        "description": "app=self selects only events of the verified app. Otherwise a caller with the verified regulator role sees application events for assigned units, with actor, subjectId, resourceRef, purpose and meta withheld for restricted events. A management principal with audit.read can see tenant platform audit items and the structural projection of app events. subjectId filtering is unavailable in the management view. Unit and actor context come from verified identity. Export a consistent snapshot up to the tenant chain head. Each tenant can open two snapshots at a time. An export matching more than 10,000 events fails with 400 audit_export_too_large; narrow the time range and retry. The first line identifies the head even for an empty result. An empty tenant chain has sequence 0 and the zero hash of 64 zeros, which the chain verifier also accepts as the genesis predecessor. Event lines carry their chain sequence and stored digest for reconciliation. Scoped exports can have gaps and redacted fields; verify the full tenant chain through the existing privileged verify endpoint.",
+        "description": "app=self selects only events of the verified app. Otherwise a caller with the verified regulator role sees application events for assigned units, with actor, subjectId, resourceRef, purpose and meta withheld for restricted events. A management principal with audit.read can see tenant platform audit items and the structural projection of app events. The actor filter matches the stored login or service actor. Management can match platform actors and filter app metadata by unit within the tenant. Regulators can match actors on standard events in their assigned units. The app self view can match its own actors. subjectId filtering remains unavailable in the management view. Export a consistent snapshot up to the tenant chain head. Each tenant can open two snapshots at a time. An export matching more than 10,000 events fails with 400 audit_export_too_large; narrow the time range and retry. The first line identifies the head even for an empty result. An empty tenant chain has sequence 0 and the zero hash of 64 zeros, which the chain verifier also accepts as the genesis predecessor. Event lines carry their chain sequence and stored digest for reconciliation. Scoped exports can have gaps and redacted fields; verify the full tenant chain through the existing privileged verify endpoint.",
         "tags": [
           "audit-events"
         ],
@@ -4858,6 +4870,18 @@
             "example": "record.viewed"
           },
           {
+            "name": "actor",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255,
+              "pattern": "^[^\\u0000-\\u001f\\u007f]+$"
+            },
+            "example": "login-42",
+            "description": "Exact actor ID from the verified audit entry. Redacted actors do not match."
+          },
+          {
             "name": "subjectId",
             "in": "query",
             "schema": {
@@ -4874,7 +4898,7 @@
               "pattern": "^[a-z][a-z0-9-]{1,63}$"
             },
             "example": "unit-a",
-            "description": "Regulator filter for an assigned unit."
+            "description": "Management can filter within its tenant. Regulators can filter only an assigned unit."
           },
           {
             "name": "from",

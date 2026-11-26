@@ -24,7 +24,7 @@ export const AUDIT_EXPORT_PATH = "/v1/audit-events:export";
 const actionPattern = /^[a-z][a-z0-9_.-]{1,63}$/;
 const subjectPattern = /^[^\u0000-\u001f\u007f]{1,255}$/u;
 const unitPattern = /^[a-z][a-z0-9-]{1,63}$/;
-const auditFilters = new Set(["app", "action", "subjectId", "unit", "from", "to"]);
+const auditFilters = new Set(["app", "action", "actor", "subjectId", "unit", "from", "to"]);
 
 function queryPayload(url, exporting) {
   const payload = Object.create(null);
@@ -44,7 +44,7 @@ function queryPayload(url, exporting) {
   if ((payload.app !== undefined && payload.app !== "self") || (payload.app && payload.unit) ||
       (payload.from && payload.since) || (payload.to && payload.until) ||
       (payload.action && !actionPattern.test(payload.action)) || (payload.subjectId && !subjectPattern.test(payload.subjectId)) ||
-      (payload.unit && !unitPattern.test(payload.unit))) throw new HttpError(400, "invalid_audit_query");
+      (payload.actor && !subjectPattern.test(payload.actor)) || (payload.unit && !unitPattern.test(payload.unit))) throw new HttpError(400, "invalid_audit_query");
   return payload;
 }
 
