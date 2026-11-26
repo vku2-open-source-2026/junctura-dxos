@@ -104,7 +104,9 @@ jobs:
       - name: Verify directory management against the real identity provider
         run: npm run test:directory
       - name: Verify per-reader record field masking
-        run: npm run test:field-masking
+        run: |
+          npm run test:field-masking
+          npm run test:auto-audit
       - name: Verify application access, unit isolation and denial reasons
         run: npm run test:app-access
       - name: Verify application startup and key rotation through OpenBao

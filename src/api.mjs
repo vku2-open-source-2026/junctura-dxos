@@ -331,7 +331,7 @@ export function createApi(config) {
       return handleData(request, response, identity, config, new URL(request.url, "http://core"));
     }
     if (path === "/v2/data:export" || path === "/v2/data:import") {
-      return handleRecordArchive(request, response, await authorize(request, true), config, new URL(request.url, "http://core"));
+      return handleRecordArchive(request, response, { ...await authorize(request, true), requestId: requestIdFor(request) }, config, new URL(request.url, "http://core"));
     }
     if (path === "/v2/data:batch" || path?.startsWith("/v2/data/") || path?.startsWith("/v2/data-schemas/") ||
         path?.startsWith("/v2/data-masking/")) {
@@ -349,7 +349,7 @@ export function createApi(config) {
       const compatibility = path.startsWith("/v2/data/") && !path.endsWith(":lock") && !path.includes("/by-key/") &&
         !config.strictRecords;
       return presentRecordRequest(request, response, async () =>
-        handleAppRecords(request, response, await authorize(request, true), config, url), compatibility);
+        handleAppRecords(request, response, { ...await authorize(request, true), requestId: requestIdFor(request) }, config, url), compatibility);
     }
     if (["/v1/objects", "/v2/objects"].some(prefix => path === prefix || path?.startsWith(`${prefix}/`))) {
       let identity = await authorize(request, true);

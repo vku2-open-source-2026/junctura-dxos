@@ -137,6 +137,7 @@ services:
       - ./infra/postgres/063-record-mask-response.sql:/migrations/063-record-mask-response.sql:ro
       - ./infra/postgres/064-app-bootstrap-lease.sql:/migrations/064-app-bootstrap-lease.sql:ro
       - ./infra/postgres/065-message-queues.sql:/migrations/065-message-queues.sql:ro
+      - ./infra/postgres/073-automatic-operation-audit.sql:/migrations/073-automatic-operation-audit.sql:ro
     depends_on:
       database:
         condition: service_healthy

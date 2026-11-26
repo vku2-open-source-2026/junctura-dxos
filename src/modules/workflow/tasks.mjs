@@ -1,6 +1,6 @@
 // SPDX-FileCopyrightText: 2026 Junctura Contributors
 // SPDX-License-Identifier: Apache-2.0
-import { HttpError, jsonObject, logicalRequestDigest, readRecordJson, requireWriter, uuidPattern } from "../../platform/http/http.mjs";
+import { HttpError, jsonObject, logicalRequestDigest, readRecordJson, requestIdFor, requireWriter, uuidPattern } from "../../platform/http/http.mjs";
 import { signInternalToken } from "../../platform/security/internal-token.mjs";
 import { parseRecordBatch, sendRecordResult } from "../data/data.mjs";
 import { workflowRequest, workflowText } from "./client.mjs";
@@ -263,6 +263,7 @@ export async function completeTask(request, response, identity, config, executio
     operations = parseRecordBatch({ operations: records.map(record => ({ ...record, op: "create" })) }).operations;
   }
   const payload = { taskId, executionId, variables: merged, records: operations, requestKey, digest: logicalRequestDigest({ body }) };
+  payload.requestId = requestIdFor(request);
   const receipt = await workflowCommand(config, identity, "task", "complete", payload);
   if (receipt.status !== 200) return sendRecordResult(response, receipt);
   const execution = await readExecution();
