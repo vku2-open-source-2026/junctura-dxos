@@ -6,6 +6,10 @@
 All notable changes to Junctura are recorded here. Versions follow
 [Semantic Versioning](https://semver.org/).
 
+## 0.3.0-rc.1
+
+- Prepare a repeatable source installation rehearsal with checksum verification and recorded setup timings.
+
 ## Unreleased
 
 - **Capability catalog and access requests (issue #49)** adds a cursor-paged catalog of latest

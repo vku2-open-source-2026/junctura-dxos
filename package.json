@@ -1,6 +1,6 @@
 {
   "name": "junctura-core-foundation",
-  "version": "0.2.0",
+  "version": "0.3.0-rc.1",
   "private": true,
   "license": "Apache-2.0",
   "type": "module",
@@ -41,7 +41,9 @@
     "example:foundation": "node examples/foundation-http.mjs",
     "test:setup": "node --test tests/setup.test.mjs",
     "test:release": "node --test tests/release.test.mjs",
+    "tenant:preflight": "node scripts/tenant-preflight.mjs",
     "release:package": "node scripts/package-release.mjs",
+    "release:rehearse": "node scripts/rehearse-release.mjs",
     "release:verify": "node scripts/verify-release.mjs",
     "test:sdk": "node --test tests/sdk.test.mjs",
     "example:sdk": "node examples/sdk-foundation.mjs",
