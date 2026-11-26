@@ -21,7 +21,8 @@ let env;
 try { env = { ...parseEnv(readFileSync(values["config"], "utf8")), ...process.env }; }
 catch { report(false, "Local configuration", "Run npm run setup; preserve existing configuration."); }
 if (env) {
-  const required = [...readFileSync(new URL("../.env.example", import.meta.url), "utf8").matchAll(/^([A-Z_]+)=$/gm)].map(m => m[1]);
+  const compose = readFileSync(new URL("../compose.yaml", import.meta.url), "utf8");
+  const required = [...new Set([...compose.matchAll(/\$\{([A-Z_]+):\?/g)].map(match => match[1]))];
   const missing = required.filter(key => !env[key]);
   report(!missing.length, "Required configuration keys", `Set missing keys: ${missing.join(", ")}. Do not regenerate existing database passwords.`);
   for (const flag of ["C4A", "C4B"]) {
