@@ -173,17 +173,34 @@ test("gateway sends a new Flowable task to its eligible group across Core replic
       VALUES('tenant-a',${q(definitionId)},${q(unit)},ARRAY[${q(unit)}]);`);
     ownerStream = await connect(owner);
     peerStream = await connect(peer);
+    const dueAt = new Date(Date.now() + 16000).toISOString();
     const started = await fetch(`${base}/v1/workflows/executions`, {
       method: "POST",
       headers: { Authorization: `Bearer ${owner.token}`, "Content-Type": "application/json", "Idempotency-Key": requestKey },
-      body: JSON.stringify({ definitionId }), signal: AbortSignal.timeout(15000),
+      body: JSON.stringify({ definitionId, dueAt }), signal: AbortSignal.timeout(15000),
     });
     assert.equal(started.status, 201, await started.clone().text());
     const execution = await started.json();
-    const task = await ownerStream.event();
-    assert.equal(task.event, "workflow.task.created");
-    assert.equal(task.data.executionId, execution.id);
-    assert.deepEqual(Object.keys(task.data).sort(), ["executionId", "taskId"]);
+    const types = ["workflow.task.created", "workflow.task.due_soon", "workflow.task.overdue"];
+    // Replicas can publish creation and reminders in either order.
+    const received = new Map();
+    while (received.size < types.length) {
+      const { event, data } = await ownerStream.event();
+      assert.ok(types.includes(event), `unexpected task event: ${event}`);
+      assert.ok(!received.has(event), `duplicate task event: ${event}`);
+      received.set(event, data);
+    }
+    const task = received.get("workflow.task.created");
+    assert.equal(task.executionId, execution.id);
+    assert.deepEqual(Object.keys(task).sort(), ["executionId", "taskId"]);
+    for (const event of ["workflow.task.due_soon", "workflow.task.overdue"]) {
+      const reminder = received.get(event);
+      assert.deepEqual(reminder, { ...task, dueAt: reminder.dueAt });
+      assert.equal(Date.parse(reminder.dueAt), Date.parse(dueAt));
+    }
+    const milestones = await sql(`SELECT array_agg(milestone ORDER BY milestone)
+      FROM app_private.workflow_reminders WHERE tenant_id='tenant-a' AND task_id=${q(task.taskId)};`);
+    assert.equal(milestones.trim(), "{due_soon,overdue}");
 
     await sql(`INSERT INTO core.app_records(tenant_id,id,owner_app_id,collection,data)
       VALUES('tenant-a',${q(barrier)},${q(peer.appId)},'entries','{"status":"peer-only"}');`);

@@ -320,19 +320,19 @@ export function createApi(config) {
       const requestId = requestIdFor(request);
       response.setHeader("X-Request-Id", requestId);
       try {
-        return await handleSearch(request, response, await authorize(request, true), config, new URL(request.url, "http://core"));
+        return await handleSearch(request, response, { ...await authorize(request, true), requestId }, config, new URL(request.url, "http://core"));
       } catch (error) {
         return json(response, error instanceof HttpError ? error.status : 503,
           { error: error instanceof HttpError ? error.message : "search_unavailable", requestId });
       }
     }
     if (path?.startsWith("/v1/data/")) {
-      const identity = await authorize(request, true);
+      const identity = { ...await authorize(request, true), requestId: requestIdFor(request) };
       requireLegacyClient(identity, config);
       return handleData(request, response, identity, config, new URL(request.url, "http://core"));
     }
     if (path === "/v2/data:export" || path === "/v2/data:import") {
-      return handleRecordArchive(request, response, await authorize(request, true), config, new URL(request.url, "http://core"));
+      return handleRecordArchive(request, response, { ...await authorize(request, true), requestId: requestIdFor(request) }, config, new URL(request.url, "http://core"));
     }
     if (path === "/v2/data:batch" || path?.startsWith("/v2/data/") || path?.startsWith("/v2/data-schemas/") ||
         path?.startsWith("/v2/data-masking/")) {
@@ -342,16 +342,16 @@ export function createApi(config) {
           url.searchParams.has("sort") || url.searchParams.has("ownerAppId") ||
           url.searchParams.has("createdFrom") || url.searchParams.has("createdTo") ||
           [...url.searchParams.keys()].some(key => key.startsWith("where["))))) {
-        return handleRecordQuery(request, response, await authorize(request, true), config, url);
+        return handleRecordQuery(request, response, { ...await authorize(request, true), requestId: requestIdFor(request) }, config, url);
       }
       if (listing) {
-        const identity = await resourceIdentity(config, await authorize(request, true));
+        const identity = { ...await resourceIdentity(config, await authorize(request, true)), requestId: requestIdFor(request) };
         return handleData(request, response, identity, config, url);
       }
-      const compatibility = path.startsWith("/v2/data/") && !path.endsWith(":lock") && !path.includes("/by-key/") &&
+      const compatibility = path.startsWith("/v2/data/") && !path.endsWith(":lock") && !path.endsWith(":archive") && !path.includes("/by-key/") &&
         !config.strictRecords;
       return presentRecordRequest(request, response, async () =>
-        handleAppRecords(request, response, await authorize(request, true), config, url), compatibility);
+        handleAppRecords(request, response, { ...await authorize(request, true), requestId: requestIdFor(request) }, config, url), compatibility);
     }
     if (["/v1/objects", "/v2/objects"].some(prefix => path === prefix || path?.startsWith(`${prefix}/`))) {
       let identity = await authorize(request, true);

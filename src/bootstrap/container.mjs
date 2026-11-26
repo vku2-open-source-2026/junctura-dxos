@@ -7,7 +7,7 @@ import { startApplicationReconciler } from "../modules/applications/applications
 import { createApi } from "../api.mjs";
 import { createCapabilityRuntime } from "../modules/capability/execution/runtime.mjs";
 import { startDirectoryReconciler } from "../modules/directory/directory.mjs";
-import { createEventStreams } from "../modules/events/events.mjs";
+import { createEventStreams, startWorkflowReminders } from "../modules/events/events.mjs";
 import { createCompositionRuntime } from "../modules/capability/composition/runtime.mjs";
 import { startObjectReconciler } from "../modules/objects/objects.mjs";
 import { startSearchIndexer } from "../modules/search/search.mjs";
@@ -36,10 +36,11 @@ export function createApplication(config, execution, composition) {
   const stopApplications = startApplicationReconciler(config);
   const stopDirectory = startDirectoryReconciler(config);
   const stopWorkflow = startWorkflowReconciler(config);
+  const stopReminders = startWorkflowReminders(config);
   const stopObjects = startObjectReconciler(config);
   const stopSearch = startSearchIndexer(config);
   return {
     route,
-    close() { eventsRuntime.close(); stopApplications?.(); stopDirectory?.(); stopWorkflow?.(); stopObjects?.(); stopSearch?.(); executionRuntime?.close(); compositionRuntime?.close(); },
+    close() { eventsRuntime.close(); stopApplications?.(); stopDirectory?.(); stopWorkflow?.(); stopReminders?.(); stopObjects?.(); stopSearch?.(); executionRuntime?.close(); compositionRuntime?.close(); },
   };
 }

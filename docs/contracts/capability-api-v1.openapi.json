@@ -5836,7 +5836,134 @@
     },
     "/v1/me/emergency-accesses/{id}/feedback": {
       "post": {
+        "deprecated": true,
         "operationId": "submitEmergencyAccessFeedback",
+        "summary": "Submit feedback on the subject's own break-glass access",
+        "description": "Use the verified token subjectId, tenant and issuer; a supplied subject identifier never selects another person. A missing verified claim returns 403. Use the execution ID from the break-glass access entry. Feedback is separate from the management review and the original audit event. Identical retries return the saved receipt; different feedback after submission conflicts. Keep personal content out of message.",
+        "tags": [
+          "tenant"
+        ],
+        "x-junctura-query-policy": "closed",
+        "security": [
+          {
+            "oidcBearer": []
+          }
+        ],
+        "x-junctura-core-roles": [
+          "core-reader"
+        ],
+        "x-junctura-authority": "tenant",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "./foundation-api.openapi.json#/components/schemas/Uuid"
+            },
+            "example": "11111111-1111-4111-8111-111111111111"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EmergencyFeedbackWrite"
+              },
+              "example": {
+                "decision": "unrecognized"
+              }
+            }
+          }
+        },
+        "x-max-body-bytes": 16384,
+        "responses": {
+          "201": {
+            "description": "Successful response.",
+            "headers": {
+              "Cache-Control": {
+                "$ref": "./foundation-api.openapi.json#/components/headers/CacheControl"
+              },
+              "X-Content-Type-Options": {
+                "$ref": "./foundation-api.openapi.json#/components/headers/NoSniff"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EmergencyFeedbackResult"
+                },
+                "example": {
+                  "executionId": "11111111-1111-4111-8111-111111111111",
+                  "submittedAt": "2030-01-12T12:00:00Z"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Identical feedback replayed.",
+            "headers": {
+              "Cache-Control": {
+                "$ref": "./foundation-api.openapi.json#/components/headers/CacheControl"
+              },
+              "X-Content-Type-Options": {
+                "$ref": "./foundation-api.openapi.json#/components/headers/NoSniff"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EmergencyFeedbackResult"
+                },
+                "example": {
+                  "executionId": "11111111-1111-4111-8111-111111111111",
+                  "submittedAt": "2030-01-12T12:00:00Z"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "./foundation-api.openapi.json#/components/responses/PlannedBadRequest"
+          },
+          "401": {
+            "$ref": "./foundation-api.openapi.json#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "./foundation-api.openapi.json#/components/responses/PlannedForbidden"
+          },
+          "404": {
+            "$ref": "./foundation-api.openapi.json#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "./foundation-api.openapi.json#/components/responses/PlannedConflict"
+          },
+          "413": {
+            "$ref": "./foundation-api.openapi.json#/components/responses/PlannedTooLarge"
+          },
+          "415": {
+            "$ref": "./foundation-api.openapi.json#/components/responses/UnsupportedMedia"
+          },
+          "429": {
+            "$ref": "./foundation-api.openapi.json#/components/responses/PlannedRateLimited"
+          },
+          "502": {
+            "$ref": "./foundation-api.openapi.json#/components/responses/BadGateway"
+          },
+          "503": {
+            "$ref": "./foundation-api.openapi.json#/components/responses/Unavailable"
+          },
+          "504": {
+            "$ref": "./foundation-api.openapi.json#/components/responses/GatewayTimeout"
+          }
+        },
+        "x-junctura-source": "src/modules/subject-access/subject-access.mjs",
+        "x-junctura-test-suite": "subject-access"
+      }
+    },
+    "/v1/me/exceptional-accesses/{id}/feedback": {
+      "post": {
+        "operationId": "submitExceptionalAccessFeedback",
         "summary": "Submit feedback on the subject's own break-glass access",
         "description": "Use the verified token subjectId, tenant and issuer; a supplied subject identifier never selects another person. A missing verified claim returns 403. Use the execution ID from the break-glass access entry. Feedback is separate from the management review and the original audit event. Identical retries return the saved receipt; different feedback after submission conflicts. Keep personal content out of message.",
         "tags": [
@@ -6006,6 +6133,127 @@
         "x-junctura-test-suite": "capabilities",
         "x-junctura-core-roles": [
           "core-reader"
+        ],
+        "deprecated": true
+      }
+    },
+    "/v1/exceptional-accesses": {
+      "get": {
+        "operationId": "listExceptionalAccesses",
+        "summary": "List exceptional access review tasks",
+        "description": "Requires audit.read and verified membership in the configured tenant reviewer group.",
+        "tags": [
+          "audit-events"
+        ],
+        "responses": {
+          "200": {
+            "description": "Review tasks",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "tasks": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "taskId": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "executionId": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "state": {
+                            "enum": [
+                              "pending",
+                              "valid",
+                              "invalid"
+                            ]
+                          },
+                          "actor": {
+                            "type": "string"
+                          },
+                          "capabilityId": {
+                            "type": "string"
+                          },
+                          "subjectId": {
+                            "type": "string"
+                          },
+                          "accessedAt": {
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          "justification": {
+                            "type": "string"
+                          },
+                          "reviewedAt": {
+                            "type": [
+                              "string",
+                              "null"
+                            ],
+                            "format": "date-time"
+                          },
+                          "reason": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "taskId",
+                          "executionId",
+                          "state",
+                          "actor",
+                          "capabilityId",
+                          "subjectId",
+                          "accessedAt",
+                          "justification",
+                          "reviewedAt",
+                          "reason"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "tasks"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          }
+        },
+        "x-junctura-required-permissions": [
+          "audit.read"
+        ],
+        "x-junctura-status": "implemented-subject-consent",
+        "x-junctura-source": "src/modules/consent/consent.mjs",
+        "x-junctura-test-suite": "capabilities",
+        "x-junctura-core-roles": [
+          "core-reader"
         ]
       }
     },
@@ -6065,6 +6313,128 @@
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/EmergencyReviewCreate"
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "executionId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+            }
+          }
+        ],
+        "deprecated": true
+      }
+    },
+    "/v1/exceptional-accesses/{executionId}/review": {
+      "post": {
+        "operationId": "reviewExceptionalAccess",
+        "summary": "Record an exceptional access review",
+        "description": "Requires audit.read and verified membership in the configured tenant reviewer group.",
+        "tags": [
+          "audit-events"
+        ],
+        "responses": {
+          "200": {
+            "description": "Review recorded",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "taskId": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "executionId": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "state": {
+                      "enum": [
+                        "valid",
+                        "invalid"
+                      ]
+                    },
+                    "reviewedAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    }
+                  },
+                  "required": [
+                    "taskId",
+                    "executionId",
+                    "state",
+                    "reviewedAt"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          },
+          "409": {
+            "description": "The execution was reviewed with a different result."
+          }
+        },
+        "x-junctura-required-permissions": [
+          "audit.read"
+        ],
+        "x-junctura-status": "implemented-subject-consent",
+        "x-junctura-source": "src/modules/consent/consent.mjs",
+        "x-junctura-test-suite": "capabilities",
+        "x-junctura-core-roles": [
+          "core-reader"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "decision": {
+                    "enum": [
+                      "valid",
+                      "invalid"
+                    ]
+                  },
+                  "reason": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 500
+                  }
+                },
+                "required": [
+                  "decision",
+                  "reason"
+                ],
+                "additionalProperties": false
               }
             }
           }
@@ -7590,7 +7960,8 @@
             "minLength": 1
           },
           "emergency": {
-            "type": "boolean"
+            "type": "boolean",
+            "deprecated": true
           },
           "review": {
             "anyOf": [
@@ -7636,6 +8007,9 @@
               "title"
             ],
             "additionalProperties": false
+          },
+          "exceptionalAccess": {
+            "type": "boolean"
           }
         },
         "required": [
@@ -9538,6 +9912,10 @@
             "description": "Identifies an operator-bound subjectId. A missing kind means login."
           },
           "emergency": {
+            "const": true,
+            "deprecated": true
+          },
+          "exceptionalAccess": {
             "const": true
           }
         },
@@ -10498,13 +10876,17 @@
           },
           "emergency": {
             "const": true,
-            "description": "Break-glass access without consent; requires dataSubject and justification and is queued for review."
+            "description": "Break-glass access without consent; requires dataSubject and justification and is queued for review.",
+            "deprecated": true
           },
           "justification": {
             "type": "string",
             "minLength": 10,
             "maxLength": 500,
             "description": "Why consent could not be obtained (emergency only)."
+          },
+          "exceptionalAccess": {
+            "const": true
           }
         },
         "dependentRequired": {
@@ -10515,8 +10897,34 @@
             "dataSubject",
             "justification"
           ],
-          "justification": [
-            "emergency"
+          "exceptionalAccess": [
+            "dataSubject",
+            "justification"
+          ]
+        },
+        "not": {
+          "required": [
+            "emergency",
+            "exceptionalAccess"
+          ]
+        },
+        "if": {
+          "required": [
+            "justification"
+          ]
+        },
+        "then": {
+          "anyOf": [
+            {
+              "required": [
+                "emergency"
+              ]
+            },
+            {
+              "required": [
+                "exceptionalAccess"
+              ]
+            }
           ]
         }
       },
@@ -10625,7 +11033,8 @@
             }
           },
           "emergency": {
-            "type": "boolean"
+            "type": "boolean",
+            "deprecated": true
           },
           "review": {
             "type": [
@@ -10638,6 +11047,9 @@
               "unjustified",
               null
             ]
+          },
+          "exceptionalAccess": {
+            "type": "boolean"
           }
         }
       },

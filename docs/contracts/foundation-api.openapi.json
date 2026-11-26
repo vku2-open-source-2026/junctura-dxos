@@ -3600,7 +3600,7 @@
       "get": {
         "operationId": "streamAuthorizedEvents",
         "summary": "Stream authorized notifications",
-        "description": "Connect with the Authorization bearer header. Receive new workflow tasks for eligible groups, record status changes for readable records and consent revocations for the subject or affected app. Each SSE event has a named event field and one JSON data line containing references only. The connection is live-only and has no event IDs or replay. Reconnect and refresh source lists after disconnect. Core closes the stream when authentication expires and rechecks authorization before delivery.",
+        "description": "Connect with the Authorization bearer header. Receive new workflow tasks and deadline reminders for eligible groups, record status changes for readable records and consent revocations for the subject or affected app. Each SSE event has a named event field and one JSON data line containing references only. The connection is live-only and has no event IDs or replay. Reconnect and refresh source lists after disconnect. Core closes the stream when authentication expires and rechecks authorization before delivery.",
         "tags": [
           "tenant"
         ],
@@ -5344,6 +5344,144 @@
         },
         "x-junctura-source": "src/modules/data/records.mjs",
         "x-junctura-test-suite": "records"
+      }
+    },
+    "/v2/data/{collection}/{id}:archive": {
+      "post": {
+        "tags": [
+          "app-resource"
+        ],
+        "x-junctura-query-policy": "closed",
+        "security": [
+          {
+            "coreBearer": []
+          }
+        ],
+        "x-junctura-core-roles": [
+          "core-reader",
+          "core-writer"
+        ],
+        "x-junctura-authority": "app-resource",
+        "x-junctura-source": "src/modules/data/records.mjs",
+        "x-junctura-test-suite": "records",
+        "operationId": "archiveRecord",
+        "summary": "Make a record read-only",
+        "description": "The owning caller locks the current version using If-Match. Delegated users need the app manager role. An optional Idempotency-Key replays the receipt. The transition is terminal. Existing read authorization still applies.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Collection"
+          },
+          {
+            "$ref": "#/components/parameters/Id"
+          },
+          {
+            "$ref": "#/components/parameters/RecordIfMatch"
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/Uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Record archived.",
+            "headers": {
+              "Cache-Control": {
+                "$ref": "#/components/headers/CacheControl"
+              },
+              "X-Content-Type-Options": {
+                "$ref": "#/components/headers/NoSniff"
+              },
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "$ref": "#/components/schemas/Uuid"
+                    },
+                    "collection": {
+                      "type": "string",
+                      "pattern": "^[a-z][a-z0-9_-]{0,62}$"
+                    },
+                    "version": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "archivedAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "collection",
+                    "version",
+                    "archivedAt"
+                  ],
+                  "additionalProperties": false
+                },
+                "example": {
+                  "id": "11111111-1111-4111-8111-111111111111",
+                  "collection": "entries",
+                  "version": 2,
+                  "archivedAt": "2030-01-10T09:05:00Z"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/PlannedBadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "405": {
+            "$ref": "#/components/responses/MethodNotAllowed"
+          },
+          "409": {
+            "$ref": "#/components/responses/PlannedConflict"
+          },
+          "422": {
+            "$ref": "#/components/responses/IdempotencyKeyReused"
+          },
+          "423": {
+            "$ref": "#/components/responses/RecordLocked"
+          },
+          "429": {
+            "$ref": "#/components/responses/PlannedRateLimited"
+          },
+          "502": {
+            "$ref": "#/components/responses/BadGateway"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          },
+          "504": {
+            "$ref": "#/components/responses/GatewayTimeout"
+          },
+          "412": {
+            "$ref": "#/components/responses/RecordPreconditionFailed"
+          },
+          "428": {
+            "$ref": "#/components/responses/RecordPreconditionRequired"
+          }
+        }
       }
     },
     "/v2/data/{collection}/{id}:lock": {
@@ -12337,6 +12475,10 @@
             "type": "integer",
             "minimum": 1,
             "maximum": 9007199254740991
+          },
+          "archivedAt": {
+            "type": "string",
+            "format": "date-time"
           }
         },
         "required": [
@@ -13793,12 +13935,60 @@
               "consentId"
             ],
             "additionalProperties": false
+          },
+          "workflow.task.due_soon": {
+            "type": "object",
+            "properties": {
+              "taskId": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9:_-]{1,128}$"
+              },
+              "executionId": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9:_-]{1,128}$"
+              },
+              "dueAt": {
+                "type": "string",
+                "format": "date-time"
+              }
+            },
+            "required": [
+              "taskId",
+              "executionId",
+              "dueAt"
+            ],
+            "additionalProperties": false
+          },
+          "workflow.task.overdue": {
+            "type": "object",
+            "properties": {
+              "taskId": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9:_-]{1,128}$"
+              },
+              "executionId": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9:_-]{1,128}$"
+              },
+              "dueAt": {
+                "type": "string",
+                "format": "date-time"
+              }
+            },
+            "required": [
+              "taskId",
+              "executionId",
+              "dueAt"
+            ],
+            "additionalProperties": false
           }
         },
         "required": [
           "workflow.task.created",
           "record.status.changed",
-          "consent.revoked"
+          "consent.revoked",
+          "workflow.task.due_soon",
+          "workflow.task.overdue"
         ],
         "additionalProperties": false,
         "description": "Map from SSE event name to the schema of the JSON on its data line."
@@ -13957,6 +14147,10 @@
             "$ref": "#/components/schemas/JsonObject"
           },
           "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "archivedAt": {
             "type": "string",
             "format": "date-time"
           }

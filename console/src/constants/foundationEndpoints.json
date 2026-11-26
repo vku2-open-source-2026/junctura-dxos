@@ -1906,7 +1906,7 @@
     "method": "GET",
     "operationId": "streamAuthorizedEvents",
     "summary": "Stream authorized notifications",
-    "description": "Connect with the Authorization bearer header. Receive new workflow tasks for eligible groups, record status changes for readable records and consent revocations for the subject or affected app. Each SSE event has a named event field and one JSON data line containing references only. The connection is live-only and has no event IDs or replay. Reconnect and refresh source lists after disconnect. Core closes the stream when authentication expires and rechecks authorization before delivery.",
+    "description": "Connect with the Authorization bearer header. Receive new workflow tasks and deadline reminders for eligible groups, record status changes for readable records and consent revocations for the subject or affected app. Each SSE event has a named event field and one JSON data line containing references only. The connection is live-only and has no event IDs or replay. Reconnect and refresh source lists after disconnect. Core closes the stream when authentication expires and rechecks authorization before delivery.",
     "tags": [
       "tenant"
     ],
@@ -3008,6 +3008,84 @@
     "successStatus": "204",
     "successContentType": null,
     "successHasBody": false
+  },
+  {
+    "path": "/v2/data/{collection}/{id}:archive",
+    "method": "POST",
+    "operationId": "archiveRecord",
+    "summary": "Make a record read-only",
+    "description": "The owning caller locks the current version using If-Match. Delegated users need the app manager role. An optional Idempotency-Key replays the receipt. The transition is terminal. Existing read authorization still applies.",
+    "tags": [
+      "app-resource"
+    ],
+    "security": [
+      {
+        "coreBearer": []
+      }
+    ],
+    "responses": [
+      "200",
+      "400",
+      "401",
+      "403",
+      "404",
+      "405",
+      "409",
+      "412",
+      "422",
+      "423",
+      "428",
+      "429",
+      "502",
+      "503",
+      "504"
+    ],
+    "hasRequestBody": false,
+    "requestContentTypes": [],
+    "pathParameters": [
+      {
+        "name": "collection",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_-]{0,62}$"
+        },
+        "description": ""
+      },
+      {
+        "name": "id",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        },
+        "description": ""
+      }
+    ],
+    "queryParameters": [],
+    "headerParameters": [
+      {
+        "name": "If-Match",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "pattern": "^\"record-[a-f0-9]{64}-[1-9][0-9]{0,15}\"$"
+        },
+        "description": "Send the exact strong ETag from the record response. Required for every delete or replacement of an existing record, including in schemaless collections and when the caller holds the record lock. Missing returns 428; stale returns 412."
+      },
+      {
+        "name": "Idempotency-Key",
+        "required": false,
+        "schema": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        },
+        "description": ""
+      }
+    ],
+    "successStatus": "200",
+    "successContentType": "application/json",
+    "successHasBody": true
   },
   {
     "path": "/v2/data/{collection}/{id}:lock",

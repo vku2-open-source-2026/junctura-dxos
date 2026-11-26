@@ -294,6 +294,10 @@ export function createJuncturaClient({ baseUrl, issuer, clientId, clientSecret, 
       if (!Array.isArray(operations) || operations.length === 0) throw new TypeError("operations must be a non-empty array");
       return etagged(await request(recordPath(collection, id), { method: "PATCH", json: { operations }, ifMatch, idempotencyKey }));
     },
+    async archiveRecord(collection, id, { ifMatch, idempotencyKey = randomUUID() } = {}) {
+      requirePrecondition(ifMatch);
+      return etagged(await request(`${recordPath(collection, id)}:archive`, { method: "POST", ifMatch, idempotencyKey }));
+    },
     async deleteVersionedRecord(collection, id, ifMatch) {
       requirePrecondition(ifMatch);
       await finish(await request(recordPath(collection, id), { method: "DELETE", ifMatch }));
@@ -459,6 +463,14 @@ export function createJuncturaClient({ baseUrl, issuer, clientId, clientSecret, 
           return request(`/v1/me/emergency-accesses/${segment(executionId)}/feedback`, { method: "POST", json: feedback, bearer: userToken }).then(response => response.json());
         },
       });
+    },
+    async listExceptionalAccesses({ userToken } = {}) {
+      return (await request("/v1/exceptional-accesses", { bearer: userToken })).json();
+    },
+    async reviewExceptionalAccess(executionId, { decision, reason }, { userToken } = {}) {
+      return (await request(`/v1/exceptional-accesses/${segment(executionId)}/review`, {
+        method: "POST", json: { decision, reason }, bearer: userToken,
+      })).json();
     },
     async appendAppAuditEvent(body, { idempotencyKey = randomUUID(), userToken } = {}) {
       return (await request("/v1/audit-events", { method: "POST", json: body, idempotencyKey, bearer: userToken })).json();

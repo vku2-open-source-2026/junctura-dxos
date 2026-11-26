@@ -193,14 +193,22 @@ async function scanSearchPage(request, response, identity, config, q, limit, sco
       .filter(entry => entry && entry.item).map(entry => [entry.position, entry.item]));
     for (let position = 0; position < hits.length; position++) {
       if (!visible.has(position)) continue;
-      found.push({ hit: hits[position], index: scanFrom + position });
+      found.push({ hit: hits[position], index: scanFrom + position, archived: visible.get(position).archived === true });
       if (found.length > limit) break;
     }
     if (found.length > limit) break;
     scanFrom += hits.length;
     if (hits.length < size) break;
   }
-  const items = found.slice(0, limit).map(({ hit }) => itemOf(hit));
+  const page = found.slice(0, limit);
+  const archived = page.flatMap(({ hit, archived }, position) => archived ? [candidateOf(hit, position)] : []);
+  let rechecked;
+  if (archived.length) {
+    const { value } = await searchRpc(config, identity, "acl", { candidates: archived, auditArchived: true });
+    rechecked = new Set(value.items.map(item => item.position));
+  }
+  const items = page.flatMap(({ hit, archived }, position) =>
+    !archived || rechecked.has(position) ? [itemOf(hit)] : []);
   const nextCursor = found.length > limit
     ? encodeSearchCursor(q, identity, scope, generation, found[limit].index, config.dataSecret) : null;
   return json(response, 200, { items, nextCursor });
