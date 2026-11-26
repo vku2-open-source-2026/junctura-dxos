@@ -85,6 +85,11 @@ jobs:
         run: docker compose -f compose.yaml -f infra/openbao/compose.bootstrap.yaml up --build --detach --wait --wait-timeout 900
       - name: Provision directory and application identity synchronization
         run: npm run directory:provision
+      - name: Verify managed configuration and Core process recovery
+        run: |
+          npm run reconcile -- --check
+          npm run test:reconcile
+          npm run test:self-heal
       - name: Probe host and container endpoints
         run: |
           npm run healthcheck
