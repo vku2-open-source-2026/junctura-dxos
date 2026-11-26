@@ -151,8 +151,19 @@ test("application management, provider login, unit isolation, audit, and OIDC ke
   }
 
   await signIn(userA, false);
-  const assign = body => call(`${path}/assignments`, { method: "POST", body }).then(r => json(r, 200));
-  const revoke = id => call(`${path}/assignments/${id}`, { method: "DELETE" });
+  const requestCorrelation = response => response.headers.get("x-request-id").split(",").at(-1).trim();
+  const assignmentRequests = [];
+  const assign = async body => {
+    const response = await call(`${path}/assignments`, { method: "POST", body });
+    const value = await json(response, 200);
+    assignmentRequests.push({ assignmentId: value.assignmentId, requestId: requestCorrelation(response) });
+    return value;
+  };
+  const revocationRequests = [];
+  const revoke = id => call(`${path}/assignments/${id}`, { method: "DELETE" }).then(response => {
+    revocationRequests.push({ assignmentId: id, requestId: requestCorrelation(response) });
+    return response;
+  });
   const a = await assign({ unit: unitA, targetType: "unit", target: unitA, role: "manager" });
   const b = await assign({ unit: unitB, targetType: "group", target: groupB, role: "viewer" });
   const subject = await assign({ unit: unitB, targetType: "subject", target: userB.id, role: "editor" });
@@ -204,6 +215,24 @@ test("application management, provider login, unit isolation, audit, and OIDC ke
   const byRequestId = (a, b) => a.requestId.localeCompare(b.requestId);
   assert.deepEqual(denials.map(row => ({ error: row.reasonCode, requestId: row.reason })).sort(byRequestId),
     auditReasons.sort(byRequestId));
+
+  // Assignment grant and revocation events correlate to the HTTP response
+  // request id, keep the assignment id as reason, and no-op replays add none.
+  const assignmentEvents = (await Promise.all(["application.assignment_granted", "application.assignment_revoked"].map(async action =>
+    json(await call(`/v1/audit-events?limit=100&action=${action}`), 200)))).flatMap(page => page.items)
+    .filter(row => row.resourceId === appId)
+    .map(({ event, reason, requestId }) => ({ event, assignmentId: reason, requestId }))
+    .sort((x, y) => `${x.event}|${x.assignmentId}`.localeCompare(`${y.event}|${y.assignmentId}`));
+  const byEvent = (x, y) => `${x.event}|${x.assignmentId}`.localeCompare(`${y.event}|${y.assignmentId}`);
+  const expected = [
+    ...assignmentRequests.slice(0, 3).map(({ assignmentId, requestId }) =>
+      ({ event: "application.assignment_granted", assignmentId, requestId })),
+    ...[revocationRequests[0], revocationRequests[1], revocationRequests[3]].map(({ assignmentId, requestId }) =>
+      ({ event: "application.assignment_revoked", assignmentId, requestId })),
+  ].sort(byEvent);
+  assert.deepEqual(assignmentEvents, expected, "each transition correlates to its own HTTP request id");
+  const noOps = [assignmentRequests[3], revocationRequests[2]].map(row => row.requestId);
+  assert.ok(assignmentEvents.every(row => !noOps.includes(row.requestId)), "idempotent replays add no audit event");
 
   const current = await call(path);
   await json(current, 200);

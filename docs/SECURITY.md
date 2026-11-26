@@ -197,6 +197,16 @@ time zone/date-style differences. Results include `verified`, `entries`, `newlyS
 `headHash`, `verifiedAt` and `firstBreak` (`chainSeq`, `eventId`, `reason`). Break kinds:
 `content_modified`, `chain_link_mismatch`, `missing_entry` or `head_mismatch`.
 
+Migration 075 adds optional server-derived request correlation (schema version `3`) for the
+`grant.activated`, `grant.revoked`, `application.assignment_granted` and
+`application.assignment_revoked` events. Correlated rows re-commit to their unchanged
+version 1 row hash plus `request_id` (`'junctura-audit/3'`), so historical digests stay
+byte-identical and the caller-supplied `reason` (revoke reason, assignment ID) remains a
+separate field. Management listing and export expose the correlation as `requestId`, and
+modifying it reports `content_modified`. Assignment transitions persist the initiating
+request ID while a provider write is pending, so asynchronous retries and worker confirms
+correlate to the original request rather than a replay; idempotent repeats keep it.
+
 Single-capability reservations with context append `execution.subject_accessed`
 (`execution.emergency_access` for emergency calls), with purpose as `reason_code`
 and, for a named data subject, `data_subject_sha256:` plus its SHA-256 as `reason`.

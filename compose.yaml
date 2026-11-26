@@ -145,6 +145,7 @@ services:
       - ./infra/postgres/071-exceptional-access-review.sql:/migrations/071-exceptional-access-review.sql:ro
       - ./infra/postgres/073-automatic-operation-audit.sql:/migrations/073-automatic-operation-audit.sql:ro
       - ./infra/postgres/074-audited-queue-removal.sql:/migrations/074-audited-queue-removal.sql:ro
+      - ./infra/postgres/075-audit-request-correlation.sql:/migrations/075-audit-request-correlation.sql:ro
     depends_on:
       database:
         condition: service_healthy

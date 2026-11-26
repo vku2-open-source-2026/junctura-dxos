@@ -401,6 +401,67 @@ test("application audit verifies hashes written before its migration", async () 
   }
 });
 
+test("audit request correlation preserves hashes written before its migration and seals the new field", async () => {
+  const database = "correlation_upgrade";
+  const upgradeDir = join(directory, database);
+  mkdirSync(upgradeDir);
+  const migrateCorrelation = () => migrate({ MIGRATION_DIR: `/migrations/${database}` }, database);
+  const user = { tenant_id: "correlation-audit", iss: "https://audit.example.invalid", sub: "manager", client_id: "console" };
+  const setClaims = `SELECT set_config('request.jwt.claims','${JSON.stringify(user)}',false)`;
+  const asAuditor = query => sql(`SET ROLE junctura_audit_api; ${setClaims}; ${query}`, database);
+  const verify = async () => JSON.parse((await asAuditor("SELECT core.audit_verify('{}')->'value';")).split("\n").at(-1));
+  try {
+    await sql(`CREATE DATABASE ${database} OWNER junctura_data`);
+    for (const file of migrations.filter(entry => Number(entry.slice(0, 3)) <= 74)) {
+      cpSync(join(directory, file), join(upgradeDir, file));
+    }
+    await migrateCorrelation();
+    await sql(`INSERT INTO app_private.principals(tenant_id,issuer,subject,management_client,permissions)
+      VALUES('correlation-audit','https://audit.example.invalid','manager','console',ARRAY['audit.read']);`, database);
+    const grantId = randomUUID();
+    await sql(`SET ROLE junctura_app_owner; ${setClaims};
+      SELECT app_private.audit_append('grant.activated','grant','${grantId}',1,'success',NULL,NULL);`, database);
+    const before = await verify();
+    assert.deepEqual([before.verified, before.entries], [true, 1]);
+    const sealed = () => sql("SELECT chain_seq||':'||entry_hash FROM app_private.audit WHERE tenant_id='correlation-audit' ORDER BY chain_seq;", database);
+    const historical = await sealed();
+    cpSync(join(directory, "075-audit-request-correlation.sql"), join(upgradeDir, "075-audit-request-correlation.sql"));
+    await migrateCorrelation();
+    const after = await verify();
+    assert.deepEqual([after.verified, after.entries, after.newlySealed, after.headHash],
+      [true, before.entries, 0, before.headHash]);
+    assert.equal(await sealed(), historical, "historical event hashes are preserved");
+    const requestId = randomUUID();
+    await sql(`SET ROLE junctura_app_owner; ${setClaims};
+      SELECT app_private.audit_request('grant.revoked','grant','${grantId}',2,'success',NULL,'terminal revocation','${requestId}');
+      SELECT app_private.audit_request('application.assignment_granted','application','${grantId}',3,'success',NULL,'${randomUUID()}','${randomUUID()}');`, database);
+    const correlated = await verify();
+    assert.deepEqual([correlated.verified, correlated.newlySealed], [true, 2]);
+    assert.equal(await sql(`SELECT request_id FROM app_private.audit WHERE tenant_id='correlation-audit'
+      AND event='grant.revoked';`, database), requestId);
+    assert.equal(await sql(`SELECT count(*) FROM app_private.audit WHERE tenant_id='correlation-audit'
+      AND schema_version=3 AND request_id IS NOT NULL AND reason IS DISTINCT FROM request_id::text;`, database), "2");
+    const page = JSON.parse((await asAuditor("SELECT core.audit_query('{}')->'value';")).split("\n").at(-1));
+    const correlatedItems = page.items.filter(item => item.schemaVersion === 3);
+    assert.equal(correlatedItems.length, 2);
+    assert.ok(correlatedItems.every(item => item.requestId && item.reason !== item.requestId),
+      "management listing keeps correlation and reason apart on correlated rows");
+    assert.ok(page.items.some(item => item.schemaVersion === 1 && !("requestId" in item)),
+      "historical rows keep their projection shape");
+    const snapshot = JSON.parse((await asAuditor("SELECT core.audit_app_export('start','{}')->'value';")).split("\n").at(-1));
+    const exported = JSON.parse((await asAuditor(
+      `SELECT core.audit_app_export('page','{"snapshotId":"${snapshot.snapshotId}"}')->'value';`)).split("\n").at(-1));
+    assert.deepEqual(exported.lines.filter(line => line.event.schemaVersion === 3).map(line => line.event.requestId).sort(),
+      correlatedItems.map(item => item.requestId).sort(), "export covers the sealed correlation field");
+    await sql(`UPDATE app_private.audit SET request_id=gen_random_uuid() WHERE tenant_id='correlation-audit'
+      AND event='grant.revoked';`, database);
+    assert.equal((await verify()).firstBreak.reason, "content_modified", "the correlation field is tamper-evident");
+  } finally {
+    await sql(`DROP DATABASE IF EXISTS ${database}`);
+    rmSync(upgradeDir, { recursive: true, force: true });
+  }
+});
+
 test("workflow notification observations deduplicate across Core replicas and require a current matching group", async () => {
   const tenant = `events-${randomUUID()}`;
   const task = { taskId: "example-task", executionId: "example-run", definitionId: "review:1:example",
