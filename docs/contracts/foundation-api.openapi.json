@@ -5277,6 +5277,144 @@
         "x-junctura-test-suite": "records"
       }
     },
+    "/v2/data/{collection}/{id}:archive": {
+      "post": {
+        "tags": [
+          "app-resource"
+        ],
+        "x-junctura-query-policy": "closed",
+        "security": [
+          {
+            "coreBearer": []
+          }
+        ],
+        "x-junctura-core-roles": [
+          "core-reader",
+          "core-writer"
+        ],
+        "x-junctura-authority": "app-resource",
+        "x-junctura-source": "src/modules/data/records.mjs",
+        "x-junctura-test-suite": "records",
+        "operationId": "archiveRecord",
+        "summary": "Make a record read-only",
+        "description": "The owning caller locks the current version using If-Match. Delegated users need the app manager role. An optional Idempotency-Key replays the receipt. The transition is terminal. Existing read authorization still applies.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Collection"
+          },
+          {
+            "$ref": "#/components/parameters/Id"
+          },
+          {
+            "$ref": "#/components/parameters/RecordIfMatch"
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/Uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Record archived.",
+            "headers": {
+              "Cache-Control": {
+                "$ref": "#/components/headers/CacheControl"
+              },
+              "X-Content-Type-Options": {
+                "$ref": "#/components/headers/NoSniff"
+              },
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "$ref": "#/components/schemas/Uuid"
+                    },
+                    "collection": {
+                      "type": "string",
+                      "pattern": "^[a-z][a-z0-9_-]{0,62}$"
+                    },
+                    "version": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "archivedAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "collection",
+                    "version",
+                    "archivedAt"
+                  ],
+                  "additionalProperties": false
+                },
+                "example": {
+                  "id": "11111111-1111-4111-8111-111111111111",
+                  "collection": "entries",
+                  "version": 2,
+                  "archivedAt": "2030-01-10T09:05:00Z"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/PlannedBadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "405": {
+            "$ref": "#/components/responses/MethodNotAllowed"
+          },
+          "409": {
+            "$ref": "#/components/responses/PlannedConflict"
+          },
+          "422": {
+            "$ref": "#/components/responses/IdempotencyKeyReused"
+          },
+          "423": {
+            "$ref": "#/components/responses/RecordLocked"
+          },
+          "429": {
+            "$ref": "#/components/responses/PlannedRateLimited"
+          },
+          "502": {
+            "$ref": "#/components/responses/BadGateway"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          },
+          "504": {
+            "$ref": "#/components/responses/GatewayTimeout"
+          },
+          "412": {
+            "$ref": "#/components/responses/RecordPreconditionFailed"
+          },
+          "428": {
+            "$ref": "#/components/responses/RecordPreconditionRequired"
+          }
+        }
+      }
+    },
     "/v2/data/{collection}/{id}:lock": {
       "post": {
         "operationId": "lockRecord",
@@ -12268,6 +12406,10 @@
             "type": "integer",
             "minimum": 1,
             "maximum": 9007199254740991
+          },
+          "archivedAt": {
+            "type": "string",
+            "format": "date-time"
           }
         },
         "required": [
@@ -13820,6 +13962,10 @@
             "$ref": "#/components/schemas/JsonObject"
           },
           "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "archivedAt": {
             "type": "string",
             "format": "date-time"
           }

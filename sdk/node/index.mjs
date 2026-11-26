@@ -294,6 +294,10 @@ export function createJuncturaClient({ baseUrl, issuer, clientId, clientSecret, 
       if (!Array.isArray(operations) || operations.length === 0) throw new TypeError("operations must be a non-empty array");
       return etagged(await request(recordPath(collection, id), { method: "PATCH", json: { operations }, ifMatch, idempotencyKey }));
     },
+    async archiveRecord(collection, id, { ifMatch, idempotencyKey = randomUUID() } = {}) {
+      requirePrecondition(ifMatch);
+      return etagged(await request(`${recordPath(collection, id)}:archive`, { method: "POST", ifMatch, idempotencyKey }));
+    },
     async deleteVersionedRecord(collection, id, ifMatch) {
       requirePrecondition(ifMatch);
       await finish(await request(recordPath(collection, id), { method: "DELETE", ifMatch }));

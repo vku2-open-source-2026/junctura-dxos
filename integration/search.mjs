@@ -132,6 +132,42 @@ test("shares decide visibility at query time and revocation is immediate", async
   assert.deepEqual(await hits(recipient, `needle-${prefix}`), []);
 });
 
+test("search audits archived references only when authorized and returned", async () => {
+  const term = `archived-${prefix}`;
+  const created = await api(`/v2/data/${collection}`, owner, {
+    method: "POST", body: { data: { code: term } }, headers: { "Idempotency-Key": randomUUID() },
+  });
+  const record = await jsonResult(created, 201);
+  const path = `/v2/data/${collection}/${record.id}`;
+  let createdArchive = false;
+  try {
+    await jsonResult(await api(`${path}:archive`, owner, {
+      method: "POST", headers: { "If-Match": created.headers.get("etag") },
+    }), 200);
+    createdArchive = true;
+    const expected = { type: "record", recordRef: { collection, id: record.id } };
+    const response = await waitUntil("archived record revision", async () => {
+      const next = await api(`/v1/search?q=${encodeURIComponent(term)}`, owner);
+      const data = await jsonResult(next, 200);
+      return data.items.some(item => item.recordRef?.id === record.id) && { headers: next.headers, items: data.items };
+    });
+    assert.deepEqual(response.items, [expected]);
+    assert.deepEqual(await hits(other, term), []);
+    const requestId = response.headers.get("x-request-id").split(",").at(-1).trim();
+    assert.equal(await sql(`SELECT count(*) FROM app_private.audit WHERE tenant_id='tenant-a'
+      AND event='audit.archived_record_read' AND reason_code='record_search' AND resource_id=${q(record.id)}
+      AND subject=${q(owner.subject)} AND reason=${q(requestId)};`), "1");
+    assert.equal(await sql(`SELECT count(*) FROM app_private.audit WHERE tenant_id='tenant-a'
+      AND event='audit.archived_record_read' AND resource_id=${q(record.id)} AND subject=${q(other.subject)};`), "0");
+  } finally {
+    if (createdArchive) await sql(`BEGIN;
+      ALTER TABLE core.app_records DISABLE TRIGGER record_guard_archived;
+      DELETE FROM core.app_records WHERE tenant_id='tenant-a' AND id=${q(record.id)};
+      ALTER TABLE core.app_records ENABLE TRIGGER record_guard_archived;
+      COMMIT;`);
+  }
+});
+
 test("cursors carry the query, caller and generation and fail closed", async () => {
   const term = `cursor-${prefix}`;
   for (const code of [`${term}-1`, `${term}-2`]) {

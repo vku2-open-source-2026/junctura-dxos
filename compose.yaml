@@ -140,6 +140,7 @@ services:
       - ./infra/postgres/066-audit-inspection.sql:/migrations/066-audit-inspection.sql:ro
       - ./infra/postgres/067-capability-unit-consents.sql:/migrations/067-capability-unit-consents.sql:ro
       - ./infra/postgres/068-workflow-reminders.sql:/migrations/068-workflow-reminders.sql:ro
+      - ./infra/postgres/069-readonly-record-lifecycle.sql:/migrations/069-readonly-record-lifecycle.sql:ro
       - ./infra/postgres/071-exceptional-access-review.sql:/migrations/071-exceptional-access-review.sql:ro
     depends_on:
       database:

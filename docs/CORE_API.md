@@ -401,7 +401,20 @@ In compatibility mode (`STRICT_RECORD_WRITES=false`), a list without `sort`, any
 `ownerAppId` keeps the legacy body and cursor without `version` fields. Strict mode and any filtered list
 return the versioned page. Restart pagination after switching modes.
 
-#### Record archives
+#### Read-only record lifecycle
+
+`POST /v2/data/{collection}/{id}:archive` marks an owned record read-only and advances its ETag.
+Send `If-Match` with the current ETag. A delegated caller also needs the app manager role.
+An optional `Idempotency-Key` replays the original receipt. The receipt and subsequent detail
+and list responses include `archivedAt`. Updates, deletes, increments, locks and upserts
+against an archived record conflict with `409`. Batches containing such a mutation roll back.
+
+Authorized readers keep their read access. Details, lists, exports and search references
+generate `audit.archived_record_read` with actor, record, time and the request ID in
+the audit reason field. The event stores neither record data nor search terms.
+Aggregates continue to include archived records in the caller's existing read scope.
+
+### Record archives
 
 `GET /v2/data:export` streams a consistent snapshot of the calling app's records as UTF-8 NDJSON in
 `(collection, id)` order, containing record IDs, collections and data. Collection definitions, revisions,

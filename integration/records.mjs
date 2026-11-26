@@ -370,6 +370,77 @@ test("batch locks collections in sorted order and rolls back rows, projections a
     [{ op: "delete", id: record.id, version: null }]);
 });
 
+test("archiving serializes with edits and all record paths keep the terminal state", async () => {
+  const name = collection("lifecycle");
+  await jsonResult(await register(name), 200);
+  const data = { code: "ARCHIVE", quantity: 1 };
+  const created = await create(name, data);
+  const record = await jsonResult(created, 201);
+  const path = `${dataPath(name)}/${record.id}`;
+  const archive = (headers, options = {}) => request("POST", `${path}:archive`, { headers, ...options });
+  const conflict = async response => {
+    const body = await jsonResult(response, 409);
+    assert.equal(body.details?.code ?? body.error, "record_archived");
+  };
+  try {
+    await jsonResult(await archive({}, { observe: true }), 428);
+    const before = headersFor(created);
+    const edit = { data: { ...data, quantity: 2 } };
+    const archiveKey = key();
+    const [archiving, editing] = await Promise.all([
+      archive({ ...before, ...archiveKey }, { observe: true }),
+      request("PATCH", path, { headers: before, body: edit }),
+    ]);
+    let archived = archiving;
+    let expected = data;
+    let headers = { ...before, ...archiveKey };
+    if (editing.status === 200) {
+      await jsonResult(archiving, 412);
+      expected = edit.data;
+      headers = { ...headersFor(editing), ...key() };
+      archived = await archive(headers, { observe: true });
+    } else await conflict(editing);
+    const receipt = await jsonResult(archived, 200);
+    assert.ok(Number.isFinite(Date.parse(receipt.archivedAt)));
+    assert.deepEqual(await jsonResult(await archive(headers), 200), receipt);
+    const current = headersFor(archived);
+    await conflict(await archive(current));
+    await conflict(await request("PATCH", path, { headers: current, body: edit }));
+    await conflict(await request("PATCH", path, { headers: { ...current, ...key() },
+      body: { operations: [{ op: "increment", field: "quantity", by: 1 }] } }));
+    await conflict(await request("DELETE", path, { headers: current }));
+    await conflict(await request("POST", `${path}:lock`, { headers: key() }));
+    await conflict(await request("PUT", `${dataPath(name)}/by-key/ARCHIVE`, { headers: key(), body: edit }));
+    const batch = await request("POST", "/v2/data:batch", { headers: key(), body: { operations: [
+      { op: "create", collection: name, data: { code: "ROLLED-BACK" } },
+      { op: "delete", collection: name, id: record.id, ifMatch: current["If-Match"] },
+    ] } });
+    await conflict(batch);
+    await assert.rejects(sql(`UPDATE core.app_records SET data='{}' WHERE tenant_id='tenant-a' AND id=${quoted(record.id)};`), /record_archived/);
+    await assert.rejects(sql(`DELETE FROM core.app_records WHERE tenant_id='tenant-a' AND id=${quoted(record.id)};`), /record_archived/);
+    const detail = await request("GET", path);
+    const returned = await jsonResult(detail, 200);
+    assert.deepEqual(returned.data, expected);
+    assert.equal(Date.parse(returned.archivedAt), Date.parse(receipt.archivedAt));
+    const list = await request("GET", `${dataPath(name)}?sort=code.asc`);
+    assert.deepEqual((await jsonResult(list, 200)).items.map(item => [item.id, Date.parse(item.archivedAt)]),
+      [[record.id, Date.parse(receipt.archivedAt)]]);
+    const exported = await request("GET", `/v2/data:export?collection=${name}`);
+    assert.equal(exported.status, 200);
+    assert.equal((await exported.text()).trim().split("\n").map(line => JSON.parse(line)).filter(line => line.id === record.id).length, 1);
+    const reasons = [detail, list, exported].map(result => quoted(result.headers.get("x-request-id").split(",").at(-1).trim())).join(",");
+    assert.equal(await sql(`SELECT count(DISTINCT reason) FROM app_private.audit
+      WHERE tenant_id='tenant-a' AND resource_id=${quoted(record.id)} AND event='audit.archived_record_read'
+      AND subject=${quoted(owner.subject)} AND reason IN (${reasons});`), "3");
+  } finally {
+    await sql(`BEGIN;
+      ALTER TABLE core.app_records DISABLE TRIGGER record_guard_archived;
+      DELETE FROM core.app_records WHERE tenant_id='tenant-a' AND id=${quoted(record.id)};
+      ALTER TABLE core.app_records ENABLE TRIGGER record_guard_archived;
+      COMMIT;`);
+  }
+});
+
 test("implemented record operations match the observed HTTP contract", async () => {
   await verifyContracts("records");
 });

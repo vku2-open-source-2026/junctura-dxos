@@ -82,6 +82,11 @@ export async function recordCommand(config, identity, operation, payload) {
       signal: AbortSignal.timeout(5000),
       redirect: "error",
     });
+    if (upstream.status === 409) {
+      const error = await upstream.json();
+      if (error?.code === "PT409" && error.message === "record_archived") return { status: 409, error: "record_archived" };
+      throw new Error();
+    }
     if (!upstream.ok) throw new Error();
     const result = await upstream.json();
     if (!Number.isInteger(result?.status) || result.status < 200 || result.status > 499) throw new Error();
@@ -238,12 +243,22 @@ export async function handleAppRecords(request, response, identity, config, url)
     : url.pathname.match(/^\/v2\/data\/([^/]+)(?:\/([^/]+))?$/);
   const collection = path?.[1];
   const lockPath = !schemaPath && path?.[2]?.endsWith(":lock");
-  const id = lockPath ? path[2].slice(0, -5) : path?.[2];
+  const archivePath = !schemaPath && path?.[2]?.endsWith(":archive");
+  const id = lockPath ? path[2].slice(0, -5) : archivePath ? path[2].slice(0, -8) : path?.[2];
   if (!collectionPattern.test(collection ?? "") || (id !== undefined && !uuidPattern.test(id))) {
     throw new HttpError(400, !schemaPath && !lockPath && !config.strictRecords ? "invalid_record_path" : "invalid_request");
   }
   const payload = { collection, id, method, path: url.pathname };
   if (lockPath) return handleRecordLock(request, response, identity, config, url, payload);
+  if (archivePath) {
+    if (method !== "POST") return methodNotAllowed(response, "POST");
+    requireWriter(identity);
+    if (url.search) throw new HttpError(400, "invalid_query");
+    const { ifMatch, requestKey } = parseRecordWriteHeaders(request.headers, { allowIfMatch: true });
+    if (!ifMatch) throw new HttpError(428, "precondition_required");
+    const digest = logicalRequestDigest({ ifMatch });
+    return sendRecordResult(response, await recordCommand(config, identity, "archive_row", { ...payload, ifMatch, requestKey, digest }));
+  }
   if (schemaPath && method === "PUT") {
     requireWriter(identity);
     if (url.search) throw new HttpError(400, "invalid_query");
