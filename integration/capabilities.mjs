@@ -24,7 +24,9 @@ let adminToken, owner, approver, publisher, stranger, foreign, foreignApprover, 
 const visibility = {};
 let c4aFixture, c4aProvider, c4aConsumer, c4aReference, c4aGrant;
 
-const authority = createAuthorityFixture({ base, prefix, sql, q, api, clientIds, users });
+// The full suite crosses the realm's five-minute default on a slow runner.
+const fixtureTokenLifespan = 900;
+const authority = createAuthorityFixture({ base, prefix, sql, q, api, clientIds, users, backendTokenLifespan: fixtureTokenLifespan });
 const { operatorToken, admin, login, human, verifiedSubject, cleanupSubjectBindings } = authority;
 
 // A database restart recreates the Data and Core connection pools, and each
@@ -156,7 +158,7 @@ before(async () => {
     const protocolMappers = structuredClone(source.protocolMappers);
     for (const mapper of protocolMappers) delete mapper.id;
     protocolMappers.find(mapper => mapper.name === "tenant").config["claim.value"] = tenant;
-    const management = await admin("clients", { clientId: `${prefix}-management-${tenant}`, enabled: true, protocol: "openid-connect", publicClient: true, standardFlowEnabled: true, directAccessGrantsEnabled: false, redirectUris: ["http://127.0.0.1:9876/callback"], attributes: { "pkce.code.challenge.method": "S256" }, protocolMappers }, "POST");
+    const management = await admin("clients", { clientId: `${prefix}-management-${tenant}`, enabled: true, protocol: "openid-connect", publicClient: true, standardFlowEnabled: true, directAccessGrantsEnabled: false, redirectUris: ["http://127.0.0.1:9876/callback"], attributes: { "pkce.code.challenge.method": "S256", "access.token.lifespan": String(fixtureTokenLifespan) }, protocolMappers }, "POST");
     assert.equal(management.status, 201); clientIds.push(management.headers.get("location").split("/").at(-1));
   }
 
