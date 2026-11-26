@@ -89,6 +89,7 @@ async function exportRecords(request, response, identity, config, url) {
     "X-Content-Type-Options": "nosniff",
   });
   let written = 0;
+  let released = false;
   try {
     for (;;) {
       for (const line of page.lines) {
@@ -110,9 +111,13 @@ async function exportRecords(request, response, identity, config, url) {
         afterId: page.nextAfter.id,
       }));
     }
-    if (!closed && !response.destroyed) response.end();
+    if (!closed && !response.destroyed) {
+      resultValue(await archiveCommand(config, identity, "export_end", { snapshotId, completed: true }));
+      released = true;
+      response.end();
+    }
   } finally {
-    await endSnapshot(config, identity, snapshotId);
+    if (!released) await endSnapshot(config, identity, snapshotId);
   }
 }
 

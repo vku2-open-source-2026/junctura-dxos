@@ -63,6 +63,7 @@
     "test:capabilities": "node --env-file=.env --test integration/capabilities.mjs",
     "test:compositions": "node --env-file=.env --test integration/compositions.mjs",
     "test:audit": "node --env-file=.env --test integration/audit.mjs",
+    "test:auto-audit": "node --env-file=.env --test integration/auto-audit.mjs",
     "test:audit-app": "node --env-file=.env --test integration/audit-app.mjs",
     "test:events": "node --env-file=.env --test integration/events.mjs",
     "test:message-queue": "node --env-file=.env --test integration/message-queue.mjs",

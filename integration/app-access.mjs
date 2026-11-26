@@ -29,9 +29,14 @@ after(async () => {
   const apps = `SELECT app_id FROM app_private.applications WHERE tenant_id=${q(tenant)} AND owner_subject IN (${subjects})`;
   try {
     await sql(`BEGIN;
+      SELECT set_config('request.jwt.claims', ${q(JSON.stringify({ tenant_id: tenant }))}, true);
       DELETE FROM core.app_records WHERE tenant_id=${q(tenant)} AND owner_app_id IN (${apps});
+      DELETE FROM app_private.record_collections WHERE tenant_id=${q(tenant)} AND owner_app_id IN (${apps});
       DELETE FROM app_private.approvals WHERE tenant_id=${q(tenant)} AND app_id IN (${apps});
-      DELETE FROM app_private.applications WHERE tenant_id=${q(tenant)} AND owner_subject IN (${subjects});
+      DELETE FROM app_private.applications a WHERE a.tenant_id=${q(tenant)} AND a.owner_subject IN (${subjects})
+        AND NOT EXISTS (SELECT FROM app_private.audit e WHERE (e.tenant_id,e.actor_app_id)=(a.tenant_id,a.app_id));
+      -- Revoke fixture apps that remain referenced by the audit chain.
+      UPDATE app_private.applications SET state='revoked' WHERE tenant_id=${q(tenant)} AND owner_subject IN (${subjects});
       DELETE FROM app_private.enrollments WHERE tenant_id=${q(tenant)} AND owner_subject IN (${subjects});
       DELETE FROM app_private.principals WHERE tenant_id=${q(tenant)} AND subject IN (${subjects});
       DELETE FROM app_private.directory_memberships WHERE tenant_id=${q(tenant)} AND unit IN (${q(unitA)},${q(unitB)});

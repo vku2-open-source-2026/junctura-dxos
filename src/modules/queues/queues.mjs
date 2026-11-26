@@ -10,6 +10,7 @@ const validUuid = value => typeof value === "string" && uuidPattern.test(value);
 const invalid = () => { throw new HttpError(400, "invalid_queue_request"); };
 
 const routes = {
+  delete: { method: "DELETE", status: 204 },
   configure: { method: "PUT", status: 200, fields: [...accessLists, "maxAttempts"] },
   send: { method: "POST", status: 201, fields: ["payload", "delaySeconds"] },
   lease: { method: "POST", status: 200, fields: ["visibilityTimeoutSeconds"] },
@@ -34,6 +35,11 @@ async function readCommand(request, url, operation) {
     return { limit: boundedInteger(query.limit === undefined ? undefined : Number(query.limit), 1, 50, 20), cursor: query.cursor };
   }
   if (url.search) invalid();
+  if (operation === "delete") {
+    const key = request.headers["idempotency-key"];
+    if (!validUuid(key)) throw new HttpError(400, "invalid_idempotency_key");
+    return { key };
+  }
   const body = await readRecordJson(request, operation === "send" ? maxPayloadBytes + 1024 : 16384);
   if (!jsonObject(body) || Object.keys(body).some(key => !routes[operation].fields.includes(key))) invalid();
   switch (operation) {
@@ -69,10 +75,10 @@ export async function handleQueues(request, response, identity, config, url) {
   const match = pathPattern.exec(url.pathname);
   if (!match) throw new HttpError(404, "not_found");
   const [, queue, suffix, messageId, action, deadId] = match;
-  const operation = action ?? (deadId ? "replay" : { messages: "send", lease: "lease", "dead-letters": "list" }[suffix] ?? "configure");
+  const operation = action ?? (deadId ? "replay" : { messages: "send", lease: "lease", "dead-letters": "list" }[suffix] ?? (request.method === "DELETE" ? "delete" : "configure"));
   const { method, status } = routes[operation];
   if (request.method !== method) {
-    response.setHeader("Allow", method);
+    response.setHeader("Allow", operation === "configure" ? "PUT, DELETE" : method);
     throw new HttpError(405, "method_not_allowed");
   }
   if ((messageId || deadId) && !validUuid(messageId ?? deadId)) invalid();

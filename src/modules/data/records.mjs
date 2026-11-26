@@ -263,6 +263,8 @@ export async function handleAppRecords(request, response, identity, config, url)
     requireWriter(identity);
     if (url.search) throw new HttpError(400, "invalid_query");
     payload.body = parseCollectionSchema(await readRecordJson(request));
+    Object.assign(payload, parseRecordWriteHeaders(request.headers));
+    if (payload.requestKey) payload.digest = logicalRequestDigest(payload);
     return sendRecordResult(response, await recordCommand(config, identity, "register", payload));
   }
   if (!schemaPath && id && method === "GET") {

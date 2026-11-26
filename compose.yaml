@@ -143,6 +143,8 @@ services:
       - ./infra/postgres/069-readonly-record-lifecycle.sql:/migrations/069-readonly-record-lifecycle.sql:ro
       - ./infra/postgres/070-record-aggregate-source.sql:/migrations/070-record-aggregate-source.sql:ro
       - ./infra/postgres/071-exceptional-access-review.sql:/migrations/071-exceptional-access-review.sql:ro
+      - ./infra/postgres/073-automatic-operation-audit.sql:/migrations/073-automatic-operation-audit.sql:ro
+      - ./infra/postgres/074-audited-queue-removal.sql:/migrations/074-audited-queue-removal.sql:ro
     depends_on:
       database:
         condition: service_healthy

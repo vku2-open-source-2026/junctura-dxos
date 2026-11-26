@@ -142,6 +142,74 @@
             "$ref": "#/components/responses/GatewayTimeout"
           }
         }
+      },
+      "delete": {
+        "tags": [
+          "message-queues"
+        ],
+        "x-junctura-query-policy": "closed",
+        "security": [
+          {
+            "coreBearer": []
+          }
+        ],
+        "x-junctura-core-roles": [
+          "core-reader",
+          "core-writer"
+        ],
+        "x-junctura-authority": "app-resource",
+        "x-junctura-source": "src/modules/queues/queues.mjs",
+        "x-junctura-test-suite": "message-queue",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/QueueName"
+          },
+          {
+            "$ref": "#/components/parameters/PlannedIdempotencyKey"
+          }
+        ],
+        "operationId": "deleteQueue",
+        "summary": "Remove an empty message queue",
+        "description": "The queue owner may remove a queue after messages and dead letters have cleared. The idempotency key replays a successful removal.",
+        "responses": {
+          "204": {
+            "description": "Queue deleted."
+          },
+          "409": {
+            "description": "The queue still contains messages or dead letters.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": { "const": "queue_not_empty" },
+                    "requestId": { "$ref": "#/components/schemas/Uuid" }
+                  },
+                  "required": ["error", "requestId"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "405": {
+            "$ref": "#/components/responses/MethodNotAllowed"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          }
+        }
       }
     },
     "/v1/queues/{queue}/messages": {

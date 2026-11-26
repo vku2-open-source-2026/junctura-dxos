@@ -74,7 +74,7 @@ def composition_inventory(spec, source=None):
 # When handlers change, review this inventory and add an observed positive case.
 EXPECTED = {
     '/health': {'get', 'head'}, '/ready': {'get'}, '/metrics': {'get'}, '/v1/identity': {'get'}, '/v1/events': {'get'}, '/v1/token-exchange': {'post'},
-    '/v1/queues/{queue}': {'put'}, '/v1/queues/{queue}/messages': {'post'}, '/v1/queues/{queue}/lease': {'post'},
+    '/v1/queues/{queue}': {'put', 'delete'}, '/v1/queues/{queue}/messages': {'post'}, '/v1/queues/{queue}/lease': {'post'},
     '/v1/queues/{queue}/messages/{messageId}/ack': {'post'}, '/v1/queues/{queue}/messages/{messageId}/nack': {'post'},
     '/v1/queues/{queue}/dead-letters': {'get'}, '/v1/queues/{queue}/dead-letters/{messageId}/replay': {'post'},
     '/v1/me/resource-consents': {'get', 'post'}, '/v1/me/resource-consents/{consentId}/revoke': {'post'},

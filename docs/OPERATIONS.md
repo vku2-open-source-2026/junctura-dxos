@@ -479,3 +479,22 @@ Before anything beyond the local stack, approve the target and check:
 - Quarantine cleanup is best-effort; interrupted uploads can leave orphaned bytes.
 - `test:recovery` covers structured data only; the backup command omits OpenBao and global roles.
 - No production deployment, container registry publication or automatic Core release is configured. The only automated publication is the Node SDK: pushing an `sdk-v*` tag publishes `sdk/node` to npm (`.github/workflows/publish-sdk.yml`).
+
+
+## Automatic audit of operation commits
+
+| Operation | Event | Actor | Evidence and retry |
+| --- | --- | --- | --- |
+| Record batch | `audit.record_batch` | Verified caller | Mutation transaction and idempotency receipt |
+| Schema registration | `audit.record_schema_registered` | Verified caller | Schema transaction and optional idempotency key |
+| Masking change | `audit.record_masking_changed` | Verified caller | Changed policy row and schema revision |
+| NDJSON import | `audit.records_imported` | Verified caller | Import transaction and idempotency receipt |
+| NDJSON export | `audit.records_exported` | Verified caller | Final generated page and deletion of its snapshot |
+| Workflow completion | `audit.workflow_completed` | Verified task completer | Confirmed Flowable result and the completion outbox marker |
+| Queue creation, deletion and delivery | `audit.queue_*` | Verified app | Queue transaction and successful deletion receipt |
+| App backup | `application.backed_up` | Compose operator | Verified manifest and per-file checksums |
+| Assignment changes | Existing application audit events | Enrolled manager | Assignment transaction |
+| App restore | `application.restored` | Compose operator | Restore metadata transaction |
+
+The new operation events store request correlation in the audit reason field.
+Workflow completion keeps the original actor in the outbox until its result is confirmed.
