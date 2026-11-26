@@ -407,3 +407,29 @@ test("workflow notification observations deduplicate across Core replicas and re
   assert.equal((await deliver(["/unit-a/readers"])).value, null);
   await assert.rejects(rpc("junctura_event_api", "core.event_observe_tasks('[]')"), /permission denied/);
 });
+
+test("workflow reminders retain a single milestone per deadline revision across observers", async () => {
+  const tenant = "reminder-migration";
+  const key = randomUUID();
+  await sql(`INSERT INTO app_private.workflow_executions
+    (tenant_id,caller_scope,request_key,digest,definition_id,definition_key,steps,execution_id,start_result,due_at)
+    VALUES ('${tenant}',sha256(''::bytea),'${key}',sha256(''::bytea),'fixture:1:1','fixture',
+      '{"review":{"unit":"review","groups":["member"]}}','execution','{}',clock_timestamp()+interval '10 minutes');`);
+  const reference = JSON.stringify([{ taskId: "task", executionId: "execution", definitionId: "fixture:1:1",
+    stepKey: "review", createdAt: new Date().toISOString() }]);
+  const observe = () => sql(`SET ROLE junctura_event_observer;
+    SELECT set_config('request.jwt.claims','{"tenant_id":"${tenant}"}',false);
+    SELECT core.event_remind_tasks('${reference}',3600);`);
+  const journal = () => sql(`SELECT string_agg(deadline_revision||':'||milestone,',' ORDER BY deadline_revision,milestone)
+    FROM app_private.workflow_reminders WHERE tenant_id='${tenant}';`);
+  await Promise.all([observe(), observe()]);
+  assert.equal(await journal(), "1:due_soon");
+  await sql(`UPDATE app_private.workflow_executions SET due_at=clock_timestamp()-interval '1 minute'
+    WHERE tenant_id='${tenant}';`);
+  await Promise.all([observe(), observe()]);
+  assert.equal(await journal(), "1:due_soon,2:overdue");
+  await sql(`UPDATE app_private.workflow_executions SET due_at=clock_timestamp()+interval '10 minutes',cancel_requested=true
+    WHERE tenant_id='${tenant}';`);
+  await observe();
+  assert.equal(await journal(), "1:due_soon,2:overdue");
+});
