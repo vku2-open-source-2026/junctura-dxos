@@ -90,7 +90,7 @@ test("listing asks the private audit role for one tenant page and returns it unc
 
 test("listing rejects unknown, repeated or malformed query parameters before the database", async () => {
   seen = [];
-  for (const bad of ["?tenant=other", "?limit=5&limit=6", "?limit=abc", "?limit=1000", "?since="]) {
+  for (const bad of ["?tenant=other", "?limit=5&limit=6", "?limit=abc", "?limit=1000", "?since=", "?actor=%00", "?actor=a&actor=b"]) {
     assert.equal((await events(bad)).status, 400, bad);
   }
   assert.equal((await fetch(`${base}/v1/audit-events`, { method: "PUT", body: "{}" })).status, 405);

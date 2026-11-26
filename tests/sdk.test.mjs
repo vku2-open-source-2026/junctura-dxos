@@ -362,16 +362,18 @@ test("application audit methods forward the key, scope and caller token and retu
   });
   const idempotencyKey = "11111111-1111-4111-8111-111111111111";
   assert.deepEqual(await client.appendAppAuditEvent(body, { idempotencyKey, userToken: "delegated" }), { eventId: "receipt" });
-  assert.deepEqual(await client.queryAppAuditEvents({ app: "self", action: body.action, userToken: "delegated" }),
+  assert.deepEqual(await client.queryAppAuditEvents({ app: "self", action: body.action, actor: "login-a", userToken: "delegated" }),
     { items: [], nextCursor: null });
-  const stream = await client.exportAppAuditEvents({ unit: "unit-a", userToken: "regulator" });
+  const stream = await client.exportAppAuditEvents({ unit: "unit-a", actor: "login-a", userToken: "regulator" });
   assert.equal(JSON.parse(await stream.text()).type, "chainHead");
   assert.equal(requests[0].headers.get("Idempotency-Key"), idempotencyKey);
   assert.equal(requests[0].headers.get("Authorization"), "Bearer delegated");
   assert.deepEqual(JSON.parse(requests[0].payload), body);
   assert.equal(requests[1].url.searchParams.get("app"), "self");
   assert.equal(requests[1].url.searchParams.get("action"), body.action);
+  assert.equal(requests[1].url.searchParams.get("actor"), "login-a");
   assert.equal(requests[2].url.searchParams.get("unit"), "unit-a");
+  assert.equal(requests[2].url.searchParams.get("actor"), "login-a");
   assert.equal(requests[2].headers.get("Authorization"), "Bearer regulator");
 });
 

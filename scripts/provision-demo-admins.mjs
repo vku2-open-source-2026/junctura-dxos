@@ -31,11 +31,16 @@ export const DEMO_ACCOUNT = {
   label: "Tài khoản demo (chỉ xem)", displayName: "Tài khoản demo (chỉ xem)",
   jobTitle: "Chỉ xem", readOnly: true, public: true,
 };
+export const DEMO_INSPECTOR = {
+  username: "audit-inspector", tenant: "demo", firstName: "Audit", lastName: "Inspector",
+  label: "Thanh tra demo", displayName: "Thanh tra demo", jobTitle: "Đọc nhật ký kiểm toán",
+  readOnly: true, public: false,
+};
 export const JUDGE_ACCOUNT = {
   username: "giamkhao", tenant: "production", firstName: "Giám", lastName: "khảo",
   label: "Giám khảo", displayName: "Giám khảo", jobTitle: "Chỉ xem", readOnly: true, public: false,
 };
-export const ENVIRONMENT_ACCOUNTS = [DEMO_ACCOUNT, ...DEMO_ADMINS, JUDGE_ACCOUNT];
+export const ENVIRONMENT_ACCOUNTS = [DEMO_ACCOUNT, DEMO_INSPECTOR, ...DEMO_ADMINS, JUDGE_ACCOUNT];
 
 const MANAGEMENT_CLIENT = "junctura-console";
 
@@ -225,7 +230,19 @@ export async function provisionTenant({ admin, idFrom, group, roles, sql }, { te
   const consoleClient = (await (await expectStatus(await admin(`clients?clientId=${MANAGEMENT_CLIENT}`),
     [200], "Read Console client")).json()).find(client => client.clientId === MANAGEMENT_CLIENT);
   if (!consoleClient) throw new Error("Console client missing");
-  const consoleRoles = await (await expectStatus(await admin(`clients/${consoleClient.id}/roles`),
+  const consolePath = `clients/${consoleClient.id}`;
+  const scopePath = `${consolePath}/default-client-scopes`;
+  const defaults = await (await expectStatus(await admin(scopePath), [200], "Read Console default scopes")).json();
+  const missing = ["basic", "roles"].filter(name => !defaults.some(scope => scope.name === name));
+  if (missing.length) {
+    const available = await (await expectStatus(await admin("client-scopes"), [200], "Read realm scopes")).json();
+    for (const name of missing) {
+      const scope = available.find(candidate => candidate.name === name);
+      if (!scope) throw new Error(`Keycloak client scope ${name} missing`);
+      await expectStatus(await admin(`${scopePath}/${scope.id}`, undefined, "PUT"), [204], `Assign Console scope ${name}`);
+    }
+  }
+  const consoleRoles = await (await expectStatus(await admin(`${consolePath}/roles`),
     [200], "Read Console access roles")).json();
 
   const created = [];

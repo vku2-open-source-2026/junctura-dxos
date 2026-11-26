@@ -1059,9 +1059,14 @@ are outside the subject view.
 - `GET /v1/audit-events?app=self` shows the active app's events. Regulators see app entries for
   assigned units. Their restricted view withholds actor, subject, resource, purpose and metadata,
   and the subject filter searches standard entries only. Management with `audit.read` sees
-  platform events and the structural projection of app events. It can still use `since` and
-  `until` for the inclusive time range. Keep the filters and caller scope across pages.
-- `GET /v1/audit-events:export` streams an authorized snapshot as NDJSON. The first line gives the
+  platform events and the structural projection of app events in its own tenant after matching the
+  verified issuer and client. `unit` limits that view to application metadata for the specified unit.
+  Regulators can filter only their assigned units. The `actor` filter matches the login or service identity
+  that performed an operation. It matches platform events for management, standard application events for
+  regulators and the caller's own events for `app=self`. `subjectId` continues to filter the data subject.
+  Use `from` and `to` for inclusive timestamps. List also accepts the legacy `since` and `until` names.
+  Keep the filters and caller scope across pages.
+- `GET /v1/audit-events:export` streams an authorized snapshot as NDJSON with the same audit filters. The first line gives the
   tenant head even for an empty result; an empty chain reports sequence 0 with the zero hash of 64
   zeros, which the chain verifier accepts as the genesis predecessor. Each event line gives its
   sequence and digest. Scoped views can have sequence gaps. A tenant can have two active exports,
