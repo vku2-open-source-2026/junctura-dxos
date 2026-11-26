@@ -68,7 +68,7 @@ services:
       interval: 5s
       timeout: 3s
       retries: 30
-      start_period: 60s
+      start_period: 300s
     networks: [identity]
   data-migrate:
     image: postgres:17-bookworm@sha256:858bb5e98eed02eb8cafbcdc007f9a65d1b613972028944a8ec2133ccaf80d27
