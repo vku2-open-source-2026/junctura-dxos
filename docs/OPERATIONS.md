@@ -182,6 +182,32 @@ role passwords, `.env` and OpenBao data/operator/token volumes are outside the a
 For dumps taken with migration 052 applied, the target PostgreSQL cluster must already have
 `junctura_consent_lookup` (`NOLOGIN NOBYPASSRLS`), the owner of `app_private.resource_consent_target`.
 
+## Application backup and restore
+
+```sh
+npm run app-backup -- <appId> [--out path]
+npm run app-restore -- <archive-directory> --yes [--replace]
+```
+
+The archive includes one application's collection schemas, records, object metadata and
+versioned bytes, object quota, shares and app-owned read and audit policies. JSON
+metadata comes from one PostgreSQL snapshot. Each object is downloaded by the version
+in that snapshot. The manifest records the tenant, application, migration version,
+creation time and checksum of each entry. A verified archive records one backup
+audit event. Source audit rows are stored as evidence.
+
+The target must have the matching application and enrollment. Shared directories,
+principals and grantee apps must exist in the target. Keep the app quiescent during a
+restore. Core checks staged bytes and scans them before the SQL transaction switches
+object metadata. The transaction keeps source audit evidence separate from the target
+chain and writes one restore event. A failed transaction leaves the previous object
+versions available. Existing archives retain their read-only lifecycle.
+
+The CLI refuses backup or restore with unresolved uploads, app assignments, owned queues,
+published capability state or consumer executions. It does not capture enrollment
+credentials, identity secrets, active Keycloak sessions or a Flowable execution. The
+archive may contain application data and requires the same access control as the source.
+
 ## Gateway access log
 
 Gateway emits JSON lines: `time`, `request_id`, `client`, `method`, `path`, `status`, `bytes`,
