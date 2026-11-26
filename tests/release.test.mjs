@@ -1,12 +1,17 @@
 // SPDX-FileCopyrightText: 2026 Junctura Contributors
 // SPDX-License-Identifier: Apache-2.0
 import assert from "node:assert/strict";
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { delimiter, join } from "node:path";
 import { test } from "node:test";
 import { assertRequiredReleaseFiles, releaseFiles } from "../scripts/package-release.mjs";
 import { commandOnPath, preferPython3 } from "../scripts/lib/python.mjs";
+
+// The unit container mounts /tmp with noexec, so a file created there can
+// never pass accessSync(X_OK): commandOnPath fixtures exercise executables
+// through a symlink to the node binary, which resolves onto its own
+// executable mount while all scratch files stay under os.tmpdir().
 
 test("source release allowlist excludes local/private roots and rejects secrets inside public roots", () => {
   assert.deepEqual(releaseFiles(["LICENSE", ".env", ".env.rc-test", ".codex/private.md", "local-data/data", "docs/GETTING_STARTED.md", ".env.example"]), [".env.example", "LICENSE", "docs/GETTING_STARTED.md"]);
@@ -53,17 +58,19 @@ test("the rehearsal prefers python3 only when PYTHON is unset and python is miss
 
 test("commandOnPath only finds executable files on the PATH", () => {
   const directory = mkdtempSync(join(tmpdir(), "jx-release-python-"));
-  writeFileSync(join(directory, "python"), "#!/bin/sh\n");
-  chmodSync(join(directory, "python"), 0o755);
-  writeFileSync(join(directory, "notes"), "not executable");
-  mkdirSync(join(directory, "python-dir"));
-  const path = [directory, join(directory, "missing")].join(delimiter);
-  assert.equal(commandOnPath("python", path), true);
-  assert.equal(commandOnPath("notes", path), false);
-  assert.equal(commandOnPath("python-dir", path), false);
-  assert.equal(commandOnPath("python", ""), false);
-  assert.equal(commandOnPath("python", null), false);
-  rmSync(directory, { recursive: true, force: true });
+  try {
+    symlinkSync(process.execPath, join(directory, "python"));
+    writeFileSync(join(directory, "notes"), "not executable");
+    mkdirSync(join(directory, "python-dir"));
+    const path = [directory, join(directory, "missing")].join(delimiter);
+    assert.equal(commandOnPath("python", path), true);
+    assert.equal(commandOnPath("notes", path), false);
+    assert.equal(commandOnPath("python-dir", path), false);
+    assert.equal(commandOnPath("python", ""), false);
+    assert.equal(commandOnPath("python", null), false);
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
 });
 
 test("the release rehearsal applies the python3 fallback before spawning children", () => {
