@@ -29,6 +29,7 @@ after(async () => {
   const apps = `SELECT app_id FROM app_private.applications WHERE tenant_id=${q(tenant)} AND owner_subject IN (${subjects})`;
   try {
     await sql(`BEGIN;
+      SELECT set_config('request.jwt.claims', ${q(JSON.stringify({ tenant_id: tenant }))}, true);
       DELETE FROM core.app_records WHERE tenant_id=${q(tenant)} AND owner_app_id IN (${apps});
       DELETE FROM app_private.record_collections WHERE tenant_id=${q(tenant)} AND owner_app_id IN (${apps});
       DELETE FROM app_private.approvals WHERE tenant_id=${q(tenant)} AND app_id IN (${apps});
