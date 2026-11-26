@@ -6,6 +6,7 @@ import { cpus, tmpdir, totalmem } from "node:os";
 import { basename, join, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { sha256 } from "./backup.mjs";
+import { preferPython3 } from "./lib/python.mjs";
 
 const { positionals, values } = parseArgs({ allowPositionals: true, options: {
   project: { type: "string" }, port: { type: "string" }, "console-port": { type: "string" },
@@ -19,6 +20,9 @@ if (!archive || !archive.endsWith(".tar.gz") || !/^jx-release-[a-z0-9-]+$/.test(
 }
 const sidecar = readFileSync(archive + ".sha256", "utf8").trim().match(/^([a-f0-9]{64})\s+\*?([^/]+)$/);
 if (!sidecar || sidecar[2] !== basename(archive) || sidecar[1] !== await sha256(archive)) throw new Error("Source archive checksum mismatch");
+
+// Contract checks spawned below honor $PYTHON; hosts that only ship python3 still work.
+preferPython3();
 
 const listing = execFileSync("tar", ["-tvzf", archive], { encoding: "utf8" });
 if (listing.trim().split("\n").some(line => !/^[-d]/.test(line))) throw new Error("Source archive has an unsupported file type");

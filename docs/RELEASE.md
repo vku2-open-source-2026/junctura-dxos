@@ -80,7 +80,7 @@ For regression tests install `requirements-contracts.txt`, host OpenSSL and Cons
 dependencies. Run the commands in [DEVELOPING](DEVELOPING.md) sequentially whenever
 they restart shared services. Do not run recovery/fault suites on a real data stack.
 
-## Tenant transfer preflight
+## Tenant transfer preflight and isolated rehearsal
 
 Run the preflight on an isolated restore of the tenant and pass both IDs and the
 new display name. The report inventories Core and Flowable rows and Keycloak tenant
@@ -89,6 +89,51 @@ groups. A populated target namespace produces a failing exit status.
 ```sh
 npm run tenant:preflight -- --from old-tenant --to new-tenant --name "New tenant"
 ```
+
+`npm run tenant:transfer-rehearse` turns that preflight into a strictly
+**read-only** rehearsal plan on an isolated `jx-` rehearsal stack. It never
+mutates tenant data, never renames preserved source audit rows and never
+performs a cutover; the configured Compose project is read from the checkout's
+`.env` only and passed explicitly to every Docker invocation, with session
+`COMPOSE_*`, `DOCKER_HOST` and `DOCKER_CONTEXT` overrides stripped, so a
+session environment cannot point the tool at another running stack or daemon.
+It summarizes the read-only preflight (Core/Postgres and Flowable inventory,
+Keycloak tenant group counts, destination-namespace conflicts), re-verifies
+the sealed audit chain with the same link algorithm as `core.audit_verify`,
+records object byte digests inside the Core container, checks loopback-only
+gateway health and readiness (redirects refused; the configured `PUBLIC_URL`
+is informational and never contacted with credentials) and classifies every
+store:
+
+- `ready` — preconditions and read-only evidence collected. The transfer is
+  **not** executed; the report stays strictly read-only and embeds no
+  executable SQL.
+- `blocked` — the tool refuses: source audit rows (`app_private.audit`,
+  `app_private.audit_chain_heads`) are preserved, never re-identified;
+  `app_private.subject_bindings` require operator reconciliation;
+  `app_private.object_upload_staging` must be drained; per-tenant search
+  indexes are rebuilt asynchronously and cannot be verified synchronously;
+  **OpenBao and Keycloak binding/login evidence stay blocked until a guarded
+  isolated test exists** — the planner performs no token exchange, sends no
+  operator credentials and probes no secret values or digests, so no secret
+  material can reach the report.
+- `unavailable` — nothing present or not configured in this fixture. An empty
+  fixture, a passing preflight or a `ready` status is never reported as a
+  transfer: `complete` is always `false` in this mode, with the reason recorded.
+- `failed` — evidence collection failed; the report is still written.
+
+```sh
+npm run tenant:transfer-rehearse -- --from old-tenant --to new-tenant \
+  --name "New tenant" --project jx-transfer-1 --report transfer-plan.json
+```
+
+The report lists the concrete remaining gates: sandbox staging with per-write
+rollback, OpenBao and Keycloak evidence collection in a guarded isolated test,
+guard interactions on archived records and subject bindings, Keycloak
+member/mapper verification, search reindexing, a verified restore point taken
+with `scripts/backup.mjs` (the platform snapshot does not cover OpenBao
+storage) and a coordinated rollback rehearsal in a fresh sandbox. No
+production cutover and no final tag is authorized by this tool.
 
 Before authorizing a transfer, inventory SeaweedFS object versions, OpenBao policy
 bindings and any external registrations for those IDs. Take and verify a coordinated

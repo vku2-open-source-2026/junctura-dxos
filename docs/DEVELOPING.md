@@ -148,6 +148,8 @@ npm run console:build
 use `python3 -B scripts/check-contracts.py` and `python3 -B scripts/check-contracts.py --self-test`.
 `check:reuse` also calls `python`; use `python3 -B -m reuse lint` instead (`reuse lint` is read-only).
 `integration/contract.mjs` honours `PYTHON`; set `PYTHON=python3` on such hosts.
+`scripts/dev-stack.sh` and `npm run release:rehearse` set `PYTHON=python3` automatically
+when only `python3` exists; an explicit `PYTHON` always wins.
 
 Real-service checks require Docker Engine with Linux containers; provider-network
 checks also require host OpenSSL. Run sequentially on a disposable test stack:

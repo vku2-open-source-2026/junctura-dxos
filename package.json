@@ -42,6 +42,7 @@
     "test:setup": "node --test tests/setup.test.mjs",
     "test:release": "node --test tests/release.test.mjs",
     "tenant:preflight": "node scripts/tenant-preflight.mjs",
+    "tenant:transfer-rehearse": "node scripts/tenant-transfer.mjs",
     "release:package": "node scripts/package-release.mjs",
     "release:rehearse": "node scripts/rehearse-release.mjs",
     "release:verify": "node scripts/verify-release.mjs",

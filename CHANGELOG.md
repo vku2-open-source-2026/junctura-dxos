@@ -206,6 +206,18 @@ All notable changes to Junctura are recorded here. Versions follow
   language (VI or EN); one click switches to the other. It has an accessible name and a visible
   keyboard focus, and the standard drop-down still works if the small script cannot run.
 
+- **Read-only tenant evidence report (issue #50):** `npm run
+  tenant:transfer-rehearse` runs a guarded, reproducible rehearsal on an
+  isolated `jx-` Compose project, re-verifying the sealed audit chain and
+  inventorying Core/Postgres and object digests, then drafts a transfer plan —
+  strictly read-only: no tenant data mutation, object staging, token exchange
+  or secret probing. OpenBao and Keycloak binding evidence stay blocked until
+  a guarded isolated test exists; no production cutover is authorized.
+
+- **Python 3 fallback:** `npm run release:rehearse` exports `PYTHON=python3`
+  when `PYTHON` is unset and no `python` binary exists, fixing
+  `spawn python ENOENT` on Python3-only hosts; an explicit `PYTHON` still wins.
+
 ## 0.2.0 — Console on live APIs (2026-11-11)
 
 - **Junctura sign-in page for applications (issue #30):** applications that sign in
