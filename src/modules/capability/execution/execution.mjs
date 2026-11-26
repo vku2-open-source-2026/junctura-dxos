@@ -12,7 +12,9 @@ import { evaluateCapabilityEligibility } from "../trust/trust.mjs";
 const digestPattern = /^sha256:[0-9a-f]{64}$/;
 const capabilityPattern = /^urn:junctura:capability:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}:[a-z][a-z0-9-]{0,62}$/;
 const versionPattern = /^(0|[1-9][0-9]{0,8})\.(0|[1-9][0-9]{0,8})\.(0|[1-9][0-9]{0,8})$/;
-const sameIdentity = (a, b) => ["tenantId", "issuer", "subject", "clientId"].every(key => a[key] === b[key]);
+const serviceSubject = identity => identity.actor?.sub ?? identity.actorSubject ?? null;
+const sameIdentity = (a, b) => ["tenantId", "issuer", "subject", "clientId", "resourceUnit", "humanAppId"]
+  .every(key => (a[key] ?? null) === (b[key] ?? null)) && serviceSubject(a) === serviceSubject(b);
 export const jsonDigest = value => `sha256:${createHash("sha256").update(canonicalize(value)).digest("hex")}`;
 export const ticketDigest = ticket => `sha256:${createHash("sha256").update(ticket).digest("hex")}`;
 
@@ -73,7 +75,9 @@ export function createAuthenticationLeases({ capacity = 1000, now = Date.now } =
       if (previous && !sameIdentity(previous.identity, identity)) throw new HttpError(403, "initiator_mismatch");
       if (previous) return; // Concurrent replays retain the first live credential and expiry.
       if (!previous && leases.size >= capacity) throw new HttpError(429, "execution_capacity_exceeded");
-      const boundIdentity = { tenantId: identity.tenantId, issuer: identity.issuer, subject: identity.subject, clientId: identity.clientId };
+      const boundIdentity = { tenantId: identity.tenantId, issuer: identity.issuer, subject: identity.subject,
+        clientId: identity.clientId, resourceUnit: identity.resourceUnit, humanAppId: identity.humanAppId,
+        actorSubject: serviceSubject(identity) };
       leases.set(execution.executionId, { identity: boundIdentity, authorization, expiresAt: expiry });
     },
     async use(executionId, identity, callback) {
@@ -95,7 +99,8 @@ export function createAuthenticationLeases({ capacity = 1000, now = Date.now } =
 
 export function leaseProof(executionId, identity, expiresAt) {
   return { executionId, tenantId: identity.tenantId, issuer: identity.issuer, subject: identity.subject,
-    clientId: identity.clientId, writer: identity.roles.includes("core-writer"), expiresAt: new Date(expiresAt).toISOString() };
+    clientId: identity.clientId, writer: identity.roles.includes("core-writer"), expiresAt: new Date(expiresAt).toISOString(),
+    ...(identity.actor ? { resourceUnit: identity.resourceUnit, actorSubject: identity.actor.sub } : {}) };
 }
 
 export async function executionCommand(config, identity, operation, payload, proof) {
@@ -103,6 +108,7 @@ export async function executionCommand(config, identity, operation, payload, pro
   const assertion = signInternalToken(config.dataSecret, { role: "junctura_execution_api", aud: "junctura-data",
     tenant_id: identity.tenantId, iss: identity.issuer, sub: identity.subject, client_id: identity.clientId,
     trust_writer: identity.roles.includes("core-writer"),
+    ...(identity.actor ? { actor_sub: identity.actor.sub, resource_unit: identity.resourceUnit, human_app_id: identity.humanAppId } : {}),
     exp: Math.min(Math.floor(Date.now() / 1000) + 30, Math.floor(identity.credentialExpiresAt / 1000)),
     ...(proof ? { c4a_lease: proof } : {}) });
   let result;
@@ -162,14 +168,27 @@ export async function reserveExecution(config, identity, request, body, leases, 
   return result;
 }
 
+function executionRequest(authorization) {
+  return { headers: { authorization }, url: "/v1/capability-executions", method: "POST" };
+}
+
+export async function authorizeExecutionLease(config, authorization, original) {
+  const current = await createAuthorizer(config)(executionRequest(authorization), true);
+  if (!sameIdentity(original, current)) throw new HttpError(403, "initiator_mismatch");
+  return current;
+}
+
 export async function recheckLease(config, leases, executionId, identity, reference, callback) {
   return leases.use(executionId, identity, async (original, authorization, expiresAt) => {
-    const request = { headers: { authorization } };
-    const current = await createAuthorizer(config)(request, true);
+    const request = executionRequest(authorization);
+    const current = await authorizeExecutionLease(config, authorization, original);
     requireWriter(current);
-    if (!sameIdentity(original, current)) throw new HttpError(403, "initiator_mismatch");
-    const decision = await evaluateCapabilityEligibility(request, config, { ...reference, operation: "invoke" });
-    if (!decision.allowed) throw new HttpError(decision.reason.endsWith("unavailable") ? 503 : 403, "invoke_not_authorized");
+    if (current.actor) {
+      await executionCommand(config, current, "resolve", reference);
+    } else {
+      const decision = await evaluateCapabilityEligibility(request, config, { ...reference, operation: "invoke" });
+      if (!decision.allowed) throw new HttpError(decision.reason.endsWith("unavailable") ? 503 : 403, "invoke_not_authorized");
+    }
     if (Date.now() >= Math.min(expiresAt, current.credentialExpiresAt)) throw new HttpError(409, "auth_required");
     return callback(current, leaseProof(executionId, current, Math.min(expiresAt, current.credentialExpiresAt)));
   });
