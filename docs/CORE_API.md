@@ -990,6 +990,9 @@ Queues store background jobs in the existing PostgreSQL Data service. Leasing us
 `SKIP LOCKED` so Core replicas can dispatch work concurrently. Delivery is at least once. Make job
 handlers safe to run again after a lease expires or a worker stops before acknowledgement.
 
+A queue owner can send `DELETE /v1/queues/{queue}` with a UUID `Idempotency-Key`.
+A queue with messages or dead letters returns `409 queue_not_empty`.
+
 Queue names are unique per tenant and match `^[a-z][a-z0-9-]{0,62}$`. The backend that first configures
 a name owns the queue. Only that owner can replace its policy. The owner can also send, consume and
 manage dead letters. All callers use enrolled, active service accounts with `core-reader`. `POST`

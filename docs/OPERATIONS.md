@@ -463,7 +463,8 @@ Before anything beyond the local stack, approve the target and check:
 | NDJSON import | `audit.records_imported` | Verified caller | Import transaction and idempotency receipt |
 | NDJSON export | `audit.records_exported` | Verified caller | Final generated page and deletion of its snapshot |
 | Workflow completion | `audit.workflow_completed` | Verified task completer | Confirmed Flowable result and the completion outbox marker |
-| Queue operations | `audit.queue_*` | Verified app | Queue transaction and operation receipt where supported |
+| Queue creation, deletion and delivery | `audit.queue_*` | Verified app | Queue transaction and successful deletion receipt |
+| App backup | `application.backed_up` | Compose operator | Verified manifest and per-file checksums |
 | Assignment changes | Existing application audit events | Enrolled manager | Assignment transaction |
 | App restore | `application.restored` | Compose operator | Restore metadata transaction |
 

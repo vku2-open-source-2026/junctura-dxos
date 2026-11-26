@@ -154,12 +154,26 @@ test("application queues enforce access, delivery, settlement and dead-letter re
     await sql(`UPDATE trust_private.grants SET state='revoked', revoked_at=now() WHERE grant_id=${q(grant.grantId)};`);
     assert.equal((await post("/lease", outsider, {})).status, 403);
 
+    const deleteQueue = (app, key) => api(path, app,
+      { method: "DELETE", headers: { "Idempotency-Key": key } });
+    assert.equal((await jsonResult(await deleteQueue(owner, randomUUID()), 409)).error, "queue_not_empty");
+    assert.equal((await deleteQueue(outsider, randomUUID())).status, 403);
+    for (const { messageId } of (await deadLetters(owner)).items) {
+      assert.equal((await replay(owner, messageId)).status, 204);
+      assert.equal((await settle("ack", owner, await lease(owner))).status, 204);
+    }
+    const removal = randomUUID();
+    const deleted = await deleteQueue(owner, removal);
+    assert.equal(deleted.status, 204);
+    assert.equal((await deleteQueue(owner, removal)).status, 204);
+    assert.equal(await sql(`SELECT count(*) FROM app_private.audit WHERE tenant_id='tenant-a'
+      AND event='audit.queue_delete' AND outcome='success' AND resource_id=${q(queue.queueId)};`), "1");
     const audit = JSON.parse(await sql(`SELECT jsonb_agg(jsonb_build_object('event', event, 'outcome', outcome, 'leaked',
       to_jsonb(a)::text LIKE '%queue-audit-payload-marker%')) FROM app_private.audit a
       WHERE tenant_id='tenant-a' AND management_client IN (${apps.map(app => q(app.clientId)).join(",")})
       AND left(event, 12)='audit.queue_';`));
     assert.deepEqual(new Set(audit.filter(entry => entry.outcome === "success").map(entry => entry.event)),
-      new Set(["configure", "send", "lease", "ack", "nack", "list", "replay"].map(operation => `audit.queue_${operation}`)));
+      new Set(["configure", "send", "lease", "ack", "nack", "list", "replay", "delete"].map(operation => `audit.queue_${operation}`)));
     assert.ok(audit.some(entry => entry.event === "audit.queue_send" && entry.outcome === "denied"));
     assert.ok(audit.every(entry => !entry.leaked));
     await verifyContracts("message-queue");

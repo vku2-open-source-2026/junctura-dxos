@@ -49,6 +49,59 @@
     "successHasBody": true
   },
   {
+    "path": "/v1/queues/{queue}",
+    "method": "DELETE",
+    "operationId": "deleteQueue",
+    "summary": "Remove an empty message queue",
+    "description": "The queue owner may remove a queue after messages and dead letters have cleared. The idempotency key replays a successful removal.",
+    "tags": [
+      "message-queues"
+    ],
+    "security": [
+      {
+        "coreBearer": []
+      }
+    ],
+    "responses": [
+      "204",
+      "400",
+      "401",
+      "403",
+      "405",
+      "409",
+      "429",
+      "503"
+    ],
+    "hasRequestBody": false,
+    "requestContentTypes": [],
+    "pathParameters": [
+      {
+        "name": "queue",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]{0,62}$"
+        },
+        "description": ""
+      }
+    ],
+    "queryParameters": [],
+    "headerParameters": [
+      {
+        "name": "Idempotency-Key",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        },
+        "description": "Required UUID for this write. A missing or malformed key returns 400 invalid_request. Core retains the first recorded result for 24 hours, scoped to the verified tenant and caller, HTTP method and concrete request path. Within that window, the same key and logical request replay the first status, body and resource headers without another write. A changed body or write precondition for the same key returns 422 idempotency_key_reused. Concurrent identical requests share one result; every replay requires current authorization."
+      }
+    ],
+    "successStatus": "204",
+    "successContentType": null,
+    "successHasBody": false
+  },
+  {
     "path": "/v1/queues/{queue}/messages",
     "method": "POST",
     "operationId": "sendQueueMessage",
