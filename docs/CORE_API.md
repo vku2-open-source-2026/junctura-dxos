@@ -493,7 +493,11 @@ variables, which are visible within the tenant. Start JSON is limited to 64 KiB 
 ### Deadlines, task routing and claims
 
 An operator binds each business definition version to a default unit and allowed units. The caller needs
-verified membership in the resolved default unit and every per-step override. `taskUnits` and `taskDueAt`
+verified membership in the resolved default unit. Per-step overrides also require membership in the
+destination unit or the Keycloak `workflow-router` realm role. The role cannot route outside the
+definition's allowed units and it grants no task claim or completion permissions.
+Existing realms can add the role in Keycloak and assign it to designated callers.
+`taskUnits` and `taskDueAt`
 use BPMN user-task element IDs. An unknown ID is invalid. A step uses the execution deadline unless it has
 an override, including when a step is revisited. Deadlines use absolute timestamps and mark work overdue.
 
@@ -994,7 +998,13 @@ the reader and acting application from the exchanged token and records both in t
 `GET /v1/events` streams new group tasks, record status changes and consent revocations as
 Server-Sent Events. Use the bearer header with an empty query string. A change to a record's
 top-level `status` publishes a reference, including creation with that field. Task notifications
-come from active Flowable tasks on confirmed executions. Core rechecks the bearer and resource authority
+come from active Flowable tasks on confirmed executions.
+The background scan publishes `workflow.task.due_soon` and `workflow.task.overdue`
+with `taskId`, `executionId` and `dueAt` for eligible task groups. The default lead time
+is 3600 seconds, configurable via `WORKFLOW_REMINDER_LEAD_SECONDS`. Each active task
+can produce one reminder per milestone and deadline revision. A scan that first observes a
+task after its deadline publishes only the overdue event. Delivery checks current task activity,
+group membership and the current deadline revision. Core rechecks the bearer and resource authority
 before each delivery. The feed has no event IDs or replay. Refresh source lists after reconnecting.
 Core sends comment heartbeats and closes streams on credential expiry, backpressure or a journal gap.
 

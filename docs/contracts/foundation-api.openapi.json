@@ -3549,7 +3549,7 @@
       "get": {
         "operationId": "streamAuthorizedEvents",
         "summary": "Stream authorized notifications",
-        "description": "Connect with the Authorization bearer header. Receive new workflow tasks for eligible groups, record status changes for readable records and consent revocations for the subject or affected app. Each SSE event has a named event field and one JSON data line containing references only. The connection is live-only and has no event IDs or replay. Reconnect and refresh source lists after disconnect. Core closes the stream when authentication expires and rechecks authorization before delivery.",
+        "description": "Connect with the Authorization bearer header. Receive new workflow tasks and deadline reminders for eligible groups, record status changes for readable records and consent revocations for the subject or affected app. Each SSE event has a named event field and one JSON data line containing references only. The connection is live-only and has no event IDs or replay. Reconnect and refresh source lists after disconnect. Core closes the stream when authentication expires and rechecks authorization before delivery.",
         "tags": [
           "tenant"
         ],
@@ -13608,12 +13608,60 @@
               "consentId"
             ],
             "additionalProperties": false
+          },
+          "workflow.task.due_soon": {
+            "type": "object",
+            "properties": {
+              "taskId": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9:_-]{1,128}$"
+              },
+              "executionId": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9:_-]{1,128}$"
+              },
+              "dueAt": {
+                "type": "string",
+                "format": "date-time"
+              }
+            },
+            "required": [
+              "taskId",
+              "executionId",
+              "dueAt"
+            ],
+            "additionalProperties": false
+          },
+          "workflow.task.overdue": {
+            "type": "object",
+            "properties": {
+              "taskId": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9:_-]{1,128}$"
+              },
+              "executionId": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9:_-]{1,128}$"
+              },
+              "dueAt": {
+                "type": "string",
+                "format": "date-time"
+              }
+            },
+            "required": [
+              "taskId",
+              "executionId",
+              "dueAt"
+            ],
+            "additionalProperties": false
           }
         },
         "required": [
           "workflow.task.created",
           "record.status.changed",
-          "consent.revoked"
+          "consent.revoked",
+          "workflow.task.due_soon",
+          "workflow.task.overdue"
         ],
         "additionalProperties": false,
         "description": "Map from SSE event name to the schema of the JSON on its data line."

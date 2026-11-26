@@ -1868,7 +1868,7 @@
     "method": "GET",
     "operationId": "streamAuthorizedEvents",
     "summary": "Stream authorized notifications",
-    "description": "Connect with the Authorization bearer header. Receive new workflow tasks for eligible groups, record status changes for readable records and consent revocations for the subject or affected app. Each SSE event has a named event field and one JSON data line containing references only. The connection is live-only and has no event IDs or replay. Reconnect and refresh source lists after disconnect. Core closes the stream when authentication expires and rechecks authorization before delivery.",
+    "description": "Connect with the Authorization bearer header. Receive new workflow tasks and deadline reminders for eligible groups, record status changes for readable records and consent revocations for the subject or affected app. Each SSE event has a named event field and one JSON data line containing references only. The connection is live-only and has no event IDs or replay. Reconnect and refresh source lists after disconnect. Core closes the stream when authentication expires and rechecks authorization before delivery.",
     "tags": [
       "tenant"
     ],

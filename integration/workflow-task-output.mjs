@@ -251,3 +251,75 @@ test("completion output commits to the outbox and becomes engine variables and h
   assert.deepEqual(await jsonResult(await complete(writer, path, body, completionKey), 202), pending);
   assert.equal((await jsonResult(await complete(writer, path, body), 409)).error, "task_already_completed");
 });
+
+test("literal gateway routes output to the pinned unit and preserves recipient task authority", { timeout: 90000 }, async () => {
+  const branchKey = `${key}_branch`;
+  const xml = `<?xml version="1.0" encoding="UTF-8"?>
+    <definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xmlns:flowable="http://flowable.org/bpmn" targetNamespace="https://example.invalid">
+      <process id="${branchKey}" isExecutable="true" name="Review routing">
+        <startEvent id="start"/>
+        <userTask id="review" name="Review" flowable:candidateGroups="${group}"/>
+        <exclusiveGateway id="route" default="standardPath"/>
+        <userTask id="standard" name="Standard review" flowable:candidateGroups="${group}"/>
+        <userTask id="escalated" name="Escalated review" flowable:candidateGroups="${group}"/>
+        <endEvent id="end"/>
+        <sequenceFlow id="first" sourceRef="start" targetRef="review"/>
+        <sequenceFlow id="decide" sourceRef="review" targetRef="route"/>
+        <sequenceFlow id="escalationPath" sourceRef="route" targetRef="escalated">
+          <conditionExpression xsi:type="tFormalExpression"><![CDATA[\${requiresEscalation == true}]]></conditionExpression>
+        </sequenceFlow>
+        <sequenceFlow id="standardPath" sourceRef="route" targetRef="standard"/>
+        <sequenceFlow id="doneStandard" sourceRef="standard" targetRef="end"/>
+        <sequenceFlow id="doneEscalated" sourceRef="escalated" targetRef="end"/>
+      </process>
+    </definitions>`;
+  const deployed = await engine("repository/deployments", "POST", { tenant, xml });
+  let branchId;
+  const branchKeys = [];
+  const startBranch = (who, overrides) => {
+    const id = randomUUID();
+    branchKeys.push(id);
+    return api("/v1/workflows/executions", who, post({ definitionId: branchId, taskUnits: overrides }, id));
+  };
+  const branchInbox = who => lookup(`/v1/workflows/tasks?definitionKey=${branchKey}`, who);
+  try {
+    const result = await engine(`repository/process-definitions?${new URLSearchParams({ deploymentId: deployed.id, tenantId: tenant })}`);
+    branchId = result.data[0].id;
+    await sql(`INSERT INTO app_private.workflow_definition_policies(tenant_id,definition_id,default_unit,allowed_units)
+      VALUES(${q(tenant)},${q(branchId)},${q(unit)},ARRAY[${q(unit)},${q(wrongUnit)}]);`);
+    const destinations = { escalated: wrongUnit };
+    assert.equal((await jsonResult(await startBranch(writer, destinations), 403)).error, "workflow_unit_required");
+    const role = await admin("roles/workflow-router");
+    assert.equal(role.status, 200, await role.clone().text());
+    assert.equal((await admin(`users/${writer.id}/role-mappings/realm`, [await role.json()], "POST")).status, 204);
+    const router = { ...writer, token: await login(writer.username, writer.password, writer.clientId) };
+    assert.equal((await jsonResult(await startBranch(router, { escalated: `${prefix}-unregistered` }), 403)).error, "workflow_unit_required");
+    for (const requiresEscalation of [false, true]) {
+      const execution = await jsonResult(await startBranch(router, destinations), 201);
+      const path = executionPath(execution.id);
+      const initial = (await branchInbox(router)).items.find(task => task.executionId === execution.id);
+      assert.equal(initial.stepKey, "review");
+      assert.equal(initial.unit, unit);
+      await jsonResult(await complete(router, path, { taskId: initial.taskId, output: { requiresEscalation } }), 202);
+      const recipient = requiresEscalation ? outsider : router;
+      const stepKey = requiresEscalation ? "escalated" : "standard";
+      const task = await waitFor(async () => (await branchInbox(recipient)).items
+        .find(task => task.executionId === execution.id && task.stepKey === stepKey));
+      assert.equal(task.unit, requiresEscalation ? wrongUnit : unit);
+      if (requiresEscalation) {
+        assert.ok(!(await branchInbox(router)).items.some(item => item.taskId === task.taskId));
+        assert.equal((await jsonResult(await complete(router, path, { taskId: task.taskId }), 403)).error, "task_group_required");
+      }
+      await jsonResult(await complete(recipient, path, { taskId: task.taskId }), 202);
+      await waitFor(async () => (await lookup(path)).status === "completed");
+    }
+  } finally {
+    await engine(`repository/deployments/${encodeURIComponent(deployed.id)}?cascade=true`, "DELETE");
+    await sql(`DELETE FROM app_private.workflow_completion_outbox WHERE tenant_id=${q(tenant)} AND definition_id=${q(branchId)};
+      DELETE FROM app_private.workflow_executions WHERE tenant_id=${q(tenant)} AND definition_id=${q(branchId)};
+      DELETE FROM app_private.workflow_definition_policies WHERE tenant_id=${q(tenant)} AND definition_id=${q(branchId)};
+      DELETE FROM app_private.idempotency_results WHERE tenant_id=${q(tenant)} AND key IN (${branchKeys.map(q).join(",") || "NULL"});`);
+  }
+});
