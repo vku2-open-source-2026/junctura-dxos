@@ -181,18 +181,25 @@ test("gateway sends a new Flowable task to its eligible group across Core replic
     });
     assert.equal(started.status, 201, await started.clone().text());
     const execution = await started.json();
-    const task = await ownerStream.event();
-    assert.equal(task.event, "workflow.task.created");
-    assert.equal(task.data.executionId, execution.id);
-    assert.deepEqual(Object.keys(task.data).sort(), ["executionId", "taskId"]);
+    const types = ["workflow.task.created", "workflow.task.due_soon", "workflow.task.overdue"];
+    // Replicas can publish creation and reminders in either order.
+    const received = new Map();
+    while (received.size < types.length) {
+      const { event, data } = await ownerStream.event();
+      assert.ok(types.includes(event), `unexpected task event: ${event}`);
+      assert.ok(!received.has(event), `duplicate task event: ${event}`);
+      received.set(event, data);
+    }
+    const task = received.get("workflow.task.created");
+    assert.equal(task.executionId, execution.id);
+    assert.deepEqual(Object.keys(task).sort(), ["executionId", "taskId"]);
     for (const event of ["workflow.task.due_soon", "workflow.task.overdue"]) {
-      const reminder = await ownerStream.event();
-      assert.equal(reminder.event, event);
-      assert.deepEqual(reminder.data, { ...task.data, dueAt: reminder.data.dueAt });
-      assert.equal(Date.parse(reminder.data.dueAt), Date.parse(dueAt));
+      const reminder = received.get(event);
+      assert.deepEqual(reminder, { ...task, dueAt: reminder.dueAt });
+      assert.equal(Date.parse(reminder.dueAt), Date.parse(dueAt));
     }
     const milestones = await sql(`SELECT array_agg(milestone ORDER BY milestone)
-      FROM app_private.workflow_reminders WHERE tenant_id='tenant-a' AND task_id=${q(task.data.taskId)};`);
+      FROM app_private.workflow_reminders WHERE tenant_id='tenant-a' AND task_id=${q(task.taskId)};`);
     assert.equal(milestones.trim(), "{due_soon,overdue}");
 
     await sql(`INSERT INTO core.app_records(tenant_id,id,owner_app_id,collection,data)
