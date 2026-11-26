@@ -170,7 +170,7 @@ export type PlatformAuditEntry = {
   issuer: string; subject: string; managementClient: string | null;
   outcome: string; reasonCode: string | null; reason: string | null;
 };
-export type AuditFilter = { app?: 'self'; action?: string; subjectId?: string; unit?: string; from?: string; to?: string };
+export type AuditFilter = { app?: 'self'; action?: string; actor?: string; subjectId?: string; unit?: string; from?: string; to?: string };
 export type AuditPage = { items: (PlatformAuditEntry | AppAuditEntry)[]; nextCursor: string | null };
 export type WorkflowStart = {
   definitionId: string;
