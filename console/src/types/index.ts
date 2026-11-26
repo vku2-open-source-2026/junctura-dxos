@@ -488,9 +488,8 @@ export interface TrustGrant {
   revokedAt?: string | null;
 }
 
-export interface SubjectConsent {
+export type SubjectConsent = {
   consentId: string;
-  consumer: { appId: string; displayName: string | null };
   capabilityId: string;
   capabilityTitle: string | null;
   purposes: string[];
@@ -498,7 +497,7 @@ export interface SubjectConsent {
   expiresAt: string;
   revokedAt: string | null;
   state: "active" | "expired" | "revoked";
-}
+} & ({ consumer: { appId: string; displayName: string | null }; recipientUnit?: never } | { recipientUnit: string; consumer?: never });
 
 export interface EmergencyAccess {
   executionId: string;

@@ -178,7 +178,7 @@ and upstream send/read to 15 seconds. Upstream URLs are fixed configuration. Aut
 
 The application backend sends `POST /v1/token-exchange` with its enrolled service account's access token in `Authorization: Bearer` and the user's login access token in a JSON body `{"subjectToken":"<user-access-token>"}`. The login token must come from the same application client and tenant. Core resolves the user's current assignment and pins the unit selected by the application access rules. If the application credential names a unit, that unit must match.
 
-Present the returned `access_token` as a bearer to `/v1/identity`, `/v1/search`, the resource consent request routes for the requester, or the v2 record, schema and object routes permitted by the current assignment. It carries the user in `sub`, the app client and its service account in `act`, and the verified tenant and selected unit. Changes to v2 resources require `core-writer` in both input tokens and a current assignment that permits the operation. The bearer lasts at most 60 seconds and expires by the earlier input expiry. To renew access, exchange an active login token and an active service account token again. Token exchange accepts only those two input credentials.
+Present the returned `access_token` as a bearer to `/v1/identity`, `/v1/search`, the resource consent request routes for the requester, or the v2 record, schema and object routes permitted by the current assignment, or single-capability execution routes. It carries the user in `sub`, the app client and its service account in `act`, and the verified tenant and selected unit. Changes to v2 resources require `core-writer` in both input tokens and a current assignment that permits the operation. The bearer lasts at most 60 seconds and expires by the earlier input expiry. To renew access, exchange an active login token and an active service account token again. Token exchange accepts only those two input credentials.
 
 Core uses Keycloak Standard Token Exchange V2 to obtain an access-only user proof and checks it on every delegated call. Core also checks the active app, enrollment, assignment and unit on every call. For an existing realm, apply the token exchange attributes and audience mapper on `junctura-core` from the realm configuration. [Realm configuration](../infra/keycloak/realm.json)
 
@@ -193,6 +193,20 @@ Use the bearer that represents the actor for each route family. Route permission
 | Capability invocation | Enrolled consumer bearer with the exact invocation grant and write authority. |
 
 Policy refusals return `403` with `requestId`. `not_assigned_to_app` means the current user assignment is missing, `unit_mismatch` means the selected unit is invalid for the call, and `capability_not_granted` means the effective roles or supported route set exclude the operation. `delegation_not_allowed` covers an invalid delegation pairing or a delegated credential whose user proof has become inactive, including a locked user. Tenant audit records `delegation.exchanged`, `delegation.authorized` and `authorization.denied` with the request ID in `reason`, the login in `subject`, the app client in `managementClient` and the application ID in `actorAppId` when the enrollment is verified.
+
+## Capability consent by recipient unit
+
+`POST /v1/me/consents` accepts `recipientUnit` as an alternative to `consumerAppId`.
+The caller needs an operator-bound `subjectId`, and the unit must be confirmed in the same tenant.
+A unit grant covers the declared capability and purposes for each app independently approved to invoke it
+on behalf of a writer with a current assignment in that unit. Send the exchanged bearer to execute and read
+that execution. Set `context.dataSubjectKind` to `canonical` and use the bound `context.dataSubject`.
+Core checks the consumer app's approved direct grant and the user's effective unit separately.
+
+An authorized request with no matching unit grant receives `403 consent_missing`. Revoked and expired grants
+produce `consent_revoked` and `consent_expired`. The execution uses its original grant for retries, result reads
+and provider redemption. Removing a unit revokes its grants. A legacy app grant remains scoped to that app's
+backend invocation. An undisclosed subject or capability yields `404 not_found`.
 
 ## Resource consent
 

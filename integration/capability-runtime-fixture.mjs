@@ -85,7 +85,7 @@ export async function createRuntimeFixture(options) {
       "--mount", `type=bind,source=${tls.certPath},target=/tls/provider-ca.pem,readonly`,
       "junctura-core:local", "node", "/fixtures/capability-core.mjs"], { ...process.env, ...coreEnv });
     for (const backendNetwork of backendNetworks) await docker(["network", "connect", backendNetwork, core]);
-    coreProcess = start(["start", "--attach", "--interactive", core], { origin: options.origin, address, origins: providers.map(item => item.origin), addresses, composition: options.composition === true }, "runtime-ready");
+    coreProcess = start(["start", "--attach", "--interactive", core], { origin: options.origin, address, origins: providers.map(item => item.origin), addresses, composition: options.composition === true, enforceAppAccess: options.enforceAppAccess === true }, "runtime-ready");
     await coreProcess.ready;
   }
   try {
@@ -98,7 +98,7 @@ export async function createRuntimeFixture(options) {
       "--mount", `type=bind,source=${resolve("integration/fixtures")},target=/fixtures,readonly`,
       "--mount", `type=bind,source=${directory},target=/tls,readonly`, "junctura-core:local", "node", "/fixtures/capability-provider.mjs"],
     { coreUrl: "http://runtime.c4a.test:8080", oidcToken: item.token, providerAppId: item.providerAppId,
-      capability: item.capability, tenantId: item.tenantId }, "provider-ready");
+      capability: item.capability, tenantId: item.tenantId, allowUserPrincipal: options.enforceAppAccess === true }, "provider-ready");
     providerProcesses.push(providerProcess);
     await providerProcess.ready;
     address = JSON.parse((await docker(["inspect", providerName])).stdout)[0].NetworkSettings.Networks[network].IPAddress;

@@ -89,6 +89,7 @@ export function createApi(config) {
         if (path === "/v1/capability-executions" && request.method === "POST") {
           const body = await readExecutionJson(request);
           if (config.compositionRuntime && body?.target?.kind === "composition") {
+            if (identity.actor) throw new HttpError(403, "capability_not_granted");
             const result = await config.compositionRuntime.submit(request, response, identity, body);
             if (result) return json(response, result.status, result.value);
           }
@@ -105,7 +106,7 @@ export function createApi(config) {
           return await config.executionRuntime.handle(request, response, identity, url, { body });
         }
         const match = /^\/v1\/capability-executions\/([0-9a-f-]{36})$/.exec(url.pathname);
-        if (match && config.compositionRuntime) {
+        if (match && config.compositionRuntime && !identity.actor) {
           if (request.method !== "GET") throw new HttpError(405, "method_not_allowed");
           if (url.search) throw new HttpError(400, "invalid_query");
           try { return await config.compositionRuntime.get(request, response, identity, match[1]); }

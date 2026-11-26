@@ -33,7 +33,8 @@ const provider = httpsServer({ key: readFileSync("/tls/provider.key.pem"), cert:
     const result = await redemption.json();
     last.authorization = result;
     const context = result.context;
-    if (redemption.status !== 200 || !result.active || context.providerAppId !== config.providerAppId || context.principalType !== "service" ||
+    const allowedPrincipal = context?.principalType === "service" || (config.allowUserPrincipal && context?.principalType === "user");
+    if (redemption.status !== 200 || !result.active || context.providerAppId !== config.providerAppId || !allowedPrincipal ||
       context.tenantId !== config.tenantId || context.invocationId !== envelope.invocationId || context.operationId !== last.operationId ||
       context.inputDigest !== last.inputDigest || canonicalize(context.capability) !== canonicalize(config.capability) ||
       canonicalize(envelope.capability) !== canonicalize(config.capability) || Date.parse(context.deadlineAt) <= Date.now()) return respond(response, 403, { error: "authorization_denied", effect: "none" });

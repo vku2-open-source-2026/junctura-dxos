@@ -138,6 +138,7 @@ services:
       - ./infra/postgres/064-app-bootstrap-lease.sql:/migrations/064-app-bootstrap-lease.sql:ro
       - ./infra/postgres/065-message-queues.sql:/migrations/065-message-queues.sql:ro
       - ./infra/postgres/066-audit-inspection.sql:/migrations/066-audit-inspection.sql:ro
+      - ./infra/postgres/067-capability-unit-consents.sql:/migrations/067-capability-unit-consents.sql:ro
       - ./infra/postgres/070-record-aggregate-source.sql:/migrations/070-record-aggregate-source.sql:ro
     depends_on:
       database:

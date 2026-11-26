@@ -3,7 +3,7 @@
 // Real Keycloak identities and operator-enrolled technical apps; credentials stay in memory.
 import assert from "node:assert/strict";
 import { createHash, randomBytes } from "node:crypto";
-export function createAuthorityFixture({ base, prefix, sql, q, api, clientIds, users }) {
+export function createAuthorityFixture({ base, prefix, sql, q, api, clientIds, users, backendTokenLifespan }) {
 const issuer = `${base}/identity/realms/junctura`;
 let adminToken;
 const bindings = [];
@@ -99,7 +99,9 @@ async function backend(label, principal, administrator, tenant = "tenant-a", wri
   mappers.find(mapper => mapper.name === "tenant").config["claim.value"] = tenant;
   const createdClient = await admin("clients", { clientId, enabled: true, protocol: "openid-connect", publicClient: false,
     serviceAccountsEnabled: true, standardFlowEnabled: Boolean(redirectUri), directAccessGrantsEnabled: false,
-    ...(redirectUri ? { redirectUris: [redirectUri] } : {}), protocolMappers: mappers }, "POST");
+    ...(redirectUri ? { redirectUris: [redirectUri] } : {}),
+    ...(backendTokenLifespan ? { attributes: { "access.token.lifespan": String(backendTokenLifespan) } } : {}),
+    protocolMappers: mappers }, "POST");
   assert.equal(createdClient.status, 201);
   const id = createdClient.headers.get("location").split("/").at(-1); clientIds.push(id);
   const subject = (await (await admin(`clients/${id}/service-account-user`)).json()).id;
@@ -115,6 +117,10 @@ async function backend(label, principal, administrator, tenant = "tenant-a", wri
     return (await response.json()).access_token;
   }
   const token = await issueToken();
+  if (backendTokenLifespan) {
+    const { exp, iat } = JSON.parse(Buffer.from(token.split(".")[1], "base64url").toString("utf8"));
+    assert.ok(exp - iat >= backendTokenLifespan, "Keycloak honored the fixture client lifetime");
+  }
   assert.equal((await api("/v1/identity", token)).status, 200, "issuer verifies backend tenant membership");
   const body = { displayName: "Technical trust consumer", oauthClientId: clientId, providerOrigin: providerOrigin ?? `https://${clientId}.example.invalid` };
   await sql(`INSERT INTO app_private.enrollments(tenant_id,issuer,oauth_client_id,owner_subject,provider_origin,resource_subject)
