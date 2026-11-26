@@ -139,6 +139,10 @@ services:
       - ./infra/postgres/065-message-queues.sql:/migrations/065-message-queues.sql:ro
       - ./infra/postgres/066-audit-inspection.sql:/migrations/066-audit-inspection.sql:ro
       - ./infra/postgres/067-capability-unit-consents.sql:/migrations/067-capability-unit-consents.sql:ro
+      - ./infra/postgres/068-workflow-reminders.sql:/migrations/068-workflow-reminders.sql:ro
+      - ./infra/postgres/069-readonly-record-lifecycle.sql:/migrations/069-readonly-record-lifecycle.sql:ro
+      - ./infra/postgres/070-record-aggregate-source.sql:/migrations/070-record-aggregate-source.sql:ro
+      - ./infra/postgres/071-exceptional-access-review.sql:/migrations/071-exceptional-access-review.sql:ro
       - ./infra/postgres/073-automatic-operation-audit.sql:/migrations/073-automatic-operation-audit.sql:ro
       - ./infra/postgres/074-audited-queue-removal.sql:/migrations/074-audited-queue-removal.sql:ro
     depends_on:
@@ -294,6 +298,7 @@ services:
       OIDC_ISSUER: ${PUBLIC_URL:-http://127.0.0.1:8080}/identity/realms/junctura
       IDENTITY_URL: http://identity:8080/identity/realms/junctura
       CORE_CLIENT_SECRET: ${CORE_CLIENT_SECRET:?Run npm run setup first}
+      WORKFLOW_REMINDER_LEAD_SECONDS: ${WORKFLOW_REMINDER_LEAD_SECONDS:-3600}
       STRICT_RECORD_WRITES: ${STRICT_RECORD_WRITES:-false}
       DATA_URL: http://data:3000
       DATA_JWT_SECRET: ${DATA_JWT_SECRET:?Run npm run setup first}

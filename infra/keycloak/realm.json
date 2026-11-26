@@ -33,6 +33,9 @@
       },
       {
         "name": "core-writer"
+      },
+      {
+        "name": "workflow-router"
       }
     ],
     "client": {

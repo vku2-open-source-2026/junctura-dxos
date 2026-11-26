@@ -19,7 +19,7 @@ async function workflowCommand(config, identity, rpc, operation, payload) {
     role: rpc === "worker" ? "junctura_workflow_worker" : "junctura_workflow_api",
     tenant_id: identity.tenantId, iss: identity.issuer, sub: identity.subject,
     client_id: identity.clientId, subject_id: identity.subjectId, display_name: identity.preferredUsername,
-    resource_writer: identity.roles?.includes("core-writer"), groups: identity.groups, units: identity.units,
+    resource_writer: identity.roles?.includes("core-writer"), workflow_router: identity.workflowRouter === true, groups: identity.groups, units: identity.units,
     aud: "junctura-data", exp: Math.floor(Date.now() / 1000) + 30,
   };
   try {

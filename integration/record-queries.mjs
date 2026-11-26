@@ -340,3 +340,39 @@ test("equality, prefix and default pagination use their declared indexes", async
 test("implemented operations match the observed HTTP contract", async () => {
   await verifyContracts("record-queries");
 });
+
+test("numeric aggregates use the same half-open UTC range and filters as detail queries", async () => {
+  const range = [
+    ["createdFrom", "2030-01-10T07:00:00+07:00"],
+    ["createdTo", "2030-01-20T00:00:00Z"],
+  ];
+  const where = ["where[status]", 'eq:"open"'];
+  const detail = await jsonResult(await api(listPath(collection, [...range, where]), owner), 200);
+  const expected = records.filter(item => item.data.status === "open" &&
+    Date.parse(item.createdAt) >= Date.parse(range[0][1]) && Date.parse(item.createdAt) < Date.parse(range[1][1]));
+  assert.deepEqual(new Set(detail.items.map(item => item.id)), new Set(expected.map(item => item.id)));
+  const values = expected.flatMap(item => item.data.quantity === undefined ? [] : [item.data.quantity]);
+  const total = values.reduce((sum, value) => sum + value, 0);
+  for (const [measure, value] of [["sum", total], ["avg", total / values.length]]) {
+    const query = new URLSearchParams([[measure, "quantity"], ...range, where, ["groupBy", "status"]]);
+    const result = await jsonResult(await api(`/v2/data/${collection}/aggregate?${query}`, owner), 200);
+    assert.equal(result.count, detail.items.length);
+    assert.equal(result.value, value);
+    assert.deepEqual(result.groups, [{ key: ["open"], count: detail.items.length, value }]);
+    assert.deepEqual(result.source, {
+      collection, ownerAppId: owner.appId, measure, field: "quantity",
+      groupBy: [{ field: "status", day: false }], filters: [{ field: "status", op: "eq", value: "open" }],
+      createdFrom: "2030-01-10T00:00:00.000Z", createdTo: "2030-01-20T00:00:00.000Z",
+    });
+  }
+  const empty = await jsonResult(await api(`/v2/data/${collection}/aggregate?sum=quantity&createdFrom=2050-01-01T00:00:00Z`, owner), 200);
+  assert.equal(empty.count, 0);
+  assert.equal(empty.value, null);
+  const first = await jsonResult(await api(listPath(collection, [...range, ["limit", "1"]]), owner), 200);
+  assert.ok(first.nextCursor);
+  await jsonResult(await api(listPath(collection, [...range, ["cursor", first.nextCursor]]), owner), 200);
+  assert.equal((await jsonResult(await api(listPath(collection, [["cursor", first.nextCursor]]), owner), 400)).error, "invalid_cursor");
+  for (const query of ["sum=status", "avg=quantity&count", "sum=quantity&createdTo=2030-02-31T00:00:00Z"]) {
+    assert.equal((await jsonResult(await api(`/v2/data/${collection}/aggregate?${query}`, owner), 400)).error, "invalid_query");
+  }
+});

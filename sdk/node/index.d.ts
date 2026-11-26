@@ -26,12 +26,12 @@ export type CapabilityAccessRequest = CapabilityAccessRequestCreate & {
 export type ExecutionTarget = { kind: 'capability'; capability: CapabilityReference }
   | { kind: 'composition'; compositionId: string; version: string; compositionDigest: string };
 export type Execution = { executionId: string; state: 'accepted' | 'running' | 'auth_required' | 'succeeded' | 'failed' | 'timed_out' | 'outcome_unknown' | 'cancelled'; output?: Json; [key: string]: unknown };
-export type ExecutionContext = { purpose: string; dataSubject?: string; emergency?: boolean; justification?: string };
+export type ExecutionContext = { purpose: string; dataSubject?: string; exceptionalAccess?: boolean; emergency?: boolean; justification?: string };
 export type RequestOptions = { method?: string; json?: Json; body?: BodyInit; contentType?: string; ifMatch?: string; idempotencyKey?: string; lockId?: string; signal?: AbortSignal };
-export type TicketContext = { active: false } | { active: true; context: { tenantId: string; executionId: string; purpose?: string; dataSubject?: string; emergency?: boolean; [key: string]: unknown }; [key: string]: unknown };
+export type TicketContext = { active: false } | { active: true; context: { tenantId: string; executionId: string; purpose?: string; dataSubject?: string; exceptionalAccess?: boolean; emergency?: boolean; [key: string]: unknown }; [key: string]: unknown };
 
-export type VersionedRecord = { id: string; collection: string; created_at: string; version: number; data: JsonObject };
-export type CompatibilityRecord = { id: string; collection: string; created_at: string; data: JsonObject };
+export type VersionedRecord = { id: string; collection: string; created_at: string; archivedAt?: string; version: number; data: JsonObject };
+export type CompatibilityRecord = { id: string; collection: string; created_at: string; archivedAt?: string; data: JsonObject };
 export type VersionedRecordResult = { record: VersionedRecord; etag: string | null };
 export type CompatibilityRecordResult = { record: CompatibilityRecord; etag: string | null };
 export type VersionedRecordPage = { items: VersionedRecord[]; nextCursor: string | null };
@@ -53,7 +53,16 @@ export type RecordBatchOperation =
   | { op: 'increment'; collection: string; id: string; operations: RecordIncrement[]; ifMatch?: string };
 export type RecordBatchResult = { results: { op: 'create' | 'replace' | 'delete' | 'increment'; id: string; version: number | null }[] };
 export type RecordLock = { lockId: string; lockedUntil: string };
-export type RecordAggregate = { count: number; groups: { key: (string | number | boolean | null)[]; count: number }[] };
+export type RecordAggregateSource = {
+  collection: string; ownerAppId: string; measure: "count" | "sum" | "avg"; field: string | null;
+  filters: { field: string; op: "eq" | "in" | "gte" | "lte" | "prefix"; value: unknown }[];
+  groupBy: { field: string; day: boolean }[]; createdFrom: string | null; createdTo: string | null;
+};
+export type RecordAggregate = {
+  count: number; value?: number | null;
+  groups: { key: (string | number | boolean | null)[]; count: number; value?: number | null }[];
+  source: RecordAggregateSource;
+};
 export type RecordImportResult = { created: number };
 export type ExactResourceShareTarget = {
   resourceType: 'record' | 'object';
@@ -76,6 +85,8 @@ export type ExactResourceShareResult = { shareId: string; resourceType: 'record'
 export type GroupResourceShareResult = { shareId: string; resourceType: 'record'; resourceId: string; granteeAppGroup: string; action: 'read'; expiresAt: string };
 export type ResourceShareResult = ExactResourceShareResult | GroupResourceShareResult;
 export type RecordListFilter = {
+  createdFrom?: string;
+  createdTo?: string;
   limit?: number;
   order?: 'asc' | 'desc';
   cursor?: string;
@@ -83,7 +94,11 @@ export type RecordListFilter = {
   where?: Record<string, string>;
   ownerAppId?: string;
 };
-export type RecordAggregateFilter = { count?: true; groupBy?: string[]; where?: Record<string, string>; ownerAppId?: string };
+export type RecordAggregateFilter = {
+  groupBy?: string[]; where?: Record<string, string>; ownerAppId?: string;
+  createdFrom?: string; createdTo?: string;
+} & ({ count?: true; sum?: never; avg?: never } | { sum: string; count?: never; avg?: never } |
+     { avg: string; count?: never; sum?: never });
 export type VerifiedIdentity = {
   subject: string;
   tenantId: string;
@@ -103,7 +118,7 @@ export type ObjectUpload = { file: Blob | Uint8Array | ArrayBuffer | string; rec
 export type ObjectListFilter = { recordRef?: RecordRef; tag?: string; limit?: number; cursor?: string };
 export type CapabilitySubjectAccessEntry = {
   source: 'capability'; accessId: string; executionId: string; accessedAt: string; purpose: string;
-  flaggedAt: string | null; state: string; emergency: boolean; review: 'pending' | 'justified' | 'unjustified' | null;
+  flaggedAt: string | null; state: string; exceptionalAccess?: boolean; emergency: boolean; review: 'pending' | 'justified' | 'unjustified' | null;
   consumer: { appId: string; displayName: string | null }; provider: { appId: string; displayName: string | null };
   capability: { capabilityId: string; version: string; title: string | null };
 };
@@ -253,6 +268,8 @@ export function createJuncturaClient(options: { baseUrl: string; issuer?: string
   getVersionedRecord(collection: string, id: string): Promise<VersionedRecordResult | CompatibilityRecordResult>;
   replaceVersionedRecord(collection: string, id: string, data: JsonObject, options: { ifMatch: string; idempotencyKey?: string }): Promise<VersionedRecordResult | CompatibilityRecordResult>;
   incrementRecord(collection: string, id: string, operations: RecordIncrement[], options?: { ifMatch?: string; idempotencyKey?: string }): Promise<VersionedRecordResult>;
+  archiveRecord(collection: string, id: string, options: { ifMatch: string; idempotencyKey?: string }):
+    Promise<{ record: { id: string; collection: string; version: number; archivedAt: string }; etag: string | null }>;
   deleteVersionedRecord(collection: string, id: string, ifMatch: string): Promise<void>;
   upsertRecordByKey(collection: string, key: string, data: JsonObject, options?: { ifMatch?: string; idempotencyKey?: string }): Promise<VersionedRecordResult & { created: boolean }>;
   writeRecordBatch(operations: RecordBatchOperation[], options?: { idempotencyKey?: string }): Promise<RecordBatchResult>;
@@ -268,6 +285,13 @@ export function createJuncturaClient(options: { baseUrl: string; issuer?: string
   listObjectsByMetadata(filters?: ObjectListFilter): Promise<ObjectMetadataPage>;
   searchReadableResources(query: string, options?: { limit?: number; cursor?: string }): Promise<SearchPage>;
   getObject(id: string): Promise<ArrayBuffer>;
+  listExceptionalAccesses(options?: { userToken?: string }): Promise<{ tasks: Array<{
+    taskId: string; executionId: string; state: "pending" | "valid" | "invalid";
+    actor: string; capabilityId: string; subjectId: string; accessedAt: string;
+    justification: string; reviewedAt: string | null; reason: string | null;
+  }> }>;
+  reviewExceptionalAccess(executionId: string, review: { decision: "valid" | "invalid"; reason: string },
+    options?: { userToken?: string }): Promise<{ taskId: string; executionId: string; state: "valid" | "invalid"; reviewedAt: string }>;
   appendAppAuditEvent(body: AppAuditWrite, options?: { idempotencyKey?: string; userToken?: string }): Promise<AppAuditReceipt>;
   queryAppAuditEvents(options?: AuditFilter & { since?: string; until?: string; limit?: number; cursor?: string; userToken?: string }): Promise<AuditPage>;
   exportAppAuditEvents(options?: AuditFilter & { userToken?: string; signal?: AbortSignal }): Promise<Response>;

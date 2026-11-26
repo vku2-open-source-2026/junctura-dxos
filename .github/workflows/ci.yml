@@ -100,6 +100,7 @@ jobs:
           npm run test:records
           npm run test:record-queries
           npm run test:record-archives
+          npm run test:app-backup
           npm run test:app-group-shares
       - name: Verify directory management against the real identity provider
         run: npm run test:directory

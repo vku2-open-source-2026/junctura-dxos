@@ -51,6 +51,7 @@ export function validateIdentity(claims, issuer, now = Date.now() / 1000) {
   return { subject: claims.sub, tenantId: claims.tenant_id,
     roles: roles.filter((role) => ["core-reader", "core-writer", "regulator"].includes(role)),
     ...organizationContext(claims.groups, claims.tenant_id),
+    ...(roles.includes("workflow-router") ? { workflowRouter: true } : {}),
     ...(subjectId ? { subjectId } : {}),
     ...(preferredUsername ? { preferredUsername } : {}) };
 }

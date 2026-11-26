@@ -175,10 +175,28 @@ function assertKnownKeys(searchParams, allowed, repeated) {
   }
 }
 
+function parseCreatedPeriod(params) {
+  const result = {};
+  for (const key of ["createdFrom", "createdTo"]) {
+    const value = params.get(key);
+    if (value === null) continue;
+    const match = dateTimePattern.exec(value);
+    if (!match || /\.\d{4}/.test(value) || match[1].startsWith("0000-")) throw invalidQuery();
+    try {
+      utcDay(match[1]);
+      const date = new Date(value).toISOString();
+      if (date.startsWith("0000-") || date.length !== 24) throw invalidQuery();
+      result[key] = date;
+    } catch { throw invalidQuery(); }
+  }
+  if (result.createdFrom && result.createdTo && result.createdFrom >= result.createdTo) throw invalidQuery();
+  return result;
+}
+
 export function parseListQuery(searchParams, options = {}) {
   if (!(searchParams instanceof URLSearchParams)) throw new TypeError("searchParams must be URLSearchParams");
   const settings = parseOptions(options);
-  assertKnownKeys(searchParams, new Set(["limit", "order", "cursor", "sort", "ownerAppId"]), new Set());
+  assertKnownKeys(searchParams, new Set(["limit", "order", "cursor", "sort", "ownerAppId", "createdFrom", "createdTo"]), new Set());
 
   const rawLimit = searchParams.get("limit") ?? "100";
   if (!/^\d+$/.test(rawLimit) || Number(rawLimit) < 1 || Number(rawLimit) > 100) throw invalidQuery();
@@ -196,17 +214,25 @@ export function parseListQuery(searchParams, options = {}) {
     where: collectWhere(searchParams, settings, new Set()),
     ownerAppId: parseOwnerAppId(searchParams.get("ownerAppId")),
     cursor: parseCursor(searchParams.get("cursor")),
+    ...parseCreatedPeriod(searchParams),
   };
 }
 
 export function parseAggregateQuery(searchParams, options = {}) {
   if (!(searchParams instanceof URLSearchParams)) throw new TypeError("searchParams must be URLSearchParams");
   const settings = parseOptions(options);
-  assertKnownKeys(searchParams, new Set(["count", "groupBy", "ownerAppId"]), new Set(["groupBy"]));
+  assertKnownKeys(searchParams, new Set(["count", "sum", "avg", "groupBy", "ownerAppId", "createdFrom", "createdTo"]), new Set(["groupBy"]));
 
-  const counts = searchParams.getAll("count");
-  if (counts.length !== 1 || !["", "true"].includes(counts[0])) throw invalidQuery();
-  if (searchParams.getAll("ownerAppId").length > 1) throw invalidQuery();
+  const measures = ["count", "sum", "avg"].filter(name => searchParams.has(name));
+  if (measures.length !== 1) throw invalidQuery();
+  const [measure] = measures;
+  const field = searchParams.get(measure);
+  if (measure === "count") {
+    if (!["", "true"].includes(field)) throw invalidQuery();
+  } else {
+    assertField(field, settings);
+    if (settings.types && !["number", "integer"].includes(settings.types.get(field))) throw invalidQuery();
+  }
 
   const groupBy = [];
   const seen = new Set();
@@ -223,7 +249,8 @@ export function parseAggregateQuery(searchParams, options = {}) {
   }
 
   return {
-    count: true,
+    ...(measure === "count" ? { count: true } : { measure, field }),
+    ...parseCreatedPeriod(searchParams),
     groupBy,
     where: collectWhere(searchParams, settings, new Set()),
     ownerAppId: parseOwnerAppId(searchParams.get("ownerAppId")),

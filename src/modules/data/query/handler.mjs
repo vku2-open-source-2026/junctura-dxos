@@ -60,6 +60,10 @@ export async function handleRecordQuery(request, response, identity, config, url
         ownerAppId: details.ownerAppId,
         filters: canonicalWhere(query.where),
         groupBy: query.groupBy,
+        measure: query.measure,
+        field: query.field,
+        createdFrom: query.createdFrom,
+        createdTo: query.createdTo,
       }));
       return json(response, 200, value);
     }
@@ -73,7 +77,8 @@ export async function handleRecordQuery(request, response, identity, config, url
     });
     const where = canonicalWhere(query.where);
     const sort = query.sort ? `data.${query.sort.field}.${query.sort.direction}` : `system.created_at.${query.order}`;
-    const binding = { ownerAppId: details.ownerAppId, where, sort, schemaRevision: details.schemaRevision };
+    const binding = { ownerAppId: details.ownerAppId, where, sort, schemaRevision: details.schemaRevision,
+      createdFrom: query.createdFrom, createdTo: query.createdTo };
     let cursorId;
     if (query.cursor !== null) {
       const cursor = createQueryCursor(config.dataSecret);
@@ -86,6 +91,8 @@ export async function handleRecordQuery(request, response, identity, config, url
       order: query.order,
       sort: query.sort,
       filters: where,
+      createdFrom: query.createdFrom,
+      createdTo: query.createdTo,
       ...(cursorId === undefined ? {} : { cursorId }),
     }));
     const nextCursor = value.nextCursorId === null || value.nextCursorId === undefined
