@@ -205,11 +205,18 @@ npm run app-restore -- <archive-directory> --yes [--replace]
 ```
 
 The archive includes one application's collection schemas, records, object metadata and
-versioned bytes, object quota, shares and app-owned read and audit policies. JSON
-metadata comes from one PostgreSQL snapshot. Each object is downloaded by the version
-in that snapshot. The manifest records the tenant, application, migration version,
-creation time and checksum of each entry. A verified archive records one backup
-audit event. Source audit rows are stored as evidence.
+versioned bytes, object quota, shares, app-owned read and audit policies and the message
+queues the application owns, including their messages. Queue messages are scoped by tenant
+and owning queue; active leases refuse the backup and lease credentials are never exported.
+Historical message producers stay valid: restore checks that producer and consumer
+applications exist in the same tenant and that referenced capability versions of the owning
+application exist, not the current authorization whitelist. Restore locks owned queue rows
+so concurrent queue commands cannot interleave, refuses a live target lease instead of
+deleting it, and a version-one archive refuses to replace
+state that the archive does not cover. JSON metadata comes from one PostgreSQL snapshot.
+Each object is downloaded by the version in that snapshot. The manifest records the tenant,
+application, migration version, creation time and checksum of each entry. A verified archive
+records one backup audit event. Source audit rows are stored as evidence.
 
 The target must have the matching application and enrollment. Shared directories,
 principals and grantee apps must exist in the target. Keep the app quiescent during a
@@ -218,10 +225,15 @@ object metadata. The transaction keeps source audit evidence separate from the t
 chain and writes one restore event. A failed transaction leaves the previous object
 versions available. Existing archives retain their read-only lifecycle.
 
-The CLI refuses backup or restore with unresolved uploads, app assignments, owned queues,
-published capability state or consumer executions. It does not capture enrollment
-credentials, identity secrets, active Keycloak sessions or a Flowable execution. The
-archive may contain application data and requires the same access control as the source.
+The CLI refuses backup or restore with unresolved uploads, app assignments, published
+capability state or consumer executions. Assignments stay refused because a safe
+replace/reconcile cannot be demonstrated: restored assignments would need confirmed
+directory objects, unsynchronized staging for the Keycloak reconciliation and a way to
+replace live rows without leaving stale provider mappings. It does not capture enrollment
+credentials, identity secrets, active Keycloak sessions or a Flowable execution: durable
+workflow state is keyed by request caller scope and engine process/job identifiers, so
+per-app ownership and cross-store recovery cannot be demonstrated either. The archive may
+contain application data and requires the same access control as the source.
 
 ## Gateway access log
 
