@@ -12,6 +12,22 @@ All notable changes to Junctura are recorded here. Versions follow
 
 ## Unreleased
 
+- **Tenant-scoped BPMN publishing (issue #112):** `POST /v1/workflows/definitions` lets a verified
+  direct tenant administrator publish one business BPMN definition per tenant. Authorization reuses
+  the existing Core operator trust boundary — the verified `console-admin` role of the
+  `junctura-console` client plus `core-writer`, with no delegated app-actor caller; ordinary writers,
+  enrolled backends, non-administrator console sessions and delegated calls answer `403`
+  (`operator_required`, `delegation_not_allowed` or `write_forbidden`) before any ledger or engine
+  activity. The tenant comes from the verified identity, and the production BPMN safety policy —
+  including restricted conditions, `flowable:candidateGroups` on every user task and the reserved
+  `junctura_*` process ids — completes before any engine request. The publish key reserves a row in
+  the tenant `workflow_requests` ledger, so concurrent replicas deploy exactly once without an
+  in-process lock: identical retries replay the recorded key and version (also after a lost engine
+  reply, reconciled against the deployed engine resource), changed content under the same key answers
+  `409 idempotency_conflict`, and a reserved-but-unresolved request answers
+  `409 deployment_pending_reconciliation`. The Foundation contract documents the operation, request
+  and response schemas and policy-rule details for the Workspace pack installer (Workspace #12).
+
 - **Audit request correlation (issue #97):** migration 075 seals an optional server-derived
   `request_id` into the audit chain for `grant.activated`, `grant.revoked`,
   `application.assignment_granted` and `application.assignment_revoked`, correlated with the

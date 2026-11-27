@@ -55,6 +55,9 @@ for (const [endpointPath, pathItem] of Object.entries(spec.paths)) {
     if (operation["x-junctura-status"] === "planned") continue;
     const parameters = operationParameters(pathItem, operation);
     const requestContentTypes = Object.keys(operation.requestBody?.content ?? {});
+    const requestExample = requestContentTypes.length
+      ? operation.requestBody.content[requestContentTypes[0]].example ?? null
+      : null;
     const responses = Object.keys(operation.responses ?? {});
     const successStatuses = responses
       .filter((status) => /^2\d\d$/.test(status))
@@ -75,6 +78,7 @@ for (const [endpointPath, pathItem] of Object.entries(spec.paths)) {
       responses,
       hasRequestBody: Boolean(operation.requestBody),
       requestContentTypes,
+      requestExample,
       pathParameters: parameters.filter((parameter) => parameter.in === "path").map(summarize),
       queryParameters: parameters.filter((parameter) => parameter.in === "query").map(summarize),
       headerParameters: parameters.filter((parameter) => parameter.in === "header").map(summarize),

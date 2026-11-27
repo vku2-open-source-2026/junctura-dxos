@@ -99,7 +99,7 @@ EXPECTED = {
     '/v2/data/{collection}/aggregate': {'get'}, '/v2/data:export': {'get'}, '/v2/data:import': {'post'},
     '/v2/data:export': {'get'}, '/v2/data:import': {'post'},
     '/v2/resource-shares': {'post'}, '/v2/resource-shares/{shareId}': {'delete'},
-    '/v1/workflows/definitions': {'get'}, '/v1/workflows/executions': {'post'},
+    '/v1/workflows/definitions': {'get', 'post'}, '/v1/workflows/executions': {'post'},
     '/v1/workflows/executions/{executionId}': {'get', 'delete'},
     '/v1/workflows/executions/{executionId}/complete': {'post'},
     '/v1/workflows/executions/{executionId}/history': {'get'},
