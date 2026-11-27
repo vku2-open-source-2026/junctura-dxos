@@ -20,6 +20,8 @@ export interface ApiEndpointDef {
   responses: string[];
   hasRequestBody: boolean;
   requestContentTypes: string[];
+  /** Example body documented in the OpenAPI contract for the first request content type. */
+  requestExample?: unknown;
   pathParameters: ApiParameterDef[];
   queryParameters: ApiParameterDef[];
   headerParameters: ApiParameterDef[];
@@ -236,7 +238,7 @@ function requestExample(endpoint: ApiEndpointDef): RequestExample {
       case "putDirectoryMember":
         return { contentType, json: { groups: ["reviewers"] } };
       default:
-        return { contentType, json: {} };
+        return { contentType, json: endpoint.requestExample ?? {} };
     }
   }
 

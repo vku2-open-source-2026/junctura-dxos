@@ -31,6 +31,15 @@
     "requestContentTypes": [
       "application/json"
     ],
+    "requestExample": {
+      "producerAppIds": [
+        "11111111-1111-4111-8111-111111111111"
+      ],
+      "consumerAppIds": [
+        "11111111-1111-4111-8111-111111111111"
+      ],
+      "maxAttempts": 5
+    },
     "pathParameters": [
       {
         "name": "queue",
@@ -74,6 +83,7 @@
     ],
     "hasRequestBody": false,
     "requestContentTypes": [],
+    "requestExample": null,
     "pathParameters": [
       {
         "name": "queue",
@@ -134,6 +144,12 @@
     "requestContentTypes": [
       "application/json"
     ],
+    "requestExample": {
+      "payload": {
+        "task": "refresh-index"
+      },
+      "delaySeconds": 5
+    },
     "pathParameters": [
       {
         "name": "queue",
@@ -193,6 +209,9 @@
     "requestContentTypes": [
       "application/json"
     ],
+    "requestExample": {
+      "visibilityTimeoutSeconds": 30
+    },
     "pathParameters": [
       {
         "name": "queue",
@@ -243,6 +262,9 @@
     "requestContentTypes": [
       "application/json"
     ],
+    "requestExample": {
+      "leaseToken": "11111111-1111-4111-8111-111111111111"
+    },
     "pathParameters": [
       {
         "name": "queue",
@@ -302,6 +324,9 @@
     "requestContentTypes": [
       "application/json"
     ],
+    "requestExample": {
+      "leaseToken": "11111111-1111-4111-8111-111111111111"
+    },
     "pathParameters": [
       {
         "name": "queue",
@@ -356,6 +381,7 @@
     ],
     "hasRequestBody": false,
     "requestContentTypes": [],
+    "requestExample": null,
     "pathParameters": [
       {
         "name": "queue",
@@ -426,6 +452,7 @@
     "requestContentTypes": [
       "application/json"
     ],
+    "requestExample": {},
     "pathParameters": [
       {
         "name": "queue",
@@ -485,6 +512,44 @@
     "requestContentTypes": [
       "application/json"
     ],
+    "requestExample": {
+      "schema": {
+        "type": "object",
+        "required": [
+          "code"
+        ],
+        "properties": {
+          "code": {
+            "type": "string",
+            "minLength": 1
+          },
+          "status": {
+            "type": "string"
+          },
+          "notes": {
+            "type": "string"
+          }
+        }
+      },
+      "indexed": [
+        "code",
+        "status"
+      ],
+      "uniqueKey": "code",
+      "searchable": [
+        "notes"
+      ],
+      "sensitive": [
+        "notes"
+      ],
+      "auditActions": [
+        {
+          "action": "record.viewed",
+          "sensitivity": "restricted",
+          "visibleToSubject": true
+        }
+      ]
+    },
     "pathParameters": [
       {
         "name": "collection",
@@ -530,6 +595,7 @@
     ],
     "hasRequestBody": false,
     "requestContentTypes": [],
+    "requestExample": null,
     "pathParameters": [
       {
         "name": "collection",
@@ -580,6 +646,20 @@
     "requestContentTypes": [
       "application/json"
     ],
+    "requestExample": {
+      "fields": {
+        "nationalId": {
+          "mask": "full",
+          "owner": true
+        },
+        "phone": {
+          "mask": "last4",
+          "roles": [
+            "manager"
+          ]
+        }
+      }
+    },
     "pathParameters": [
       {
         "name": "collection",
@@ -624,6 +704,7 @@
     ],
     "hasRequestBody": false,
     "requestContentTypes": [],
+    "requestExample": null,
     "pathParameters": [
       {
         "name": "collection",
@@ -771,6 +852,12 @@
     "requestContentTypes": [
       "application/json"
     ],
+    "requestExample": {
+      "data": {
+        "code": "REF-0002",
+        "status": "open"
+      }
+    },
     "pathParameters": [
       {
         "name": "collection",
@@ -853,6 +940,7 @@
     "requestContentTypes": [
       "application/json"
     ],
+    "requestExample": null,
     "pathParameters": [],
     "queryParameters": [],
     "headerParameters": [
@@ -897,6 +985,7 @@
     ],
     "hasRequestBody": false,
     "requestContentTypes": [],
+    "requestExample": null,
     "pathParameters": [],
     "queryParameters": [
       {
@@ -947,6 +1036,7 @@
     "requestContentTypes": [
       "application/x-ndjson"
     ],
+    "requestExample": "{\"collection\":\"entries\",\"id\":\"44444444-4444-4444-8444-444444444444\",\"data\":{\"code\":\"REF-0002\",\"status\":\"open\"}}\n",
     "pathParameters": [],
     "queryParameters": [],
     "headerParameters": [
@@ -992,6 +1082,7 @@
     ],
     "hasRequestBody": false,
     "requestContentTypes": [],
+    "requestExample": null,
     "pathParameters": [],
     "queryParameters": [
       {
@@ -1090,6 +1181,9 @@
     "requestContentTypes": [
       "application/json"
     ],
+    "requestExample": {
+      "ttlSeconds": 1800
+    },
     "pathParameters": [
       {
         "name": "taskId",
@@ -1138,6 +1232,7 @@
     ],
     "hasRequestBody": false,
     "requestContentTypes": [],
+    "requestExample": null,
     "pathParameters": [
       {
         "name": "taskId",
@@ -1183,6 +1278,7 @@
     ],
     "hasRequestBody": false,
     "requestContentTypes": [],
+    "requestExample": null,
     "pathParameters": [
       {
         "name": "executionId",
@@ -1250,6 +1346,7 @@
     ],
     "hasRequestBody": false,
     "requestContentTypes": [],
+    "requestExample": null,
     "pathParameters": [],
     "queryParameters": [
       {
@@ -1313,6 +1410,9 @@
     "requestContentTypes": [
       "application/json"
     ],
+    "requestExample": {
+      "name": "Office"
+    },
     "pathParameters": [
       {
         "name": "unitType",
@@ -1358,6 +1458,7 @@
     ],
     "hasRequestBody": false,
     "requestContentTypes": [],
+    "requestExample": null,
     "pathParameters": [
       {
         "name": "unitType",
@@ -1402,6 +1503,7 @@
     ],
     "hasRequestBody": false,
     "requestContentTypes": [],
+    "requestExample": null,
     "pathParameters": [],
     "queryParameters": [
       {
@@ -1465,6 +1567,10 @@
     "requestContentTypes": [
       "application/json"
     ],
+    "requestExample": {
+      "unitType": "office",
+      "name": "Unit A"
+    },
     "pathParameters": [
       {
         "name": "unit",
@@ -1510,6 +1616,7 @@
     ],
     "hasRequestBody": false,
     "requestContentTypes": [],
+    "requestExample": null,
     "pathParameters": [
       {
         "name": "unit",
@@ -1554,6 +1661,7 @@
     ],
     "hasRequestBody": false,
     "requestContentTypes": [],
+    "requestExample": null,
     "pathParameters": [
       {
         "name": "unit",
@@ -1627,6 +1735,9 @@
     "requestContentTypes": [
       "application/json"
     ],
+    "requestExample": {
+      "name": "Reviewers"
+    },
     "pathParameters": [
       {
         "name": "unit",
@@ -1681,6 +1792,7 @@
     ],
     "hasRequestBody": false,
     "requestContentTypes": [],
+    "requestExample": null,
     "pathParameters": [
       {
         "name": "unit",
@@ -1734,6 +1846,7 @@
     ],
     "hasRequestBody": false,
     "requestContentTypes": [],
+    "requestExample": null,
     "pathParameters": [
       {
         "name": "unit",
@@ -1807,6 +1920,11 @@
     "requestContentTypes": [
       "application/json"
     ],
+    "requestExample": {
+      "groups": [
+        "reviewers"
+      ]
+    },
     "pathParameters": [
       {
         "name": "unit",
@@ -1861,6 +1979,7 @@
     ],
     "hasRequestBody": false,
     "requestContentTypes": [],
+    "requestExample": null,
     "pathParameters": [
       {
         "name": "unit",
@@ -1914,6 +2033,7 @@
     ],
     "hasRequestBody": false,
     "requestContentTypes": [],
+    "requestExample": null,
     "pathParameters": [],
     "queryParameters": [
       {
@@ -1981,6 +2101,7 @@
     ],
     "hasRequestBody": false,
     "requestContentTypes": [],
+    "requestExample": null,
     "pathParameters": [],
     "queryParameters": [],
     "headerParameters": [],
@@ -2006,6 +2127,7 @@
     ],
     "hasRequestBody": false,
     "requestContentTypes": [],
+    "requestExample": null,
     "pathParameters": [],
     "queryParameters": [],
     "headerParameters": [],
@@ -2031,6 +2153,7 @@
     ],
     "hasRequestBody": false,
     "requestContentTypes": [],
+    "requestExample": null,
     "pathParameters": [],
     "queryParameters": [],
     "headerParameters": [],
@@ -2056,6 +2179,7 @@
     ],
     "hasRequestBody": false,
     "requestContentTypes": [],
+    "requestExample": null,
     "pathParameters": [],
     "queryParameters": [],
     "headerParameters": [],
@@ -2079,6 +2203,7 @@
     ],
     "hasRequestBody": false,
     "requestContentTypes": [],
+    "requestExample": null,
     "pathParameters": [],
     "queryParameters": [],
     "headerParameters": [],
@@ -2113,6 +2238,7 @@
     ],
     "hasRequestBody": false,
     "requestContentTypes": [],
+    "requestExample": null,
     "pathParameters": [],
     "queryParameters": [],
     "headerParameters": [],
@@ -2150,6 +2276,7 @@
     "requestContentTypes": [
       "application/json"
     ],
+    "requestExample": null,
     "pathParameters": [],
     "queryParameters": [],
     "headerParameters": [],
@@ -2184,6 +2311,7 @@
     ],
     "hasRequestBody": false,
     "requestContentTypes": [],
+    "requestExample": null,
     "pathParameters": [
       {
         "name": "collection",
@@ -2269,6 +2397,7 @@
     "requestContentTypes": [
       "application/json"
     ],
+    "requestExample": null,
     "pathParameters": [
       {
         "name": "collection",
@@ -2314,6 +2443,7 @@
     ],
     "hasRequestBody": false,
     "requestContentTypes": [],
+    "requestExample": null,
     "pathParameters": [
       {
         "name": "collection",
@@ -2385,6 +2515,7 @@
     "requestContentTypes": [
       "application/json"
     ],
+    "requestExample": null,
     "pathParameters": [
       {
         "name": "collection",
@@ -2439,6 +2570,7 @@
     ],
     "hasRequestBody": false,
     "requestContentTypes": [],
+    "requestExample": null,
     "pathParameters": [
       {
         "name": "collection",
@@ -2496,6 +2628,7 @@
     "requestContentTypes": [
       "application/octet-stream"
     ],
+    "requestExample": null,
     "pathParameters": [],
     "queryParameters": [],
     "headerParameters": [],
@@ -2536,6 +2669,7 @@
     "requestContentTypes": [
       "application/octet-stream"
     ],
+    "requestExample": null,
     "pathParameters": [
       {
         "name": "id",
@@ -2581,6 +2715,7 @@
     ],
     "hasRequestBody": false,
     "requestContentTypes": [],
+    "requestExample": null,
     "pathParameters": [
       {
         "name": "id",
@@ -2626,6 +2761,7 @@
     ],
     "hasRequestBody": false,
     "requestContentTypes": [],
+    "requestExample": null,
     "pathParameters": [
       {
         "name": "id",
@@ -2671,6 +2807,7 @@
     ],
     "hasRequestBody": false,
     "requestContentTypes": [],
+    "requestExample": null,
     "pathParameters": [
       {
         "name": "collection",
@@ -2811,6 +2948,12 @@
     "requestContentTypes": [
       "application/json"
     ],
+    "requestExample": {
+      "data": {
+        "code": "REF-0002",
+        "status": "open"
+      }
+    },
     "pathParameters": [
       {
         "name": "collection",
@@ -2866,6 +3009,7 @@
     ],
     "hasRequestBody": false,
     "requestContentTypes": [],
+    "requestExample": null,
     "pathParameters": [
       {
         "name": "collection",
@@ -2941,6 +3085,7 @@
     "requestContentTypes": [
       "application/json"
     ],
+    "requestExample": null,
     "pathParameters": [
       {
         "name": "collection",
@@ -3017,6 +3162,7 @@
     ],
     "hasRequestBody": false,
     "requestContentTypes": [],
+    "requestExample": null,
     "pathParameters": [
       {
         "name": "collection",
@@ -3095,6 +3241,7 @@
     ],
     "hasRequestBody": false,
     "requestContentTypes": [],
+    "requestExample": null,
     "pathParameters": [
       {
         "name": "collection",
@@ -3175,6 +3322,9 @@
     "requestContentTypes": [
       "application/json"
     ],
+    "requestExample": {
+      "ttlSeconds": 300
+    },
     "pathParameters": [
       {
         "name": "collection",
@@ -3241,6 +3391,7 @@
     ],
     "hasRequestBody": false,
     "requestContentTypes": [],
+    "requestExample": null,
     "pathParameters": [
       {
         "name": "collection",
@@ -3311,6 +3462,7 @@
       "application/octet-stream",
       "multipart/form-data"
     ],
+    "requestExample": null,
     "pathParameters": [],
     "queryParameters": [],
     "headerParameters": [
@@ -3355,6 +3507,7 @@
     ],
     "hasRequestBody": false,
     "requestContentTypes": [],
+    "requestExample": null,
     "pathParameters": [],
     "queryParameters": [
       {
@@ -3452,6 +3605,7 @@
       "application/octet-stream",
       "multipart/form-data"
     ],
+    "requestExample": null,
     "pathParameters": [
       {
         "name": "id",
@@ -3507,6 +3661,7 @@
     ],
     "hasRequestBody": false,
     "requestContentTypes": [],
+    "requestExample": null,
     "pathParameters": [
       {
         "name": "id",
@@ -3552,6 +3707,7 @@
     ],
     "hasRequestBody": false,
     "requestContentTypes": [],
+    "requestExample": null,
     "pathParameters": [
       {
         "name": "id",
@@ -3601,6 +3757,13 @@
     "requestContentTypes": [
       "application/json"
     ],
+    "requestExample": {
+      "resourceType": "record",
+      "resourceId": "44444444-4444-4444-8444-444444444444",
+      "granteeAppGroup": "partners",
+      "action": "read",
+      "expiresAt": "2030-01-12T12:00:00Z"
+    },
     "pathParameters": [],
     "queryParameters": [],
     "headerParameters": [
@@ -3645,6 +3808,7 @@
     ],
     "hasRequestBody": false,
     "requestContentTypes": [],
+    "requestExample": null,
     "pathParameters": [
       {
         "name": "shareId",
@@ -3695,6 +3859,7 @@
     "requestContentTypes": [
       "application/json"
     ],
+    "requestExample": null,
     "pathParameters": [],
     "queryParameters": [],
     "headerParameters": [],
@@ -3735,6 +3900,7 @@
     ],
     "hasRequestBody": false,
     "requestContentTypes": [],
+    "requestExample": null,
     "pathParameters": [],
     "queryParameters": [
       {
@@ -3822,6 +3988,7 @@
     ],
     "hasRequestBody": false,
     "requestContentTypes": [],
+    "requestExample": null,
     "pathParameters": [],
     "queryParameters": [],
     "headerParameters": [],
@@ -3857,6 +4024,7 @@
     ],
     "hasRequestBody": false,
     "requestContentTypes": [],
+    "requestExample": null,
     "pathParameters": [
       {
         "name": "appId",
@@ -3909,6 +4077,14 @@
     "requestContentTypes": [
       "application/json"
     ],
+    "requestExample": {
+      "displayName": "App X",
+      "ownerUnit": "unit-a",
+      "deploymentUnits": [
+        "unit-a",
+        "unit-b"
+      ]
+    },
     "pathParameters": [
       {
         "name": "appId",
@@ -3970,6 +4146,7 @@
     "requestContentTypes": [
       "application/json"
     ],
+    "requestExample": null,
     "pathParameters": [
       {
         "name": "appId",
@@ -4032,6 +4209,7 @@
     "requestContentTypes": [
       "application/json"
     ],
+    "requestExample": null,
     "pathParameters": [
       {
         "name": "appId",
@@ -4092,6 +4270,7 @@
     "requestContentTypes": [
       "application/json"
     ],
+    "requestExample": null,
     "pathParameters": [],
     "queryParameters": [],
     "headerParameters": [],
@@ -4127,6 +4306,7 @@
     ],
     "hasRequestBody": false,
     "requestContentTypes": [],
+    "requestExample": null,
     "pathParameters": [
       {
         "name": "approvalId",
@@ -4179,6 +4359,7 @@
     "requestContentTypes": [
       "application/json"
     ],
+    "requestExample": null,
     "pathParameters": [
       {
         "name": "approvalId",
@@ -4232,6 +4413,7 @@
     ],
     "hasRequestBody": false,
     "requestContentTypes": [],
+    "requestExample": null,
     "pathParameters": [],
     "queryParameters": [],
     "headerParameters": [],
@@ -4271,6 +4453,9 @@
     "requestContentTypes": [
       "application/json"
     ],
+    "requestExample": {
+      "xml": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<definitions xmlns=\"http://www.omg.org/spec/BPMN/20100524/MODEL\" xmlns:flowable=\"http://flowable.org/bpmn\" targetNamespace=\"https://example.invalid\">\n  <process id=\"pack_approval\" isExecutable=\"true\" name=\"Pack approval\">\n    <startEvent id=\"start\"/>\n    <sequenceFlow id=\"a\" sourceRef=\"start\" targetRef=\"review\"/>\n    <userTask id=\"review\" name=\"Review\" flowable:candidateGroups=\"reviewers\"/>\n    <sequenceFlow id=\"b\" sourceRef=\"review\" targetRef=\"end\"/>\n    <endEvent id=\"end\"/>\n  </process>\n</definitions>"
+    },
     "pathParameters": [],
     "queryParameters": [],
     "headerParameters": [
@@ -4322,6 +4507,18 @@
     "requestContentTypes": [
       "application/json"
     ],
+    "requestExample": {
+      "definitionId": "process_a:1:42",
+      "input": {},
+      "unit": "unit-a",
+      "taskUnits": {
+        "review": "unit-a"
+      },
+      "dueAt": "2030-01-12T12:00:00Z",
+      "taskDueAt": {
+        "review": "2030-01-10T09:00:00Z"
+      }
+    },
     "pathParameters": [],
     "queryParameters": [],
     "headerParameters": [
@@ -4367,6 +4564,7 @@
     ],
     "hasRequestBody": false,
     "requestContentTypes": [],
+    "requestExample": null,
     "pathParameters": [
       {
         "name": "executionId",
@@ -4413,6 +4611,7 @@
     ],
     "hasRequestBody": false,
     "requestContentTypes": [],
+    "requestExample": null,
     "pathParameters": [
       {
         "name": "executionId",
@@ -4465,6 +4664,29 @@
     "requestContentTypes": [
       "application/json"
     ],
+    "requestExample": {
+      "taskId": "task-23",
+      "variables": {
+        "decision": "approved",
+        "reason": "Criteria met",
+        "approved": true
+      },
+      "output": {
+        "summary": {
+          "lines": 3
+        },
+        "note": "Reviewed"
+      },
+      "records": [
+        {
+          "collection": "entries",
+          "data": {
+            "code": "REF-0002",
+            "status": "open"
+          }
+        }
+      ]
+    },
     "pathParameters": [
       {
         "name": "executionId",
@@ -4512,6 +4734,7 @@
     ],
     "hasRequestBody": false,
     "requestContentTypes": [],
+    "requestExample": null,
     "pathParameters": [],
     "queryParameters": [],
     "headerParameters": [],
@@ -4540,6 +4763,7 @@
     ],
     "hasRequestBody": false,
     "requestContentTypes": [],
+    "requestExample": null,
     "pathParameters": [],
     "queryParameters": [
       {
@@ -4639,6 +4863,7 @@
     "requestContentTypes": [
       "application/x-www-form-urlencoded"
     ],
+    "requestExample": null,
     "pathParameters": [],
     "queryParameters": [],
     "headerParameters": [],
@@ -4666,6 +4891,7 @@
     ],
     "hasRequestBody": false,
     "requestContentTypes": [],
+    "requestExample": null,
     "pathParameters": [],
     "queryParameters": [],
     "headerParameters": [],
@@ -4697,6 +4923,7 @@
     ],
     "hasRequestBody": false,
     "requestContentTypes": [],
+    "requestExample": null,
     "pathParameters": [],
     "queryParameters": [],
     "headerParameters": [],
@@ -4728,6 +4955,7 @@
     ],
     "hasRequestBody": false,
     "requestContentTypes": [],
+    "requestExample": null,
     "pathParameters": [],
     "queryParameters": [],
     "headerParameters": [],
@@ -4757,6 +4985,7 @@
     "requestContentTypes": [
       "application/x-www-form-urlencoded"
     ],
+    "requestExample": null,
     "pathParameters": [],
     "queryParameters": [],
     "headerParameters": [],
@@ -4785,6 +5014,7 @@
     ],
     "hasRequestBody": false,
     "requestContentTypes": [],
+    "requestExample": null,
     "pathParameters": [],
     "queryParameters": [
       {
@@ -4858,6 +5088,7 @@
     ],
     "hasRequestBody": false,
     "requestContentTypes": [],
+    "requestExample": null,
     "pathParameters": [
       {
         "name": "appId",
@@ -4910,6 +5141,12 @@
     "requestContentTypes": [
       "application/json"
     ],
+    "requestExample": {
+      "unit": "unit-a",
+      "targetType": "group",
+      "target": "reviewers",
+      "role": "viewer"
+    },
     "pathParameters": [
       {
         "name": "appId",
@@ -4960,6 +5197,7 @@
     ],
     "hasRequestBody": false,
     "requestContentTypes": [],
+    "requestExample": null,
     "pathParameters": [
       {
         "name": "appId",
@@ -5019,6 +5257,7 @@
     ],
     "hasRequestBody": false,
     "requestContentTypes": [],
+    "requestExample": null,
     "pathParameters": [
       {
         "name": "appId",
@@ -5071,6 +5310,7 @@
     "requestContentTypes": [
       "application/json"
     ],
+    "requestExample": {},
     "pathParameters": [
       {
         "name": "appId",
@@ -5126,6 +5366,7 @@
     ],
     "hasRequestBody": false,
     "requestContentTypes": [],
+    "requestExample": null,
     "pathParameters": [],
     "queryParameters": [],
     "headerParameters": [],
@@ -5166,6 +5407,12 @@
     "requestContentTypes": [
       "application/json"
     ],
+    "requestExample": {
+      "resourceType": "record",
+      "resourceId": "44444444-4444-4444-8444-444444444444",
+      "recipientUnit": "unit-b",
+      "purpose": "Review the selected record"
+    },
     "pathParameters": [],
     "queryParameters": [],
     "headerParameters": [
@@ -5215,6 +5462,7 @@
     "requestContentTypes": [
       "application/json"
     ],
+    "requestExample": {},
     "pathParameters": [
       {
         "name": "consentId",
@@ -5265,6 +5513,12 @@
     "requestContentTypes": [
       "application/json"
     ],
+    "requestExample": {
+      "resourceType": "record",
+      "resourceId": "44444444-4444-4444-8444-444444444444",
+      "purpose": "Review the selected record",
+      "expiresAt": "2030-01-01T00:00:00Z"
+    },
     "pathParameters": [],
     "queryParameters": [],
     "headerParameters": [],
@@ -5300,6 +5554,7 @@
     ],
     "hasRequestBody": false,
     "requestContentTypes": [],
+    "requestExample": null,
     "pathParameters": [
       {
         "name": "requestId",
@@ -5350,6 +5605,7 @@
     "requestContentTypes": [
       "application/json"
     ],
+    "requestExample": {},
     "pathParameters": [
       {
         "name": "requestId",
@@ -5395,6 +5651,7 @@
     ],
     "hasRequestBody": false,
     "requestContentTypes": [],
+    "requestExample": null,
     "pathParameters": [],
     "queryParameters": [],
     "headerParameters": [],
@@ -5435,6 +5692,7 @@
     "requestContentTypes": [
       "application/json"
     ],
+    "requestExample": {},
     "pathParameters": [
       {
         "name": "requestId",
@@ -5485,6 +5743,9 @@
     "requestContentTypes": [
       "application/json"
     ],
+    "requestExample": {
+      "reason": "The proposed duration is too long."
+    },
     "pathParameters": [
       {
         "name": "requestId",
