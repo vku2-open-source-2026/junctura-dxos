@@ -7589,7 +7589,7 @@
       "get": {
         "operationId": "listWorkflowDefinitions",
         "summary": "List workflow definitions",
-        "description": "Workflow resources remain TENANT scoped, not app-private. App suspension is not a workflow permission check. Keep private payloads out of tenant-visible variables. Up to 100 latest operator-installed definitions; no public deployment, cursor or offset.",
+        "description": "Workflow resources remain TENANT scoped, not app-private. App suspension is not a workflow permission check. Keep private payloads out of tenant-visible variables. Up to 100 latest definitions; no cursor or offset. Publishing is a separate core-writer operation on this path.",
         "tags": [
           "tenant"
         ],
@@ -7646,6 +7646,164 @@
         ],
         "x-junctura-authority": "tenant",
         "x-junctura-test-suite": "core"
+      },
+      "post": {
+        "operationId": "publishWorkflowDefinition",
+        "summary": "Publish a workflow definition",
+        "description": "Deploys one business BPMN definition for the caller's tenant on behalf of operator installers. The tenant comes from the verified bearer identity and cannot be supplied in the request. Only the verified direct tenant administrator may publish: the boundary is the verified console-admin role of the junctura-console client (checked against current role membership) plus core-writer, with no delegated actor. Ordinary application writers, enrolled backends and non-administrator console sessions answer 403 operator_required, delegated application-actor callers answer 403 delegation_not_allowed and tokens without core-writer answer 403 write_forbidden. The body must be exactly {\"xml\": definition} XML text. The production BPMN safety policy applies before any engine request: element and namespace allowlist, restricted condition expressions, lowercase flowable:candidateGroups on every user task, reserved junctura_* process ids, DOCTYPE/ENTITY rejection and a 262144 UTF-8 byte cap; rejections answer 400 definition_invalid listing the violated rules. Core deploys with the tenant id derived from the identity and reports the definition key and deployed version. Retry contract: an identical retry with the same Idempotency-Key and byte-identical XML replays 200, including after a lost engine reply, reconciled from the durable tenant reservation ledger and the deployed engine resource, so simultaneous replicas never depend on an in-process lock. The same key with different XML answers 409 idempotency_conflict and must not be retried under that key. 409 deployment_pending_reconciliation means another request reserved the key: retry the same Idempotency-Key after reconciliation, and only a publication that never committed may be retried under a fresh Idempotency-Key; independent publications always use their own fresh key. Publishing the same process id with changed XML under a new key deploys a new engine version. Flowable credentials stay private to Core.",
+        "tags": [
+          "tenant"
+        ],
+        "x-junctura-query-policy": "closed",
+        "security": [
+          {
+            "coreBearer": []
+          }
+        ],
+        "x-junctura-core-roles": [
+          "core-reader",
+          "core-writer"
+        ],
+        "x-junctura-authority": "tenant",
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/Uuid"
+            },
+            "example": "11111111-1111-4111-8111-111111111111",
+            "description": "Lowercase UUID binding the request to one definition publication; an identical retry replays the recorded version."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WorkflowDefinitionPublish"
+              },
+              "example": {
+                "xml": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<definitions xmlns=\"http://www.omg.org/spec/BPMN/20100524/MODEL\" xmlns:flowable=\"http://flowable.org/bpmn\" targetNamespace=\"https://example.invalid\">\n  <process id=\"pack_approval\" isExecutable=\"true\" name=\"Pack approval\">\n    <startEvent id=\"start\"/>\n    <sequenceFlow id=\"a\" sourceRef=\"start\" targetRef=\"review\"/>\n    <userTask id=\"review\" name=\"Review\" flowable:candidateGroups=\"reviewers\"/>\n    <sequenceFlow id=\"b\" sourceRef=\"review\" targetRef=\"end\"/>\n    <endEvent id=\"end\"/>\n  </process>\n</definitions>"
+              }
+            }
+          }
+        },
+        "x-max-body-bytes": 278528,
+        "responses": {
+          "200": {
+            "description": "Replay of an identical publication with the same Idempotency-Key, or of content already deployed for the tenant",
+            "headers": {
+              "Cache-Control": {
+                "$ref": "#/components/headers/CacheControl"
+              },
+              "X-Content-Type-Options": {
+                "$ref": "#/components/headers/NoSniff"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkflowDefinitionPublished"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Definition deployed for the tenant",
+            "headers": {
+              "Cache-Control": {
+                "$ref": "#/components/headers/CacheControl"
+              },
+              "X-Content-Type-Options": {
+                "$ref": "#/components/headers/NoSniff"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkflowDefinitionPublished"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed request, or a definition rejected by the BPMN safety policy with the violated rules.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/PlannedRequestId"
+              },
+              "Cache-Control": {
+                "$ref": "#/components/headers/CacheControl"
+              },
+              "X-Content-Type-Options": {
+                "$ref": "#/components/headers/NoSniff"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/ApplicationError"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "error": { "const": "definition_invalid" },
+                        "requestId": { "$ref": "#/components/schemas/Uuid" },
+                        "problems": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "rule": { "type": "string", "pattern": "^[a-z_]{1,64}$" },
+                              "detail": { "type": "string" }
+                            },
+                            "required": ["rule", "detail"],
+                            "additionalProperties": false
+                          }
+                        }
+                      },
+                      "required": ["error", "requestId", "problems"],
+                      "additionalProperties": false
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "413": {
+            "$ref": "#/components/responses/TooLarge"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMedia"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "502": {
+            "$ref": "#/components/responses/BadGateway"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          },
+          "504": {
+            "$ref": "#/components/responses/GatewayTimeout"
+          }
+        },
+        "x-junctura-source": "src/modules/workflow/workflow.mjs",
+        "x-junctura-test-suite": "workflow-tasks"
       }
     },
     "/v1/workflows/executions": {
@@ -14660,6 +14818,44 @@
               "string",
               "null"
             ]
+          }
+        },
+        "required": [
+          "id",
+          "key",
+          "version"
+        ],
+        "additionalProperties": false
+      },
+      "WorkflowDefinitionPublish": {
+        "type": "object",
+        "properties": {
+          "xml": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 262144,
+            "description": "BPMN 2.0 process definition XML as UTF-8 text of at most 262144 bytes. The tenant cannot be supplied; Core derives it from the verified identity."
+          }
+        },
+        "required": [
+          "xml"
+        ],
+        "additionalProperties": false
+      },
+      "WorkflowDefinitionPublished": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "key": {
+            "type": "string",
+            "minLength": 1
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1
           }
         },
         "required": [

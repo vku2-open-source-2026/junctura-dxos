@@ -4,7 +4,8 @@ import { createHash } from "node:crypto";
 import { applicationToken } from "../applications/applications.mjs";
 import { dataRequest, sendRecordResult } from "../data/data.mjs";
 import { HttpError, json, jsonObject, readRecordJson, requireWriter, uuidPattern } from "../../platform/http/http.mjs";
-import { workflowRequest } from "./client.mjs";
+import { workflowRequest, workflowText } from "./client.mjs";
+import { validateDefinition } from "./definition-policy.mjs";
 import { workflowSummary } from "./summary.mjs";
 import { completeTask, engineId, executionPolicy, handleClaim, managedStart, releaseCancellationLease, reserveCancellation, workflowTaskPage } from "./tasks.mjs";
 
@@ -267,6 +268,90 @@ async function start(request, identity, config) {
   return { status: reserved ? 201 : 200, value: await readExecution(id) };
 }
 
+function verifiedDefinition(item, tenantId, key) {
+  return item && typeof item.id === "string" && item.id && item.tenantId === tenantId &&
+    item.key === key && Number.isInteger(item.version) && item.version >= 1
+    ? { id: item.id, key: item.key, version: item.version } : null;
+}
+
+async function latestIdenticalDefinition(config, tenantId, key, xml) {
+  const result = await workflowRequest(config, `repository/process-definitions?${new URLSearchParams({
+    key, tenantId, latest: "true",
+  })}`);
+  const latest = verifiedDefinition(Array.isArray(result?.data) ? result.data[0] : undefined, tenantId, key);
+  if (!latest) return null;
+  const resource = await workflowText(config, `repository/process-definitions/${encodeURIComponent(latest.id)}/resourcedata`);
+  return resource === xml ? latest : null;
+}
+
+// Publishes one tenant-scoped business BPMN definition for operator installers.
+// Authorization (verified direct tenant administrator with the writer role, no
+// delegated actor) and policy validation complete before any engine request; the
+// tenant always comes from the verified identity. consoleRole is the only
+// administrator boundary: auth.mjs sets it solely for the verified
+// junctura-console client after checking current role membership, so an ordinary
+// writer or backend token never publishes. The tenant ledger row is the durable
+// cross-replica reservation, so concurrent requests never rely on an in-process
+// lock: only the reserving request deploys, and an ambiguous engine outcome is
+// reconciled against the deployed resource.
+async function publishDefinition(request, identity, config) {
+  requireWriter(identity);
+  if (identity.actor) throw new HttpError(403, "delegation_not_allowed");
+  if (identity.consoleRole !== "admin") throw new HttpError(403, "operator_required");
+  const key = request.headers["idempotency-key"];
+  if (typeof key !== "string" || !uuidPattern.test(key)) throw new HttpError(400, "uuid_idempotency_key_required");
+  const body = await readRecordJson(request, 262144 + 16384);
+  if (!jsonObject(body) || Object.keys(body).length !== 1 || typeof body.xml !== "string") {
+    throw new HttpError(400, "invalid_workflow_request");
+  }
+  const model = validateDefinition(body.xml, { includeTasks: true });
+  if (!model.ok) throw new HttpError(400, "definition_invalid", { problems: model.problems });
+  if (model.tasks.some(task => task.groups.length === 0)) {
+    throw new HttpError(400, "definition_invalid", { problems: [{ rule: "missing_group",
+      detail: "Every user task must declare flowable:candidateGroups" }] });
+  }
+  const tenantId = identity.tenantId;
+  const hash = createHash("sha256").update(body.xml).digest("hex");
+  const query = new URLSearchParams({ key: `eq.${key}` });
+  const ledger = (options) => dataRequest(config, tenantId, query, options, "workflow_requests");
+  let reserved = false;
+  let row;
+  try {
+    [row] = await ledger({ method: "POST", body: JSON.stringify({ key, definition_id: model.key, input_hash: hash }) });
+    reserved = true;
+  } catch (error) {
+    if (error.status !== 409) throw error;
+    [row] = await ledger();
+  }
+  if (!row || row.definition_id !== model.key || row.input_hash !== hash) throw new HttpError(409, "idempotency_conflict");
+  if (row.engine_id) {
+    const replay = await workflowRequest(config, `repository/process-definitions/${encodeURIComponent(row.engine_id)}`)
+      .catch(error => error.status === 404 ? null : Promise.reject(error));
+    const published = verifiedDefinition(replay, tenantId, model.key);
+    if (published) return { status: 200, value: published };
+  }
+  const existing = await latestIdenticalDefinition(config, tenantId, model.key, body.xml);
+  if (existing) {
+    if (row.engine_id !== existing.id) {
+      await ledger({ method: "PATCH", body: JSON.stringify({ engine_id: existing.id }) });
+    }
+    return { status: 200, value: existing };
+  }
+  if (!reserved) throw new HttpError(409, "deployment_pending_reconciliation");
+  const form = new FormData();
+  form.append("tenantId", tenantId);
+  form.append("file", new Blob([body.xml], { type: "application/xml" }), `${model.key}.bpmn20.xml`);
+  const deployment = await workflowRequest(config, "repository/deployments", { method: "POST", body: form });
+  if (typeof deployment?.id !== "string" || !deployment.id) throw new HttpError(503, "workflow_unavailable");
+  const result = await workflowRequest(config, `repository/process-definitions?${new URLSearchParams({
+    deploymentId: deployment.id, tenantId, key: model.key,
+  })}`);
+  const item = verifiedDefinition(Array.isArray(result?.data) ? result.data[0] : undefined, tenantId, model.key);
+  if (!item) throw new HttpError(503, "workflow_unavailable");
+  await ledger({ method: "PATCH", body: JSON.stringify({ engine_id: item.id }) });
+  return { status: 201, value: item };
+}
+
 function decodeEngineId(raw, error) {
   let id;
   try { id = decodeURIComponent(raw); } catch { throw new HttpError(400, error); }
@@ -313,9 +398,14 @@ export async function handleWorkflow(request, response, identity, config, url) {
     requireMethod(request, response, ["POST"]);
     return handleClaim(request, response, identity, config, decodeEngineId(claim[1], "invalid_task_id"), claim[2]);
   }
-  if (url.pathname === "/v1/workflows/definitions" && request.method === "GET") {
-    const result = await workflowRequest(config, `repository/process-definitions?${new URLSearchParams({ tenantId: identity.tenantId, latest: "true", size: "100" })}`);
-    return json(response, 200, { items: result.data.filter(item => item.key !== "junctura_c4a_single").map(({ id, key, version, name }) => ({ id, key, version, name })) });
+  if (url.pathname === "/v1/workflows/definitions") {
+    if (request.method === "GET") {
+      const result = await workflowRequest(config, `repository/process-definitions?${new URLSearchParams({ tenantId: identity.tenantId, latest: "true", size: "100" })}`);
+      return json(response, 200, { items: result.data.filter(item => item.key !== "junctura_c4a_single").map(({ id, key, version, name }) => ({ id, key, version, name })) });
+    }
+    if (request.method === "POST") {
+      return sendRecordResult(response, await publishDefinition(request, identity, config));
+    }
   }
   if (url.pathname === "/v1/workflows/executions" && request.method === "POST") {
     return sendRecordResult(response, await start(request, identity, config));

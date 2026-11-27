@@ -4211,7 +4211,7 @@
     "method": "GET",
     "operationId": "listWorkflowDefinitions",
     "summary": "List workflow definitions",
-    "description": "Workflow resources remain TENANT scoped, not app-private. App suspension is not a workflow permission check. Keep private payloads out of tenant-visible variables. Up to 100 latest operator-installed definitions; no public deployment, cursor or offset.",
+    "description": "Workflow resources remain TENANT scoped, not app-private. App suspension is not a workflow permission check. Keep private payloads out of tenant-visible variables. Up to 100 latest definitions; no cursor or offset. Publishing is a separate core-writer operation on this path.",
     "tags": [
       "tenant"
     ],
@@ -4235,6 +4235,55 @@
     "pathParameters": [],
     "queryParameters": [],
     "headerParameters": [],
+    "successStatus": "200",
+    "successContentType": "application/json",
+    "successHasBody": true
+  },
+  {
+    "path": "/v1/workflows/definitions",
+    "method": "POST",
+    "operationId": "publishWorkflowDefinition",
+    "summary": "Publish a workflow definition",
+    "description": "Deploys one business BPMN definition for the caller's tenant on behalf of operator installers. The tenant comes from the verified bearer identity and cannot be supplied in the request. Only the verified direct tenant administrator may publish: the boundary is the verified console-admin role of the junctura-console client (checked against current role membership) plus core-writer, with no delegated actor. Ordinary application writers, enrolled backends and non-administrator console sessions answer 403 operator_required, delegated application-actor callers answer 403 delegation_not_allowed and tokens without core-writer answer 403 write_forbidden. The body must be exactly {\"xml\": definition} XML text. The production BPMN safety policy applies before any engine request: element and namespace allowlist, restricted condition expressions, lowercase flowable:candidateGroups on every user task, reserved junctura_* process ids, DOCTYPE/ENTITY rejection and a 262144 UTF-8 byte cap; rejections answer 400 definition_invalid listing the violated rules. Core deploys with the tenant id derived from the identity and reports the definition key and deployed version. Retry contract: an identical retry with the same Idempotency-Key and byte-identical XML replays 200, including after a lost engine reply, reconciled from the durable tenant reservation ledger and the deployed engine resource, so simultaneous replicas never depend on an in-process lock. The same key with different XML answers 409 idempotency_conflict and must not be retried under that key. 409 deployment_pending_reconciliation means another request reserved the key: retry the same Idempotency-Key after reconciliation, and only a publication that never committed may be retried under a fresh Idempotency-Key; independent publications always use their own fresh key. Publishing the same process id with changed XML under a new key deploys a new engine version. Flowable credentials stay private to Core.",
+    "tags": [
+      "tenant"
+    ],
+    "security": [
+      {
+        "coreBearer": []
+      }
+    ],
+    "responses": [
+      "200",
+      "201",
+      "400",
+      "401",
+      "403",
+      "409",
+      "413",
+      "415",
+      "429",
+      "502",
+      "503",
+      "504"
+    ],
+    "hasRequestBody": true,
+    "requestContentTypes": [
+      "application/json"
+    ],
+    "pathParameters": [],
+    "queryParameters": [],
+    "headerParameters": [
+      {
+        "name": "Idempotency-Key",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        },
+        "description": "Lowercase UUID binding the request to one definition publication; an identical retry replays the recorded version."
+      }
+    ],
     "successStatus": "200",
     "successContentType": "application/json",
     "successHasBody": true

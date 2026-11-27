@@ -98,6 +98,7 @@ const errorFields = Object.freeze({
   schema_violation: ["issues"], quota_exceeded: ["quota"], locked: ["lockedBy", "lockedUntil"],
   task_claimed: ["claimedBy", "claimedUntil"],
   limit_exceeded: ["field"], invalid_request: ["issues"],
+  definition_invalid: ["problems"],
 });
 
 const legacyErrors = new Set([

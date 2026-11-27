@@ -222,7 +222,7 @@ The identity includes `subject`, `tenantId: 'tenant-a'` and supported roles. Tok
 | `/v2/resource-shares` and `/{shareId}` | Owner-approved, expiring read-only shares of individual resources; owner revocation. |
 | `/v1/data/{collection}` and `/{id}` | List/create/read/update/delete tenant records; JSON body limit 64 KiB. |
 | `/v1/objects` and `/{uuid}` | Upload/read/delete opaque bytes; stable-UUID PUT supports retryable replacement, with a 1-byte to 5-MiB upload bound. |
-| `/v1/workflows/definitions` and `/v1/workflows/executions` | List operator-installed definitions; start with a UUID idempotency key, inspect, complete one active user task or cancel. |
+| `/v1/workflows/definitions` and `/v1/workflows/executions` | List, and (as the verified tenant administrator, `junctura-console` `console-admin` with `core-writer`) publish tenant-scoped BPMN definitions; start with a UUID idempotency key, inspect, complete one active user task or cancel. |
 
 Foundational reads require `core-reader`; resource/workflow writes also require `core-writer`. Registration uses separately enrolled administrative permissions. V2 resources additionally require an active registered backend with an exact operator-enrolled service-account subject. V1 data/objects are a separate deprecated namespace restricted to an explicit legacy client allowlist; local Compose allows only its three service fixtures. Browsers use an authorized application backend. See [ownership, sharing and migration](SECURITY.md#resource-authorization) before upgrading. OIDC discovery and health/readiness remain public; verified context, never ownership headers, supplies authority. Detailed contracts are in [CORE_API.md](CORE_API.md).
 

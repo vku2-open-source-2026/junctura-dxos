@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
-import { randomBytes, randomUUID } from "node:crypto";
+import { createHash, createHmac, randomBytes, randomUUID } from "node:crypto";
 import { after, before, test } from "node:test";
 import { setTimeout as delay } from "node:timers/promises";
 import { promisify } from "node:util";
@@ -23,12 +23,12 @@ const collection = `entries_${suffix}`;
 const appId = randomUUID();
 const clientIds = [];
 const users = [];
-const { api, q, cleanup } = recordTestSupport(prefix);
+const { api, q, cleanup, createBackend } = recordTestSupport(prefix);
 const run = (...args) => promisify(execFile)("docker", args, { timeout: 30000 });
 const sql = source => run("compose", "exec", "-T", "database", "psql", "-U", "junctura_admin", "-d", "junctura_data",
   "-XAtq", "-v", "ON_ERROR_STOP=1", "-c", source);
 const fixture = createAuthorityFixture({ base, prefix, q, sql, api, clientIds, users });
-const { admin, login, human, verifiedSubject } = fixture;
+const { admin, login, human, verifiedSubject, createUser } = fixture;
 const executionPath = id => `/v1/workflows/executions/${encodeURIComponent(id)}`;
 const taskPath = id => `/v1/workflows/tasks/${encodeURIComponent(id)}`;
 const post = (body, idempotencyKey) => ({ method: "POST", body, headers: idempotencyKey ? { "Idempotency-Key": idempotencyKey } : {} });
@@ -36,8 +36,10 @@ const remove = { method: "DELETE" };
 const inbox = `/v1/workflows/tasks?definitionKey=${key}`;
 const trigger = `delay_completion_${suffix}`;
 const requestKeys = [];
+const rejectedKeys = [];
 const checkpointRuns = [];
-let deploymentId, definitionId, writer, peer, outsider, auditor;
+const publishedDeployments = [];
+let deploymentId, definitionId, writer, peer, outsider, auditor, operator, backend;
 
 async function engine(path, method = "GET", body) {
   const { stdout } = await run("compose", "exec", "-T", "core", "node", "--input-type=module", "-e", `
@@ -60,6 +62,35 @@ async function adminCreate(path, body) {
   const response = await admin(path, body, "POST");
   assert.equal(response.status, 201, await response.clone().text());
   return response.headers.get("location").split("/").at(-1);
+}
+
+// A real tenant administrator with the operator-enrolled console-admin role and
+// the MFA-enforced OIDC direct grant from integration/admin-mfa.mjs. The token
+// is minted on use so a long suite never publishes with a stale credential.
+async function operatorAccount() {
+  const secret = randomBytes(20).toString("base64url");
+  const user = await createUser("operator", { tenant, credentials: [{ type: "otp",
+    userLabel: "Fixture authenticator", secretData: JSON.stringify({ value: secret }),
+    credentialData: JSON.stringify({ subType: "totp", digits: 6, period: 30, algorithm: "HmacSHA1", counter: 0 }) }] });
+  const [root] = await (await admin(`groups?search=${tenant}&exact=true`)).json();
+  assert.equal((await admin(`users/${user.id}/groups/${root.id}`, undefined, "PUT")).status, 204);
+  const roles = await Promise.all(["core-reader", "core-writer"].map(async name => (await admin(`roles/${name}`)).json()));
+  assert.equal((await admin(`users/${user.id}/role-mappings/realm`, roles, "POST")).status, 204);
+  const [consoleClient] = await (await admin("clients?clientId=junctura-console")).json();
+  const role = await (await admin(`clients/${consoleClient.id}/roles/console-admin`)).json();
+  assert.equal((await admin(`users/${user.id}/role-mappings/clients/${consoleClient.id}`, [role], "POST")).status, 204);
+  return { ...user, secret };
+}
+
+function operatorGrant(account) {
+  const counter = Buffer.alloc(8);
+  counter.writeBigUInt64BE(BigInt(Math.floor(Date.now() / 30_000)));
+  const digest = createHmac("sha1", account.secret).update(counter).digest();
+  const offset = digest.at(-1) & 0xf;
+  const otp = ((digest.readUInt32BE(offset) & 0x7fffffff) % 1_000_000).toString().padStart(6, "0");
+  return fetch(`${issuer}/protocol/openid-connect/token`, { method: "POST", signal: AbortSignal.timeout(10_000),
+    body: new URLSearchParams({ grant_type: "password", client_id: "junctura-console", username: account.username,
+      password: account.password, otp }) });
 }
 
 before(async () => {
@@ -90,6 +121,8 @@ before(async () => {
   for (const who of [peer, outsider]) who.token = await login(who.username, who.password, who.clientId);
   assert.equal((await jsonResult(await api("/v1/identity", writer), 200)).subjectId, subjectId);
   assert.deepEqual((await jsonResult(await api("/v1/identity", outsider), 200)).groups, [`/${wrongUnit}/${group}`]);
+  backend = await createBackend("backend");
+  operator = await operatorAccount();
   const provider = `https://${prefix}.example.invalid`;
   const xml = `<?xml version="1.0" encoding="UTF-8"?>
     <definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:flowable="http://flowable.org/bpmn" targetNamespace="https://example.invalid">
@@ -145,6 +178,9 @@ before(async () => {
 
 after(async () => {
   try {
+    for (const id of publishedDeployments) {
+      await engine(`repository/deployments/${encodeURIComponent(id)}?cascade=true`, "DELETE");
+    }
     for (const id of checkpointRuns) {
       const path = `history/historic-process-instances/${encodeURIComponent(id)}`;
       const run = await engine(path);
@@ -168,7 +204,8 @@ after(async () => {
       DELETE FROM app_private.idempotency_results WHERE tenant_id=${q(tenant)} AND key IN (${keys});
       DELETE FROM core.workflow_requests WHERE tenant_id=${q(tenant)} AND key IN (${keys});
     `);
-    if (writer) await cleanup([{ appId, subject: writer.id, clientId: writer.clientId }]);
+    if (writer) await cleanup([{ appId, subject: writer.id, clientId: writer.clientId },
+      ...(backend ? [backend] : [])]);
     await fixture.cleanupSubjectBindings();
   } finally {
     await fixture.operatorToken();
@@ -462,4 +499,95 @@ test("concurrent cancel and complete requests admit exactly one transition", { t
     assert.equal((await lookup(path)).status, "cancelled");
   }
   assert.deepEqual((await history(path)).items, []);
+});
+
+test("publishing a business definition is tenant-scoped, policy-checked and replay-defined", { timeout: 120000 }, async () => {
+  const packKey = `pack_${suffix}`;
+  const publishXml = name => `<?xml version="1.0" encoding="UTF-8"?>
+    <definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:flowable="http://flowable.org/bpmn" targetNamespace="https://example.invalid">
+      <process id="${packKey}" isExecutable="true" name="${name}">
+        <startEvent id="start"/>
+        <sequenceFlow id="a" sourceRef="start" targetRef="review"/>
+        <userTask id="review" name="Review" flowable:candidateGroups="reviewers"/>
+        <sequenceFlow id="b" sourceRef="review" targetRef="end"/>
+        <endEvent id="end"/>
+      </process>
+    </definitions>`;
+  const publish = (who, body, id = newKey()) => api("/v1/workflows/definitions", who, post(body, id));
+  const latest = async () => (await engine(`repository/process-definitions?${
+    new URLSearchParams({ key: packKey, tenantId: tenant, latest: "true" })}`)).data[0];
+  const allVersions = async () => (await engine(`repository/process-definitions?${
+    new URLSearchParams({ key: packKey, tenantId: tenant })}`)).data.length;
+  // Only the verified direct tenant administrator may publish; ordinary writers,
+  // enrolled backends and delegated actors are rejected before any ledger row or
+  // engine request. Every rejection must leave zero durable writes behind.
+  const denied = async (who, code) => {
+    const key = newKey();
+    rejectedKeys.push(key);
+    assert.equal((await jsonResult(await publish(who, { xml: publishXml("Pack approval") }, key), 403)).error, code);
+  };
+  const publisher = { token: (await (await operatorGrant(operator)).json()).access_token };
+  assert.equal((await jsonResult(await api("/v1/identity", publisher), 200)).consoleRole, "admin");
+  await denied(writer, "operator_required");
+  await denied(auditor, "operator_required");
+  await denied(backend, "operator_required");
+  assert.equal((await sql(`SELECT count(*) FROM core.workflow_requests
+    WHERE tenant_id=${q(tenant)} AND key IN (${rejectedKeys.map(q).join(",")});`)).stdout.trim(), "0");
+  assert.equal((await latest())?.tenantId, undefined);
+
+  assert.equal((await jsonResult(await publish(publisher, { xml: publishXml("Pack approval"), tenantId: "tenant-b" }), 400)).error,
+    "invalid_workflow_request");
+  const rejected = await jsonResult(await publish(publisher, { xml: publishXml("Pack approval")
+    .replace("</definitions>", "<!DOCTYPE definitions [ <!ENTITY x \"y\"> ]></definitions>") }), 400);
+  assert.equal(rejected.error, "definition_invalid");
+  assert.ok(rejected.problems.some(problem => problem.rule === "doctype_forbidden"));
+
+  // A reserved ledger row without a deployed result is a defined pending conflict
+  // for every caller; only the reserving request may deploy.
+  const pendingKey = newKey();
+  await sql(`INSERT INTO core.workflow_requests (tenant_id, key, definition_id, input_hash)
+    VALUES (${q(tenant)},${q(pendingKey)},${q(packKey)},${
+      q(createHash("sha256").update(publishXml("Pack approval")).digest("hex"))});`);
+  assert.equal((await jsonResult(await publish(publisher, { xml: publishXml("Pack approval") }, pendingKey), 409)).error,
+    "deployment_pending_reconciliation");
+  assert.equal((await latest())?.tenantId, undefined);
+  await sql(`DELETE FROM core.workflow_requests WHERE tenant_id=${q(tenant)} AND key=${q(pendingKey)};`);
+
+  const firstKey = newKey();
+  const first = await jsonResult(await publish(publisher, { xml: publishXml("Pack approval") }, firstKey), 201);
+  assert.deepEqual(Object.keys(first).sort(), ["id", "key", "version"]);
+  assert.equal(first.key, packKey);
+  const deployed = await latest();
+  assert.equal(deployed.id, first.id);
+  assert.equal(deployed.tenantId, tenant);
+  publishedDeployments.push(deployed.deploymentId);
+  assert.ok((await lookup("/v1/workflows/definitions")).items.some(item => item.key === packKey));
+
+  assert.deepEqual(await jsonResult(await publish(publisher, { xml: publishXml("Pack approval") }, firstKey), 200), first);
+  assert.equal(await latest().then(item => item.id), first.id);
+  assert.equal((await jsonResult(await publish(publisher, { xml: publishXml("Pack approval changed") }, firstKey), 409)).error,
+    "idempotency_conflict");
+
+  // Changed content under a new key deploys the next version; two simultaneous
+  // requests with one stable key deploy exactly once and settle on durable state.
+  const changed = await jsonResult(await publish(publisher, { xml: publishXml("Pack approval changed") }), 201);
+  assert.equal(changed.version, first.version + 1);
+  publishedDeployments.push((await latest()).deploymentId);
+  assert.deepEqual(await jsonResult(await publish(publisher, { xml: publishXml("Pack approval") }, firstKey), 200), first);
+
+  const stableKey = newKey();
+  const [left, right] = await Promise.all([
+    publish(publisher, { xml: publishXml("Pack approval") }, stableKey),
+    publish(publisher, { xml: publishXml("Pack approval") }, stableKey),
+  ]);
+  const winner = [left, right].find(response => response.status === 201);
+  const loser = [left, right].find(response => response !== winner);
+  assert.ok(winner, "exactly one reserving request deploys");
+  assert.ok(loser.status === 200 || (loser.status === 409 &&
+    (await loser.json()).error === "deployment_pending_reconciliation"));
+  const settled = await jsonResult(winner, 201);
+  assert.equal(settled.version, changed.version + 1);
+  publishedDeployments.push((await latest()).deploymentId);
+  assert.equal(await allVersions(), 3);
+  assert.deepEqual(await jsonResult(await publish(publisher, { xml: publishXml("Pack approval") }, stableKey), 200), settled);
 });
