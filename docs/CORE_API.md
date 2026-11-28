@@ -498,18 +498,95 @@ reconcile an ambiguous outcome before retrying. No upstream call is blindly retr
 | --- | --- | --- |
 | `/v1/workflows/definitions` | GET | Up to 100 latest tenant definitions with ID, key, version and name. |
 | `/v1/workflows/definitions` | POST | Publish one business BPMN definition with `{"xml": definition}` and a UUID `Idempotency-Key`. Only the verified direct tenant administrator may publish: the boundary is the verified `console-admin` role of the `junctura-console` client plus `core-writer`, with no delegated actor — ordinary application writers, enrolled backends and non-administrator console sessions answer `403 operator_required`, delegated app-actor calls `403 delegation_not_allowed`, tokens without `core-writer` `403 write_forbidden`. The tenant comes from the verified identity and cannot be supplied in the request. The production BPMN safety policy applies before any engine request, including `flowable:candidateGroups` on every user task and the reserved `junctura_*` process ids. Retry contract: reuse the same UUID with byte-identical XML to retry — an identical retry answers `200` with the deployed key and version, also after a lost engine reply (reconciled against the tenant ledger and the deployed engine resource); the same UUID with different content answers `409 idempotency_conflict` and must not be retried under that key; `409 deployment_pending_reconciliation` means another request reserved the key — retry the same UUID after reconciliation, and only a publication that never committed may be retried under a fresh UUID; independent publications always use their own fresh UUID. Publishing the same process id with changed content under a new key deploys a new version. |
-| `/v1/workflows/executions` | POST | Start by exact `definitionId` with optional `input`, `unit`, `taskUnits`, `dueAt` and `taskDueAt`. Requires a UUID `Idempotency-Key`. |
-| `/v1/workflows/executions/{executionId}` | GET | `{id,definitionId,status,input,dueAt}`. Status is `running`, `completed` or `cancelled`. If deadline storage is unavailable, `dueAt` is null. |
+| `/v1/workflows/executions` | POST | Start by exact `definitionId` with optional `input`, `unit`, `taskUnits`, `dueAt` and `taskDueAt`. Requires a UUID `Idempotency-Key`. A delegated application-user token uses only the opt-in delegated path below and cannot start the technical checkpoint. |
+| `/v1/workflows/executions/{executionId}` | GET | `{id,definitionId,status,input,dueAt}`. Status is `running`, `completed` or `cancelled`. If deadline storage is unavailable, `dueAt` is null. Delegated reads additionally require persisted execution participation. |
 | `/v1/workflows/tasks` | GET | `{items,nextCursor}` for waiting tasks in the caller's candidate groups. |
 | `/v1/workflows/tasks/{taskId}/claim` | POST | Optional `{ttlSeconds}`. Returns `{taskId,claimedBy,claimedUntil}`. |
 | `/v1/workflows/tasks/{taskId}/release` | POST | Returns `204` when the caller's claim is released or the task is already unclaimed. |
 | `/v1/workflows/executions/{executionId}/complete` | POST | Business completion by `{taskId,variables?,output?,records?}` with a UUID `Idempotency-Key`. Returns `202` and `{taskId,completionStatus:"pending",execution}`. |
-| `/v1/workflows/executions/{executionId}/history` | GET | `{items,nextCursor}` for confirmed task completions, newest first. |
+| `/v1/workflows/executions/{executionId}/history` | GET | `{items,nextCursor}` for confirmed task completions, newest first. Delegated reads additionally require persisted execution participation. |
 | `/v1/workflows/executions/{executionId}` | DELETE | Cancel a running execution. Returns `204` on cancellation and on repetition. A pending completion or a completed execution conflicts with `409`. |
 
 Reads require `core-reader`. Writes also require `core-writer`. Foreign tenant definitions, executions
 and tasks return `404`. The internal C4A definition is excluded. Keep private data out of workflow
 variables, which are visible within the tenant. Start JSON is limited to 64 KiB with input nesting at most 32.
+
+### Delegated application-user workflows
+
+An application may use a delegated user token for exactly three operations:
+`POST /v1/workflows/executions`, `GET /v1/workflows/executions/{executionId}` and
+`GET /v1/workflows/executions/{executionId}/history`. The same routes for direct
+callers, definition listing and publication, tenant-wide execution listing, summary,
+tasks, claims, completion and cancellation keep their existing authorization; the
+delegated exception does not widen them. Definition publication remains the direct
+console-administrator path described above.
+
+A delegated start is denied unless all of the following are true:
+
+- Core's verified token exchange resolves an active, enrolled application and a
+  current user assignment in the verified sender unit, and both parties carry the
+  writer role.
+- An operator row exists in `app_private.workflow_delegated_policies` for the exact
+  `(tenant_id, app_id, oauth_client_id, definition_id, sender_unit)`.
+- The caller is currently a member of `sender_group` in that sender unit, and the
+  group, sender unit, default unit and every routed task unit are confirmed,
+  non-deleted Directory rows.
+- The default unit and every `taskUnits` destination are in `allowed_units` and in
+  the application's operator-approved deployment units.
+- Every BPMN task candidate group routed to those units is a confirmed, non-deleted
+  Directory group.
+
+The request never supplies the application, tenant, sender unit, sender group or
+selected unit used for authority. `unit` may override only the default task unit and
+still needs to be in `allowed_units`. Cross-unit routing is authorized by this operator
+policy, not by the `workflow-router` realm role or by request strings. Delegated starts
+reject `junctura_checkpoint`.
+
+After deployment, an operator creates one row per allowed sender unit; the application
+is identified by its enrolled client. For example:
+
+```sql
+INSERT INTO app_private.workflow_delegated_policies
+  (tenant_id, app_id, oauth_client_id, definition_id, sender_unit,
+   sender_group, default_unit, allowed_units)
+SELECT a.tenant_id, a.app_id, a.oauth_client_id, 'process_a:1:42',
+       'unit-a', 'reviewers', 'unit-a', ARRAY['unit-a', 'unit-b']
+FROM app_private.applications a
+WHERE a.tenant_id = 'tenant-a' AND a.oauth_client_id = 'workspace-app';
+```
+
+Changing or revoking the policy, the deployment version, the app assignment or
+Directory membership takes effect on the next request. Delete the exact row to remove
+the delegated start permission; there is no public policy-mutation route. A replay also
+requires the exact policy row, the current sender assignment, and current membership in
+both the current policy sender group and the original persisted sender group/subject, so
+retiring the policy, editing the policy sender group or losing the original sender group
+denies replay of an earlier start.
+
+Core uses the exact application ID and selected unit from its per-request verified
+authorization, then re-proves the active enrollment, app, sender subject, sender group
+and routed step units/groups before persisting the reservation. The delegated request
+key is scoped to that app/client, actor, sender subject and selected unit, so it cannot
+collide with a direct caller's key. The same key and normalized payload return the
+original `201` and execution ID while the policy and sender eligibility remain current,
+including after a lost reply or across Core replicas; creation and confirmation are
+serialized per key, only the reserving request starts the engine, and a competing
+request observes the reserved business key or `409 execution_pending_reconciliation`.
+A different payload under that key returns `422 idempotency_key_reused`; the same key
+from another app or sender unit is not replayed.
+
+Before returning delegated execution detail or history, Core checks the execution
+against that persisted ownership and the caller's current application assignment and
+Directory group membership. The initiating sender participates through the persisted
+sender subject in the configured sender group, which may be independent of every task
+candidate group; a receiver participates through a routed candidate group in its
+currently selected unit. Sibling units, another app sharing the tenant, other
+nonparticipant groups, stale Directory membership, foreign tenants and legacy rows
+without delegated ownership return `404` before engine data is exposed. Delegated reads
+fail closed when ownership or policy storage is unavailable; they never fall back to
+tenant-only access. Delegated history uses its own participant-checked RPC; the legacy
+task history RPC and direct callers, including operator `audit.read`, keep their previous
+tenant-scoped behavior.
 
 ### Deadlines, task routing and claims
 

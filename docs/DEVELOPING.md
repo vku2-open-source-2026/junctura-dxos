@@ -185,7 +185,7 @@ See [CI](../.github/workflows/ci.yml).
 
 Run [infra/postgres/migrate.sh](../infra/postgres/migrate.sh) with `docker compose run --rm data-migrate`;
 Compose gates `data` and then Core on success. Number after the highest `infra/postgres/NNN-*.sql`:
-currently `046`. Mount new files in `compose.yaml`'s `data-migrate` service.
+currently `076`. Mount new files in `compose.yaml`'s `data-migrate` service.
 **All applied files are immutable**: preserve their exact bytes and add forward migrations.
 
 SHA-256 enters `core.schema_migration_checksums` in the applying transaction
@@ -319,7 +319,8 @@ Run `./scripts/dev-stack.sh test test:app-bootstrap` on the isolated stack to ch
 AppRole isolation and OIDC rotation with real OpenBao and Keycloak.
 Run `npm run test:workflow-tasks` on the isolated Compose test stack to exercise business workflow policy,
 claims and outbox reconciliation against the pinned Flowable engine. The suite creates and removes its own
-BPMN deployment, identity fixtures and directory bindings.
+BPMN deployment, identity fixtures and directory bindings. Run `npm run test:workflow-delegated` for the
+opt-in cross-unit delegated start, replay, participant read and denial boundaries.
 
 Workflow variables are tenant-visible: exclude private record/object content. The CLI prints IDs
 and keeps resources; failed POST outcomes may be ambiguous, so never blindly rerun.

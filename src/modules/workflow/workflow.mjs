@@ -7,7 +7,7 @@ import { HttpError, json, jsonObject, readRecordJson, requireWriter, uuidPattern
 import { workflowRequest, workflowText } from "./client.mjs";
 import { validateDefinition } from "./definition-policy.mjs";
 import { workflowSummary } from "./summary.mjs";
-import { completeTask, engineId, executionPolicy, handleClaim, managedStart, releaseCancellationLease, reserveCancellation, workflowTaskPage } from "./tasks.mjs";
+import { completeTask, engineId, executionPolicy, handleClaim, managedStart, releaseCancellationLease, requireDelegatedExecution, reserveCancellation, workflowTaskPage } from "./tasks.mjs";
 
 export { startWorkflowReconciler } from "./tasks.mjs";
 const executionStatuses = new Set(["running", "completed", "cancelled"]);
@@ -245,6 +245,9 @@ async function start(request, identity, config) {
     return item.id;
   };
   const readExecution = async (id) => (await execution(config, identity.tenantId, id)).view;
+  if (identity.actor && definition.key === "junctura_checkpoint") {
+    throw new HttpError(403, "workflow_unit_required");
+  }
   if (definition.key !== "junctura_checkpoint" || Object.keys(body).some(name => name !== "definitionId" && name !== "input")) {
     return managedStart(config, identity, definition, body, key, startEngine, findEngine, readExecution);
   }
@@ -389,6 +392,7 @@ export async function handleWorkflow(request, response, identity, config, url) {
   if (historyRoute) {
     requireMethod(request, response, ["GET"]);
     const id = decodeEngineId(historyRoute[1], "invalid_execution_id");
+    if (identity.actor) await requireDelegatedExecution(config, identity, id);
     await execution(config, identity.tenantId, id);
     return json(response, 200, await workflowTaskPage(config, identity, url, id));
   }
@@ -417,7 +421,9 @@ export async function handleWorkflow(request, response, identity, config, url) {
   const readCurrent = () => execution(config, identity.tenantId, id);
   const readExecution = async () => (await readCurrent()).view;
   if (request.method === "GET") {
+    const delegated = identity.actor ? await requireDelegatedExecution(config, identity, id) : null;
     const current = await readExecution();
+    if (delegated) return json(response, 200, { ...current, dueAt: delegated.dueAt ?? null });
     const policy = await executionPolicy(config, identity, id).catch(error => {
       if (!(error instanceof HttpError) || error.status !== 503) throw error;
       return null;

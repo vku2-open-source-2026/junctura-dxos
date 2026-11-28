@@ -163,7 +163,7 @@ See [CAPABILITIES.md](CAPABILITIES.md) and the [resource migration](../infra/pos
 Suspending an owner blocks its grantees; reactivation can restore unexpired shares. Subsequent v2/capability checks reject inactive applications,
 but already authorized requests may finish. There is no cancellation barrier or automatic Keycloak client disablement.
 Legacy v1 records/objects stay tenant-scoped in a separate namespace and require the `LEGACY_RESOURCE_CLIENTS` allowlist;
-no owner is inferred or assigned to legacy data. Foundation workflows remain tenant-scoped and do not inherit application suspension.
+no owner is inferred or assigned to legacy data. Foundation workflows remain tenant-scoped and do not inherit application suspension; the opt-in delegated execution path binds only its own reservations to a verified application and persisted participants.
 
 ## Platform contracts
 
@@ -188,7 +188,7 @@ Do not add AI runtimes, sandbox infrastructure, MCP/A2A, vector databases, or ot
 - Use OSI-licensed OpenBao (MPL-2.0) instead of HashiCorp Vault for runtime secrets; public APIs never return plaintext secrets.
 - Require a clean ClamAV verdict before publishing object bytes; scanner failures block publication.
 - Protect transactional audit in PostgreSQL; database and host administrators remain trusted, including for hash-chain integrity.
-- Keep Foundation workflow definitions, executions and variables tenant-scoped.
+- Keep Foundation workflow definitions and direct executions tenant-scoped; delegated executions add persisted application/participant ownership without changing direct routes.
 - Keep legacy v1 separate, with an explicit allowlist and no inferred application owner.
 - Apply additive numbered migrations; released/applied migrations are immutable, and the runner checks checksums and schema drift. See [DEVELOPING.md](DEVELOPING.md).
 
@@ -196,7 +196,7 @@ Do not add AI runtimes, sandbox infrastructure, MCP/A2A, vector databases, or ot
 
 - The supplied deployment is single-host Compose; published endpoints use loopback HTTP with no TLS configured.
 - There are no application-hosting, project, environment or deployment-management APIs/controllers.
-- Foundation workflows are tenant-scoped, not application-private; application suspension does not remove those workflow rights.
+- Foundation workflows are tenant-scoped, not application-private; application suspension does not remove direct workflow rights. Delegated execution access is separate, operator-configured and rechecked against current assignment and Directory membership.
 - Human delegation and cross-tenant capability grants are unavailable; backend applications enforce their end users' business authorization.
 - Audit hash chains seal events on verification, but provide no independent tamper evidence against a privileged DBA able to rewrite events and chain heads.
 - Automated restore verification covers PostgreSQL data/authority and RLS, not coordinated disaster recovery of identity, workflow history, object bytes/metadata and OpenBao recovery material. See [OPERATIONS.md](OPERATIONS.md).

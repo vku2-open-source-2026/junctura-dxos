@@ -58,10 +58,17 @@ export function validateIdentity(claims, issuer, now = Date.now() / 1000) {
 
 const scopedRoute = /^\/v2\/(?:data(?:[/:-]|$)|objects(?:\/|$))/;
 const delegatedExecutionRoute = /^\/v1\/capability-executions(?:\/[0-9a-f-]{36})?$/;
+const delegatedWorkflowRoute = /^\/v1\/workflows\/executions(?:\/[^/]+(?:\/history)?)?$/;
 const consentRequestRoute = /^\/v1\/(?:resource-consent-requests(?:\/[0-9a-f-]+(?:\/cancel)?)?|me\/resource-consent-requests(?:\/[0-9a-f-]+\/(?:accept|decline))?)$/;
 const consoleRoles = ["admin", "manager", "viewer"];
 const consoleRoleTtlMs = 3000;
 const consoleRoleCacheLimit = 1024;
+
+function delegatedWorkflowOperation(path, method) {
+  if (!delegatedWorkflowRoute.test(path)) return false;
+  if (path === "/v1/workflows/executions") return method === "POST";
+  return method === "GET";
+}
 
 function managementAppId(path, method) {
   if (path === "/v1/applications" && method === "GET") return null;
@@ -100,6 +107,7 @@ async function enforceAccess(config, fetcher, request, identity, claims, exchang
   const resource = target && !consentRead ? { resourceId: target[2], resourceCollection: target[1] } : {};
   const roles = claims.resource_access?.[identity.clientId]?.roles;
   const clientRoles = Array.isArray(roles) ? roles.filter(role => typeof role === "string") : [];
+  if (identity.actor) identity.assignmentRoles = clientRoles;
   let consoleRole = identity.clientId === "junctura-console"
     ? consoleRoles.find(role => clientRoles.includes(`console-${role}`)) : undefined;
   if (consoleRole && config.currentConsoleRoles) {
@@ -123,7 +131,8 @@ async function enforceAccess(config, fetcher, request, identity, claims, exchang
       userRoute: Boolean(exchange) || checkOnly || path === "/v1/identity" || path === "/v1/search" ||
         path === "/v1/capabilities/catalog" || path === "/v1/trust/access-requests" ||
         path?.startsWith("/v1/trust/access-requests/") || scopedRoute.test(path) || consentRequest ||
-        (Boolean(identity.actor) && delegatedExecutionRoute.test(path)),
+        (Boolean(identity.actor) && (delegatedExecutionRoute.test(path) ||
+          delegatedWorkflowOperation(path, request.method))),
       managerOnly: write && (path?.startsWith("/v2/data-schemas/") || path?.startsWith("/v2/data-masking/")),
       sourceClient: exchange ? claims.client_id : undefined,
       delegationEvent: exchange === "issue" ? "exchanged" : identity.actor && !exchange && !checkOnly ? "authorized" : undefined,

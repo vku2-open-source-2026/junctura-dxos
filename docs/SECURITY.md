@@ -59,6 +59,19 @@ from a subject other than the owner. Realm roles/membership do not imply managem
 Traffic metrics require a verified client and `audit.read` in the caller's tenant; observations are per-process, per-tenant, in-memory and cleared on restart.
 Only requests with a verified tenant are recorded; probes and `401` responses are excluded.
 
+Delegated workflow execution start/detail/history is an opt-in exception to tenant-scoped
+workflow reads. Core resolves the exact application ID, user assignment, writer state,
+sender unit and group from its verified token exchange, then requires an operator row in
+`app_private.workflow_delegated_policies` for the exact tenant, app client, deployed
+definition version and sender unit. The reservation stores the trusted app and participant
+ownership; every delegated read and replay rechecks the current assignment and confirmed
+Directory membership against it, including the original persisted sender group/subject even
+if the operator later edits the policy sender group. Nonparticipants, sibling units, other apps in the tenant,
+stale groups, foreign tenants and legacy rows without delegated ownership receive `404`
+before engine data is read. Delegated history has a dedicated participant-checked RPC, so
+direct operator history semantics stay unchanged. Delegated access fails closed and never
+falls back to tenant-only behavior.
+
 For private application/resource/audit calls, Core signs verified tenant, issuer,
 subject and client ID in an HS256 assertion with `junctura-data` audience and 30-second
 expiry; resource assertions carry writer status. PostgREST's `junctura_data` login

@@ -114,6 +114,8 @@ test("delegation binds the application, login and unit, and uses the earliest ex
   assert.deepEqual(identity.actor, act);
   assert.deepEqual(identity.roles, writer);
   assert.deepEqual(identity.units, [unit]);
+  assert.equal(identity.humanAppId, appId);
+  assert.deepEqual(identity.assignmentRoles, [assignment]);
   assert.equal(f.entries.at(-1).payload.delegationEvent, "authorized");
   const [header, body, signature] = response.access_token.split(".");
   const forged = `${header}.${Buffer.from(JSON.stringify({ ...tokenClaims(response.access_token), unit: "unit-b" })).toString("base64url")}.${signature}`;
@@ -150,6 +152,29 @@ test("delegated viewers can submit and cancel consent requests through the assig
   await f.authorize(request(access_token, `${requests}/../me/consents`, "POST"), true);
   assert.equal(f.entries.at(-1).payload.userRoute, false);
   assert.equal(f.entries.at(-1).payload.write, true);
+});
+
+test("only the three delegated workflow execution operations are user routes", async t => {
+  const f = fixture(t);
+  const { access_token } = await f.exchange();
+  const cases = [
+    ["/v1/workflows/executions", "POST", true],
+    ["/v1/workflows/executions/run-1", "GET", true],
+    ["/v1/workflows/executions/run-1/history", "GET", true],
+    ["/v1/workflows/executions", "GET", false],
+    ["/v1/workflows/executions/run-1", "DELETE", false],
+    ["/v1/workflows/executions/run-1/complete", "POST", false],
+    ["/v1/workflows/tasks", "GET", false],
+    ["/v1/workflows/tasks/task-1/claim", "POST", false],
+    ["/v1/workflows/tasks/task-1/release", "POST", false],
+    ["/v1/workflows/definitions", "GET", false],
+    ["/v1/workflows/definitions", "POST", false],
+    ["/v1/workflows/summary", "GET", false],
+  ];
+  for (const [path, method, expected] of cases) {
+    await f.authorize(request(access_token, path, method), true);
+    assert.equal(f.entries.at(-1).payload.userRoute, expected, `${method} ${path}`);
+  }
 });
 
 test("delegated calls recheck assignment and log an inactive user proof with both identities", async t => {

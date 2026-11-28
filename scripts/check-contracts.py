@@ -245,7 +245,7 @@ def validate_paths(spec, dereference, *, foundation=False):
             return
         if not planned:
             require((ROOT / operation['x-junctura-source']).is_file(), oid + ': source missing')
-            require(operation['x-junctura-test-suite'] in ('core', 'applications', 'records', 'record-queries', 'record-archives', 'field-masking', 'app-group-shares', 'directory', 'workflow-tasks', 'events', 'message-queue', 'object-metadata', 'search', 'subject-access', 'app-access', 'delegation', 'consent', 'consent-requests', 'metrics'), oid + ': coverage suite missing')
+            require(operation['x-junctura-test-suite'] in ('core', 'applications', 'records', 'record-queries', 'record-archives', 'field-masking', 'app-group-shares', 'directory', 'workflow-tasks', 'workflow-delegated', 'events', 'message-queue', 'object-metadata', 'search', 'subject-access', 'app-access', 'delegation', 'consent', 'consent-requests', 'metrics'), oid + ': coverage suite missing')
         parameters = [dereference(p) for p in operation.get('parameters', [])]
         require(len({(p['in'], p['name']) for p in parameters}) == len(parameters), oid + ': duplicate parameter')
         require({p['name'] for p in parameters if p['in'] == 'path'} == set(re.findall(r'{([^}]+)}', path)), oid + ': path parameters differ')
