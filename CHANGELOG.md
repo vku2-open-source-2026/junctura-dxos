@@ -12,6 +12,26 @@ All notable changes to Junctura are recorded here. Versions follow
 
 ## Unreleased
 
+- **Delegated cross-unit workflow executions (issue #114):** migration 076 adds an opt-in
+  operator policy per exact tenant, application client, deployed business definition version and
+  verified sender unit. Delegated user tokens may now use only `POST /v1/workflows/executions`,
+  `GET /v1/workflows/executions/{executionId}` and
+  `GET /v1/workflows/executions/{executionId}/history`; definition publication, listing, summary,
+  tasks, claims, completion and cancellation keep their existing authorization. Starts require the
+  current app assignment, writer state and sender-group membership resolved from Core's verified
+  authorization, all routed units and candidate groups to be operator-allowed confirmed Directory
+  rows, and reject the technical checkpoint. Core persists the trusted app, sender and routed
+  participation on the durable execution reservation, scopes the key to the verified app/client,
+  actor, sender subject and unit, and serializes creation/confirmation so only the reserving
+  request starts the engine. While the policy and sender group remain current, identical retries
+  return the original `201` and ID and divergent payloads conflict; retiring the policy, editing
+  its sender group or losing the original persisted sender group denies replay. Detail and history recheck the persisted ownership against the
+  current app assignment, selected unit and Directory membership, returning `404` before engine
+  data for sibling units, other apps, nonparticipants, stale groups, foreign tenants and legacy
+  rows without delegated ownership. Delegated history uses a dedicated participant-checked RPC,
+  leaving direct task history and operator `audit.read` behavior unchanged; delegated reads fail
+  closed instead of falling back to tenant-only access. The #113 publication path is unchanged.
+
 - **Tenant-scoped BPMN publishing (issue #112):** `POST /v1/workflows/definitions` lets a verified
   direct tenant administrator publish one business BPMN definition per tenant. Authorization reuses
   the existing Core operator trust boundary — the verified `console-admin` role of the

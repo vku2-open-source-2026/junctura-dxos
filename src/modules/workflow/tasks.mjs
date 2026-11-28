@@ -20,6 +20,9 @@ async function workflowCommand(config, identity, rpc, operation, payload) {
     tenant_id: identity.tenantId, iss: identity.issuer, sub: identity.subject,
     client_id: identity.clientId, subject_id: identity.subjectId, display_name: identity.preferredUsername,
     resource_writer: identity.roles?.includes("core-writer"), workflow_router: identity.workflowRouter === true, groups: identity.groups, units: identity.units,
+    app_id: identity.actor ? identity.humanAppId : undefined,
+    app_unit: identity.actor ? identity.resourceUnit : undefined, actor_sub: identity.actor?.sub,
+    client_roles: identity.actor ? identity.assignmentRoles : undefined,
     aud: "junctura-data", exp: Math.floor(Date.now() / 1000) + 30,
   };
   try {
@@ -75,6 +78,7 @@ function parseUnit(value) {
 
 export async function managedStart(config, identity, definition, body, requestKey, startEngine, findEngine, readExecution) {
   const technical = definition.key === "junctura_checkpoint";
+  const rpc = identity.actor ? "delegated" : "execution";
   if (technical && (body.unit !== undefined || body.taskUnits !== undefined)) {
     throw new HttpError(400, "invalid_workflow_request");
   }
@@ -95,12 +99,18 @@ export async function managedStart(config, identity, definition, body, requestKe
   }]));
   const payload = { definitionId: definition.id, definitionKey: definition.key, requestKey, unit, dueAt, steps,
     digest: logicalRequestDigest({ body }) };
-  const reserve = await workflowCommand(config, identity, "execution", "reserve", payload);
+  const reserve = await workflowCommand(config, identity, rpc, "reserve", payload);
   const { reserved, businessKey } = rpcValue(reserve);
   if (reserve.status === 201) return reserve;
   const id = reserved ? await startEngine(`workflow:${businessKey}`) : await findEngine(`workflow:${businessKey}`);
   const execution = await readExecution(id);
-  return workflowCommand(config, identity, "execution", "confirm", { ...payload, execution });
+  return workflowCommand(config, identity, rpc, "confirm", { ...payload, execution });
+}
+
+export async function requireDelegatedExecution(config, identity, executionId) {
+  const value = rpcValue(await workflowCommand(config, identity, "delegated", "access", { executionId }));
+  if (value?.allowed === true) return value;
+  throw new HttpError(404, "not_found");
 }
 
 function taskIdentity(task, tenant) {
@@ -201,7 +211,8 @@ export async function workflowTaskPage(config, identity, url, executionId) {
   const after = cursorAfter(cursor, scope, mode === "list");
   const tasks = mode === "list" && identity.groups?.length
     ? await activeTasks(config, identity.tenantId, filters.definitionKey) : [];
-  const result = await workflowCommand(config, identity, "task", mode, { ...filters, executionId, tasks, limit: limit + 1, after });
+  const rpc = mode === "history" && identity.actor ? "delegated" : "task";
+  const result = await workflowCommand(config, identity, rpc, mode, { ...filters, executionId, tasks, limit: limit + 1, after });
   const items = rpcValue(result);
   const more = items.length > limit;
   if (more) items.pop();
