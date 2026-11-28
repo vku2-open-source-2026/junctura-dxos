@@ -316,8 +316,8 @@ test("delegated cross-unit workflow start, replay, participant reads and denial 
   assert.equal((await jsonResult(await request("/v1/workflows/executions", senderToken,
     post({ definitionId: checkpoint.id, input: {} }, newKey())), 403)).error, "workflow_unit_required");
   assert.equal((await request(path, senderToken, { method: "DELETE" })).status, 403);
-  assert.equal((await request(`${path}/complete`, senderToken,
-    post({ taskId: "any-task" }, newKey()))).status, 403);
+  assert.equal((await jsonResult(await request(`${path}/complete`, senderToken,
+    post({ taskId: "any-task" }, newKey())), 403)).error, "capability_not_granted");
   assert.equal((await request("/v1/workflows/tasks", senderToken)).status, 403);
   assert.equal((await request("/v1/workflows/definitions", senderToken,
     post({ xml: "<definitions/>" }, newKey()))).status, 403);
